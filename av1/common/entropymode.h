@@ -197,6 +197,12 @@ typedef struct frame_contexts {
                                  [CDF_SIZE(3)];
   aom_cdf_prob coeff_base_cdf[TX_SIZES][PLANE_TYPES][SIG_COEF_CONTEXTS]
                              [CDF_SIZE(4)];
+#if CONFIG_DQ
+  aom_cdf_prob coeff_base_cdf_tcq[TX_SIZES][PLANE_TYPES][SIG_COEF_CONTEXTS]
+                                 [CDF_SIZE(4)];
+  aom_cdf_prob coeff_base_lf_cdf_tcq[TX_SIZES][PLANE_TYPES][LF_SIG_COEF_CONTEXTS]
+                                [CDF_SIZE(LF_BASE_SYMBOLS)];
+#endif
   aom_cdf_prob idtx_sign_cdf[IDTX_SIGN_CONTEXTS][CDF_SIZE(2)];
   aom_cdf_prob coeff_base_cdf_idtx[IDTX_SIG_COEF_CONTEXTS][CDF_SIZE(4)];
   aom_cdf_prob coeff_br_cdf_idtx[IDTX_LEVEL_CONTEXTS][CDF_SIZE(BR_CDF_SIZE)];

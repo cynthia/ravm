@@ -1080,6 +1080,16 @@ void av1_fill_coeff_costs(CoeffCosts *coeff_costs, FRAME_CONTEXT *fc,
         av1_cost_tokens_from_cdf(pcost->base_cost[ctx],
                                  fc->coeff_base_cdf[tx_size][plane][ctx], NULL);
       }
+#if NEWCTX
+      for (int ctx = 0; ctx < LF_SIG_COEF_CONTEXTS; ++ctx) {
+        av1_cost_tokens_from_cdf(pcost->base_lf_cost_tcq[ctx],
+                                 fc->coeff_base_lf_cdf_tcq[tx_size][plane][ctx],
+                                 NULL);
+      }
+      for (int ctx = 0; ctx < SIG_COEF_CONTEXTS; ++ctx)
+        av1_cost_tokens_from_cdf(pcost->base_cost_tcq[ctx],
+                                  fc->coeff_base_cdf_tcq[tx_size][plane][ctx], NULL);
+#endif
       for (int ctx = 0; ctx < SIG_COEF_CONTEXTS_BOB; ++ctx)
         av1_cost_tokens_from_cdf(pcost->base_bob_cost[ctx],
                                  fc->coeff_base_bob_cdf[ctx], NULL);

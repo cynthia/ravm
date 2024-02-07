@@ -22,6 +22,20 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#if CONFIG_DQ
+#define DQENABLE                       0       //Determine whether to use DQ by dq_enable()
+#define NEWCTX                         1       //Use two sets of context models,one for the Q0 quantizer and another one for the Q1 quantizer     
+#define NEWQINDEX                      1       //QP shift
+#define NEWHR                          1       //1:parity is determined by (base + LR) levels and not changed by HR
+#else
+#define DQENABLE                       0       //Determine whether to use DQ by dq_enable()
+#define NEWCTX                         0       //Use two sets of context models,one for the Q0 quantizer and another one for the Q1 quantizer     
+#define NEWQINDEX                      0       //QP shift
+#define NEWHR                          0       //1:parity is determined by (base + LR) levels and not changed by HR
+#endif
+
+
 #define PHTHRESH 4
 #define MINQ 0
 #define QINDEX_BITS 9
@@ -48,6 +62,43 @@ extern "C" {
 struct AV1Common;
 struct CommonQuantParams;
 struct macroblockd;
+
+#if CONFIG_DQ
+typedef struct _DECISION
+{
+  int64_t rdCost;
+  int16_t absLevel;
+  int8_t prevId;
+  tran_low_t dqc;
+  int rate;
+  int64_t dist;
+} DECISION;
+
+static INLINE int tcq_parity(int abslevel, int limits)
+{
+#if NEWHR
+  (void)limits;
+  int par = abslevel & 1;
+#else
+  int cap = limits ? LF_MAX_BASE_BR_RANGE : MAX_BASE_BR_RANGE;
+  const int absLevelCtx = AOMMIN(cap, abslevel);
+  int par = absLevelCtx & 1;
+#endif
+  return par;
+}
+
+static INLINE int tcq_next_state(int state, int abslevel, int limits)
+{
+  int par = tcq_parity(abslevel, limits);
+  int flip = state & 1;
+  int next_state = (state >> 1) + 2 * (par ^ flip);
+  return next_state;
+}
+
+#if DQENABLE
+bool dq_enable(const TX_SIZE tx_size, int plane);
+#endif
+#endif
 
 int32_t av1_dc_quant_QTX(int qindex, int delta, int base_dc_delta_q,
                          aom_bit_depth_t bit_depth);

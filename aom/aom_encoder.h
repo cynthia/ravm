@@ -556,6 +556,12 @@ typedef struct cfg_options {
    *
    */
   unsigned int enable_trellis_quant;
+#if CONFIG_DQ
+  /*!\brief enable dependentquantization
+   *
+  */
+  unsigned int enable_dq;
+#endif
   /*!\brief enable ref frame MV
    *
    */

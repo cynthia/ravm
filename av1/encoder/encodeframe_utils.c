@@ -1302,6 +1302,11 @@ void av1_avg_cdf_symbols(FRAME_CONTEXT *ctx_left, FRAME_CONTEXT *ctx_tr,
               LF_BASE_SYMBOLS - 1);
   AVERAGE_CDF(ctx_left->coeff_br_lf_cdf, ctx_tr->coeff_br_lf_cdf, BR_CDF_SIZE);
   AVERAGE_CDF(ctx_left->coeff_base_cdf, ctx_tr->coeff_base_cdf, 4);
+#if NEWCTX
+  AVERAGE_CDF(ctx_left->coeff_base_cdf_tcq, ctx_tr->coeff_base_cdf_tcq, 4);
+  AVERAGE_CDF(ctx_left->coeff_base_lf_cdf_tcq, ctx_tr->coeff_base_lf_cdf_tcq,
+              LF_BASE_SYMBOLS);
+#endif
   AVERAGE_CDF(ctx_left->idtx_sign_cdf, ctx_tr->idtx_sign_cdf, 2);
   AVERAGE_CDF(ctx_left->coeff_base_cdf_idtx, ctx_tr->coeff_base_cdf_idtx, 4);
   AVERAGE_CDF(ctx_left->coeff_br_cdf_idtx, ctx_tr->coeff_br_cdf_idtx,

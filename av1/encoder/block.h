@@ -182,6 +182,12 @@ typedef struct {
    * Decoder derives coeff_base as coeff_base := base_eob + 1.
    */
   int base_cost[SIG_COEF_CONTEXTS][8];
+#if NEWCTX
+  //! Cost for encoding the base level of a low-frequency coefficient
+  int base_lf_cost_tcq[LF_SIG_COEF_CONTEXTS][LF_BASE_SYMBOLS * 2];
+  // brief Cost for encoding the base level of a Q1 quantized coefficient.
+  int base_cost_tcq[SIG_COEF_CONTEXTS][8];
+#endif
   /*! \brief Cost for encoding the last non-zero coefficient.
    *
    * Eob is derived from eob_extra at the decoder as eob := eob_extra + 1

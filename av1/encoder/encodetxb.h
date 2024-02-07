@@ -494,6 +494,13 @@ int av1_optimize_txb_new(const struct AV1_COMP *cpi, MACROBLOCK *x, int plane,
                          CctxType cctx_type, const TXB_CTX *const txb_ctx,
                          int *rate_cost, int sharpness);
 
+#if CONFIG_DQ
+int av1_dep_quant(const struct AV1_COMP* cpi, MACROBLOCK* x, int plane,
+    int block, TX_SIZE tx_size, TX_TYPE tx_type, CctxType cctx_type,
+    const TXB_CTX* const txb_ctx, int* rate_cost,
+    int sharpness);
+#endif
+
 /*!\brief Get the corresponding \ref CB_COEFF_BUFFER of the current macro block.
  *
  * \ingroup coefficient_coding

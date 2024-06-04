@@ -66,6 +66,12 @@ void av1_default_coef_probs(AV1_COMMON *cm) {
   av1_copy(cm->fc->coeff_br_lf_cdf, av1_default_coeff_lps_lf_multi_cdfs[index]);
   av1_copy(cm->fc->coeff_br_cdf, av1_default_coeff_lps_multi_cdfs[index]);
   av1_copy(cm->fc->coeff_base_cdf, av1_default_coeff_base_multi_cdfs[index]);
+#if CONFIG_DQ && !CONFIG_LCCHROMA
+  // check whether default can be used
+  av1_copy(cm->fc->coeff_base_lf_cdf_tcq,
+           av1_default_coeff_base_lf_multi_tcq_cdfs[index]);
+  av1_copy(cm->fc->coeff_base_cdf_tcq, av1_default_coeff_base_multi_tcq_cdfs[index]);
+#endif
   av1_copy(cm->fc->idtx_sign_cdf, av1_default_idtx_sign_cdfs[index]);
   av1_copy(cm->fc->coeff_base_cdf_idtx,
            av1_default_coeff_base_multi_cdfs_idtx[index]);
@@ -191,6 +197,10 @@ void av1_reset_cdf_symbol_counters(FRAME_CONTEXT *fc) {
   RESET_CDF_COUNTER(fc->coeff_br_uv_cdf, BR_CDF_SIZE);
 #endif  // CONFIG_LCCHROMA
   RESET_CDF_COUNTER(fc->coeff_base_cdf, 4);
+#if CONFIG_DQ && !CONFIG_LCCHROMA
+  RESET_CDF_COUNTER(fc->coeff_base_lf_cdf_tcq, LF_BASE_SYMBOLS);
+  RESET_CDF_COUNTER(fc->coeff_base_cdf_tcq, 4);
+#endif
   RESET_CDF_COUNTER(fc->idtx_sign_cdf, 2);
   RESET_CDF_COUNTER(fc->coeff_base_cdf_idtx, 4);
   RESET_CDF_COUNTER(fc->coeff_br_cdf_idtx, BR_CDF_SIZE);

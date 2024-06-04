@@ -2364,6 +2364,13 @@ static int skip_trellis_opt_based_on_satd(MACROBLOCK *x,
                                           int quant_b_adapt, int qstep,
                                           unsigned int coeff_opt_satd_threshold,
                                           int skip_trellis, int dc_only_blk) {
+#if CONFIG_DQ
+#if DQENABLE
+  if (dq_enable(tx_size, plane))
+#endif
+    return skip_trellis;
+#endif
+
   if (skip_trellis || (coeff_opt_satd_threshold == UINT_MAX))
     return skip_trellis;
 
@@ -2543,6 +2550,14 @@ static void search_tx_type(const AV1_COMP *cpi, MACROBLOCK *x, int plane,
           intra_txb_rd_info->txb_entropy_ctx;
       best_eob = intra_txb_rd_info->eob;
       best_tx_type = intra_txb_rd_info->tx_type;
+#if CONFIG_DQ
+#if DQENABLE
+  if (dq_enable(tx_size, plane))
+#endif
+      // perform_block_coeff_opt : Whether trellis optimization is done.
+      // we do not skip any optimization in loop of txfm search. so make sure each block is optimized.
+      assert(intra_txb_rd_info->perform_block_coeff_opt);
+#endif
       skip_trellis |= !intra_txb_rd_info->perform_block_coeff_opt;
       update_txk_array(xd, blk_row, blk_col, tx_size, best_tx_type);
       recon_intra(cpi, x, plane, block, blk_row, blk_col, plane_bsize, tx_size,
@@ -2604,9 +2619,23 @@ static void search_tx_type(const AV1_COMP *cpi, MACROBLOCK *x, int plane,
   // would be helpful. For larger residuals, R-D optimization may not be
   // effective.
   // TODO(any): Experiment with variance and mean based thresholds
-  const int perform_block_coeff_opt =
+  int perform_block_coeff_opt = 0;
+#if CONFIG_DQ
+#if DQENABLE
+  if (dq_enable(tx_size, plane))
+#endif //DQENABLE
+    perform_block_coeff_opt = 1;
+#if DQENABLE
+  else
+    perform_block_coeff_opt =
       ((uint64_t)block_mse_q8 <=
        (uint64_t)txfm_params->coeff_opt_dist_threshold * qstep * qstep);
+#endif //DQENABLE
+#else
+  perform_block_coeff_opt =
+      ((uint64_t)block_mse_q8 <=
+       (uint64_t)txfm_params->coeff_opt_dist_threshold * qstep * qstep);
+#endif
   skip_trellis |= !perform_block_coeff_opt;
 
   // Flag to indicate if distortion should be calculated in transform domain or

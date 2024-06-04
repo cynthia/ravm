@@ -87,8 +87,22 @@ static const uint16_t ac_qlookup_QTX_full[QINDEX_RANGE_8_BITS] = {
 // addition, the minimum allowable quantizer is 4; smaller values will
 // underflow to 0 in the actual quantization routines.
 
+#if DQENABLE
+#define DQMIN 0
+#define DQMAX 1024
+bool dq_enable(TX_SIZE tx_size, int plane)
+{
+  int width = get_txb_wide(tx_size);
+  int height = get_txb_high(tx_size);
+  return ((width * height <= DQMAX) && (width * height >= DQMIN));// try other constraints?
+}
+#endif
+
 int32_t av1_dc_quant_QTX(int qindex, int delta, int base_dc_delta_q,
                          aom_bit_depth_t bit_depth) {
+#if NEWQINDEX
+  qindex += 2;
+#endif
   int q_clamped;
   if ((qindex == 0) && (delta + base_dc_delta_q <= 0))
     q_clamped = 0;
@@ -149,6 +163,9 @@ int32_t av1_dc_quant_QTX(int qindex, int delta, int base_dc_delta_q,
 }
 
 int32_t av1_ac_quant_QTX(int qindex, int delta, aom_bit_depth_t bit_depth) {
+#if NEWQINDEX
+    qindex += 2;
+#endif
   int q_clamped;
   if ((qindex == 0) && (delta <= 0))
     q_clamped = 0;

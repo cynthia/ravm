@@ -744,11 +744,18 @@ static void init_config(cfg_options_t *config) {
   config->enable_interintra_wedge = 1;
   config->enable_paeth_intra = 1;
   config->enable_trellis_quant = 3;
+#if CONFIG_DQ && 0
+  config->enable_trellis_quant = 1;
+#endif
   config->enable_ref_frame_mvs = 1;
   config->enable_reduced_reference_set = 0;
   config->reduced_tx_type_set = 0;
   config->enable_refmvbank = 1;
+#if CONFIG_DQ
+  config->enable_parity_hiding = 0;
+#else
   config->enable_parity_hiding = 1;
+#endif
 #if CONFIG_MRSSE
   config->enable_mrsse = 0;
 #endif  // CONFIG_MRSSE

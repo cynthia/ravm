@@ -1164,17 +1164,9 @@ void av1_fill_coeff_costs(CoeffCosts *coeff_costs, FRAME_CONTEXT *fc,
       for (int ctx = 0; ctx < SIG_COEF_CONTEXTS_EOB; ++ctx)
         av1_cost_tokens_from_cdf(pcost->base_lf_eob_cost_uv[ctx],
                                  fc->coeff_base_lf_eob_uv_cdf[ctx], NULL);
-      for (int ctx = 0; ctx < LF_SIG_COEF_CONTEXTS_UV; ++ctx) {
-        av1_cost_tokens_from_cdf(pcost->base_lf_cost_uv[ctx],
-                                 fc->coeff_base_lf_uv_cdf[ctx], NULL);
-      }
       for (int ctx = 0; ctx < SIG_COEF_CONTEXTS_EOB; ++ctx)
         av1_cost_tokens_from_cdf(pcost->base_eob_cost_uv[ctx],
                                  fc->coeff_base_eob_uv_cdf[ctx], NULL);
-      for (int ctx = 0; ctx < SIG_COEF_CONTEXTS_UV; ++ctx) {
-        av1_cost_tokens_from_cdf(pcost->base_cost_uv[ctx],
-                                 fc->coeff_base_uv_cdf[ctx], NULL);
-      }
       for (int ctx = 0; ctx < SIG_COEF_CONTEXTS_EOB; ++ctx)
         av1_cost_tokens_from_cdf(pcost->base_eob_cost[ctx],
                                  fc->coeff_base_eob_cdf[tx_size][ctx], NULL);
@@ -1182,15 +1174,49 @@ void av1_fill_coeff_costs(CoeffCosts *coeff_costs, FRAME_CONTEXT *fc,
       for (int ctx = 0; ctx < SIG_COEF_CONTEXTS_EOB; ++ctx)
         av1_cost_tokens_from_cdf(pcost->base_lf_eob_cost[ctx],
                                  fc->coeff_base_lf_eob_cdf[tx_size][ctx], NULL);
+#if CONFIG_DQ
+      for (int ctx = 0; ctx < LF_SIG_COEF_CONTEXTS; ++ctx) {
+        for (int dq = 0; dq < DQ_CTXS; dq++) {
+          av1_cost_tokens_from_cdf(pcost->base_lf_cost[ctx][dq],
+                                   fc->coeff_base_lf_cdf[tx_size][ctx][dq], NULL);
+        }
+      }
+      for (int ctx = 0; ctx < LF_SIG_COEF_CONTEXTS_UV; ++ctx) {
+        for (int dq = 0; dq < DQ_CTXS; dq++) {
+          av1_cost_tokens_from_cdf(pcost->base_lf_cost_uv[ctx][dq],
+                                   fc->coeff_base_lf_uv_cdf[ctx][dq], NULL);
+        }
+      }
+      for (int ctx = 0; ctx < SIG_COEF_CONTEXTS; ++ctx) {
+        for (int dq = 0; dq < DQ_CTXS; dq++) {
+          av1_cost_tokens_from_cdf(pcost->base_cost[ctx][dq],
+                                   fc->coeff_base_cdf[tx_size][ctx][dq], NULL);
+        }
+      }
+      for (int ctx = 0; ctx < SIG_COEF_CONTEXTS_UV; ++ctx) {
+        for (int dq = 0; dq < DQ_CTXS; dq++) {
+          av1_cost_tokens_from_cdf(pcost->base_cost_uv[ctx][dq],
+                                   fc->coeff_base_uv_cdf[ctx][dq], NULL);
+        }
+      }
+#else
+      for (int ctx = 0; ctx < LF_SIG_COEF_CONTEXTS_UV; ++ctx) {
+        av1_cost_tokens_from_cdf(pcost->base_lf_cost_uv[ctx],
+                                 fc->coeff_base_lf_uv_cdf[ctx], NULL);
+      }
+      for (int ctx = 0; ctx < SIG_COEF_CONTEXTS_UV; ++ctx) {
+        av1_cost_tokens_from_cdf(pcost->base_cost_uv[ctx],
+                                 fc->coeff_base_uv_cdf[ctx], NULL);
+      }
       for (int ctx = 0; ctx < LF_SIG_COEF_CONTEXTS; ++ctx) {
         av1_cost_tokens_from_cdf(pcost->base_lf_cost[ctx],
                                  fc->coeff_base_lf_cdf[tx_size][ctx], NULL);
       }
-
       for (int ctx = 0; ctx < SIG_COEF_CONTEXTS; ++ctx) {
         av1_cost_tokens_from_cdf(pcost->base_cost[ctx],
                                  fc->coeff_base_cdf[tx_size][ctx], NULL);
       }
+#endif
 #else
       for (int ctx = 0; ctx < SIG_COEF_CONTEXTS_EOB; ++ctx)
         av1_cost_tokens_from_cdf(pcost->base_eob_cost[ctx],
@@ -1210,6 +1236,16 @@ void av1_fill_coeff_costs(CoeffCosts *coeff_costs, FRAME_CONTEXT *fc,
                                  fc->coeff_base_cdf[tx_size][plane][ctx], NULL);
       }
 #endif  // CONFIG_LCCHROMA
+#if CONFIG_DQ && !CONFIG_LCCHROMA
+      for (int ctx = 0; ctx < LF_SIG_COEF_CONTEXTS; ++ctx) {
+        av1_cost_tokens_from_cdf(pcost->base_lf_cost_tcq[ctx],
+                                 fc->coeff_base_lf_cdf_tcq[tx_size][plane][ctx],
+                                 NULL);
+      }
+      for (int ctx = 0; ctx < SIG_COEF_CONTEXTS; ++ctx)
+        av1_cost_tokens_from_cdf(pcost->base_cost_tcq[ctx],
+                                  fc->coeff_base_cdf_tcq[tx_size][plane][ctx], NULL);
+#endif
       for (int ctx = 0; ctx < SIG_COEF_CONTEXTS_BOB; ++ctx)
         av1_cost_tokens_from_cdf(
             pcost->base_bob_cost[ctx],

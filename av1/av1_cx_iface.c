@@ -596,7 +596,11 @@ static struct av1_extracfg default_extra_cfg = {
   0,    // max_drl_refbvs
 #endif  // CONFIG_IBC_BV_IMPROVEMENT && CONFIG_IBC_MAX_DRL
   1,    // enable_refmvbank
+#if CONFIG_DQ
+  0,    // enable_parity_hiding
+#else
   1,    // enable_parity_hiding
+#endif
 #if CONFIG_MRSSE
   0,
 #endif  // CONFIG_MRSSE

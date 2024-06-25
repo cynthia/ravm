@@ -188,16 +188,16 @@ static INLINE void read_coeffs_reverse_2d(
       const int coeff_ctx = get_lower_levels_ctx_lf_2d(levels, pos, bwl);
 #if CONFIG_DQ
       if (t_dbg && 0) {
-        printf("DEC c %d pre base_lf q%d coeff_ctx %d\n", c, (*state >> 1), coeff_ctx);
+        printf("DEC c %d pre base_lf q%d coeff_ctx %d\n", c, tcq_quant(*state), coeff_ctx);
       }
-      if (*state >> 1) // q1
+      if (tcq_quant(*state)) // q1
         level += aom_read_symbol(r, base_lf_cdf_tcq[coeff_ctx], LF_BASE_SYMBOLS,
                                  ACCT_INFO("level", "base_lf_cdf_tcq"));
       else
         level += aom_read_symbol(r, base_lf_cdf[coeff_ctx], LF_BASE_SYMBOLS,
                                  ACCT_INFO("level", "base_lf_cdf"));
       if (t_dbg) {
-        printf("DEC c %d base_lf q%d coeff_ctx %d level %d\n", c, (*state >> 1), coeff_ctx, level);
+        printf("DEC c %d base_lf q%d coeff_ctx %d level %d\n", c, tcq_quant(*state), coeff_ctx, level);
       }
 #else
       level += aom_read_symbol(r, base_lf_cdf[coeff_ctx], LF_BASE_SYMBOLS,
@@ -233,14 +233,14 @@ static INLINE void read_coeffs_reverse_2d(
 #endif  // CONFIG_CHROMA_TX_COEFF_CODING
       );
 #if CONFIG_DQ
-    if (*state >> 1) // q1
+    if (tcq_quant(*state)) // q1
       level += aom_read_symbol(r, base_cdf_tcq[coeff_ctx], 4,
                                ACCT_INFO("level", "base_cdf_tcq"));
     else
       level += aom_read_symbol(r, base_cdf[coeff_ctx], 4,
                                ACCT_INFO("level", "base_cdf"));
     if (t_dbg) {
-      printf("DEC c %d base q%d level %d\n", c, (*state >> 1), level);
+      printf("DEC c %d base q%d level %d\n", c, tcq_quant(*state), level);
     }
 #else
       level += aom_read_symbol(r, base_cdf[coeff_ctx], 4,
@@ -395,7 +395,7 @@ static INLINE void read_coeffs_reverse(
     if (limits) {
       const int coeff_ctx = get_lower_levels_lf_ctx(levels, pos, bwl, tx_class);
 #if CONFIG_DQ
-      if (*state >> 1) // q1
+      if (tcq_quant(*state)) // q1
         level += aom_read_symbol(r, base_lf_cdf_tcq[coeff_ctx], LF_BASE_SYMBOLS,
                                  ACCT_INFO("level", "base_lf_cdf_tcq"));
       else
@@ -423,7 +423,7 @@ static INLINE void read_coeffs_reverse(
 #endif  // CONFIG_CHROMA_TX_COEFF_CODING
       );
 #if CONFIG_DQ
-    if (*state >> 1) // q1
+    if (tcq_quant(*state)) // q1
       level += aom_read_symbol(r, base_cdf_tcq[coeff_ctx], 4,
                                ACCT_INFO("level", "base_cdf_tcq"));
     else
@@ -1434,8 +1434,8 @@ uint8_t av1_read_coeffs_txb(const AV1_COMMON *const cm, DecoderCodingBlock *dcb,
         const int row = pos >> bwl;
         const int col = pos - (row << bwl);
         int limits = get_lf_limits(row, col, tx_class, plane);
-        int Qx = state >> 1;
-        int t = abs(tcoeffs[pos]);
+        int Qx = tcq_quant(state);
+        int level = abs(tcoeffs[pos]);
 
         if (abs(tcoeffs[pos])) {
           tran_low_t dq_coeff;
@@ -1456,7 +1456,7 @@ uint8_t av1_read_coeffs_txb(const AV1_COMMON *const cm, DecoderCodingBlock *dcb,
           tcoeffs[pos] = clamp(dq_coeff, min_value, max_value);
         }
         //state transition
-        state = tcq_next_state(state, t, limits);
+        state = tcq_next_state(state, level, limits);
       }
   }
 #endif

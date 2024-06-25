@@ -26,6 +26,7 @@ extern "C" {
 #if CONFIG_DQ
 #define DQENABLE                       0       //Determine whether to use DQ by dq_enable()
 #define NEWQINDEX                      1       //QP shift
+#define MORESTATES                     0       //1: 8-state; 0: 4-state
 #if CONFIG_LCCHROMA
 #define NEWHR                          1       //1:parity is determined by (base + LR) levels and not changed by HR
 #else
@@ -82,31 +83,9 @@ typedef struct _DECISION
   sr_t sr;
 } DECISION;
 
-static INLINE int tcq_quant(int state)
-{
-  return (state >> 1) & 1;
-}
+bool tcq_quant(const int state);
+int tcq_next_state(const int curState, const int absLevel, const int limits);
 
-static INLINE int tcq_parity(int abslevel, int limits)
-{
-#if NEWHR
-  (void)limits;
-  int par = abslevel & 1;
-#else
-  int cap = limits ? LF_MAX_BASE_BR_RANGE : MAX_BASE_BR_RANGE;
-  const int absLevelCtx = AOMMIN(cap, abslevel);
-  int par = absLevelCtx & 1;
-#endif
-  return par;
-}
-
-static INLINE int tcq_next_state(int state, int abslevel, int limits)
-{
-  int par = tcq_parity(abslevel, limits);
-  int flip = state & 1;
-  int next_state = (state >> 1) + 2 * (par ^ flip);
-  return next_state;
-}
 
 #if DQENABLE
 bool dq_enable(const TX_SIZE tx_size, int plane);

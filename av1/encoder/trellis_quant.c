@@ -24,26 +24,57 @@
 #include "av1/encoder/rdopt.h"
 #include "av1/encoder/tokenize.h"
 
-typedef struct _PQData {
-  tran_low_t absLevel;
-  int64_t deltaDist;
-  tran_low_t dqc;
-} PQData;
+typedef struct {
+  uint8_t *base;
+  int bufsize;
+  int idx;
+} tcq_levels_t;
 
-static AOM_INLINE void set_levels_buf(DECISION *decision, uint8_t *levels,
+static void tcq_levels_init(tcq_levels_t *lev, uint8_t *mem_tcq, int bufsize) {
+  lev->base = mem_tcq;
+  lev->idx = 0;
+  lev->bufsize = bufsize;
+}
+
+static void tcq_levels_swap(tcq_levels_t *lev) { lev->idx ^= 1; }
+
+static uint8_t *tcq_levels_prev(tcq_levels_t *lev, int st) {
+  return &lev->base[(2 * st + lev->idx) * lev->bufsize];
+}
+
+static uint8_t *tcq_levels_cur(tcq_levels_t *lev, int st) {
+  return &lev->base[(2 * st + !lev->idx) * lev->bufsize];
+}
+
+#if MORESTATES
+static const uint8_t next_st[TOTALSTATES][2] = { { 0, 4 }, { 4, 0 }, { 1, 5 },
+                                                 { 5, 1 }, { 6, 2 }, { 2, 6 },
+                                                 { 7, 3 }, { 3, 7 } };
+#else
+static const uint8_t next_st[TOTALSTATES][2] = {
+  { 0, 2 }, { 2, 0 }, { 1, 3 }, { 3, 1 }
+};
+#endif
+
+static AOM_INLINE void init_tcq_decision(tcq_node_t *decision) {
+  static const tcq_node_t def = { INT64_MAX >> 10, INT32_MAX >> 1, -1, -2 };
+  for (int state = 0; state < TOTALSTATES; state++) {
+    memcpy(&decision[state], &def, sizeof(def));
+  }
+}
+
+static AOM_INLINE void set_levels_buf(int prevId, int absLevel, uint8_t *levels,
                                       const int16_t *scan, const int eob_minus1,
                                       const int scan_pos, const int bwl,
                                       const int sharpness) {
-  if (decision->prevId == -2) {
+  if (prevId == -2) {
     return;
   }
   // update current abs level
-  levels[get_padded_idx(scan[scan_pos], bwl)] =
-      AOMMIN(decision->absLevel, INT8_MAX);
+  levels[get_padded_idx(scan[scan_pos], bwl)] = AOMMIN(absLevel, INT8_MAX);
   // check current node is a new start position? if so, set all previous
   // position to 0. prevId == -1 means a new start, prevId == -2 ?
-  bool new_eob =
-      decision->prevId < 0 && scan_pos + 1 <= eob_minus1 && sharpness == 0;
+  bool new_eob = prevId < 0 && scan_pos + 1 <= eob_minus1 && sharpness == 0;
   if (new_eob) {
     for (int si = scan_pos + 1; si <= eob_minus1; si++) {
       levels[get_padded_idx(scan[si], bwl)] = 0;
@@ -73,671 +104,20 @@ static INLINE int get_high_range(int abs_qc, int lf) {
   return high_range;
 }
 
+static AOM_FORCE_INLINE int get_dqv(const int32_t *dequant, int coeff_idx,
+                                    const qm_val_t *iqmatrix) {
+  int dqv = dequant[!!coeff_idx];
+  if (iqmatrix != NULL)
+    dqv =
+        ((iqmatrix[coeff_idx] * dqv) + (1 << (AOM_QM_BITS - 1))) >> AOM_QM_BITS;
+  return dqv;
+}
+
 static AOM_FORCE_INLINE int64_t get_coeff_dist(tran_low_t tcoeff,
                                                tran_low_t dqcoeff, int shift) {
   const int64_t diff = (tcoeff - dqcoeff) * (1 << shift);
   const int64_t error = diff * diff;
   return error;
-}
-
-static const int8_t eob_to_pos_small[33] = {
-  0, 1, 2,                                        // 0-2
-  3, 3,                                           // 3-4
-  4, 4, 4, 4,                                     // 5-8
-  5, 5, 5, 5, 5, 5, 5, 5,                         // 9-16
-  6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6  // 17-32
-};
-
-static const int8_t eob_to_pos_large[17] = {
-  6,                               // place holder
-  7,                               // 33-64
-  8,  8,                           // 65-128
-  9,  9,  9,  9,                   // 129-256
-  10, 10, 10, 10, 10, 10, 10, 10,  // 257-512
-  11                               // 513-
-};
-
-static AOM_FORCE_INLINE int get_eob_pos_token(const int eob, int *const extra) {
-  int t;
-
-  if (eob < 33) {
-    t = eob_to_pos_small[eob];
-  } else {
-    const int e = AOMMIN((eob - 1) >> 5, 16);
-    t = eob_to_pos_large[e];
-  }
-
-  *extra = eob - av1_eob_group_start[t];
-
-  return t;
-}
-
-static int get_eob_cost(int eob, const LV_MAP_EOB_COST *txb_eob_costs,
-                        const LV_MAP_COEFF_COST *txb_costs
-#if CONFIG_EOB_POS_LUMA
-                        ,
-                        const int is_inter
-#endif  // CONFIG_EOB_POS_LUMA
-) {
-  int eob_cost = 0;
-  int eob_extra;
-  const int eob_pt = get_eob_pos_token(eob, &eob_extra);
-  eob_cost += txb_eob_costs->eob_cost
-#if CONFIG_EOB_POS_LUMA
-                  [is_inter]
-#endif  // CONFIG_EOB_POS_LUMA
-                  [eob_pt - 1];
-  const int eob_offset_bits = av1_eob_offset_bits[eob_pt];
-  if (eob_offset_bits > 0) {
-    const int eob_ctx = eob_pt - 3;
-    const int eob_shift = eob_offset_bits - 1;
-    const int bit = (eob_extra & (1 << eob_shift)) ? 1 : 0;
-    eob_cost += txb_costs->eob_extra_cost[eob_ctx][bit];
-    if (eob_offset_bits > 1) eob_cost += av1_cost_literal(eob_offset_bits - 1);
-  }
-  return eob_cost;
-}
-
-static const int golomb_bits_cost[32] = {
-  0,       512,     512 * 3, 512 * 3, 512 * 5, 512 * 5, 512 * 5, 512 * 5,
-  512 * 7, 512 * 7, 512 * 7, 512 * 7, 512 * 7, 512 * 7, 512 * 7, 512 * 7,
-  512 * 9, 512 * 9, 512 * 9, 512 * 9, 512 * 9, 512 * 9, 512 * 9, 512 * 9,
-  512 * 9, 512 * 9, 512 * 9, 512 * 9, 512 * 9, 512 * 9, 512 * 9, 512 * 9
-};
-static const int golomb_cost_diff[32] = {
-  0,       512, 512 * 2, 0, 512 * 2, 0, 0, 0, 512 * 2, 0, 0, 0, 0, 0, 0, 0,
-  512 * 2, 0,   0,       0, 0,       0, 0, 0, 0,       0, 0, 0, 0, 0, 0, 0
-};
-
-static AOM_FORCE_INLINE int get_golomb_cost(int abs_qc) {
-#if NEWHR
-  if (abs_qc >= NUM_BASE_LEVELS + COEFF_BASE_RANGE) {
-    const int r = 1 + get_high_range(abs_qc, 0);
-    const int length = get_msb(r) + 1;
-    return av1_cost_literal(2 * length - 1);
-  }
-#else
-  if (abs_qc >= 1 + NUM_BASE_LEVELS + COEFF_BASE_RANGE) {
-    const int r = abs_qc - COEFF_BASE_RANGE - NUM_BASE_LEVELS;
-    const int length = get_msb(r) + 1;
-    return av1_cost_literal(2 * length - 1);
-  }
-#endif
-  return 0;
-}
-
-// Golomb cost of coding bypass coded level values in the
-// low-frequency region.
-static AOM_FORCE_INLINE int get_golomb_cost_lf(int abs_qc) {
-#if NEWHR
-  if (abs_qc >= LF_NUM_BASE_LEVELS + COEFF_BASE_RANGE) {
-    const int r = 1 + get_high_range(abs_qc, 1);
-    const int length = get_msb(r) + 1;
-    return av1_cost_literal(2 * length - 1);
-  }
-#else
-  if (abs_qc >= 1 + LF_NUM_BASE_LEVELS + COEFF_BASE_RANGE) {
-    const int r = abs_qc - COEFF_BASE_RANGE - LF_NUM_BASE_LEVELS;
-    const int length = get_msb(r) + 1;
-    return av1_cost_literal(2 * length - 1);
-  }
-#endif
-  return 0;
-}
-
-static AOM_FORCE_INLINE int get_br_cost(tran_low_t level,
-                                        const int *coeff_lps) {
-  const int base_range = AOMMIN(level - 1 - NUM_BASE_LEVELS, COEFF_BASE_RANGE);
-  return coeff_lps[base_range] + get_golomb_cost(level);
-}
-
-// Base range cost of coding level values in the
-// low-frequency region, includes the bypass cost.
-static AOM_FORCE_INLINE int get_br_lf_cost(tran_low_t level,
-                                           const int *coeff_lps) {
-  const int base_range =
-      AOMMIN(level - 1 - LF_NUM_BASE_LEVELS, COEFF_BASE_RANGE);
-  return coeff_lps[base_range] + get_golomb_cost_lf(level);
-}
-
-static INLINE int get_coeff_cost_eob(int ci, tran_low_t abs_qc, int sign,
-                                     int coeff_ctx, int dc_sign_ctx,
-                                     const LV_MAP_COEFF_COST *txb_costs,
-                                     int bwl, TX_CLASS tx_class
-#if CONFIG_CONTEXT_DERIVATION
-                                     ,
-                                     int32_t *tmp_sign
-#endif  // CONFIG_CONTEXT_DERIVATION
-                                     ,
-                                     int plane) {
-  int cost = 0;
-  const int row = ci >> bwl;
-  const int col = ci - (row << bwl);
-  int limits = get_lf_limits(row, col, tx_class, plane);
-#if CONFIG_LCCHROMA
-  const int(*base_lf_eob_cost_ptr)[LF_BASE_SYMBOLS - 1] =
-      plane > 0 ? txb_costs->base_lf_eob_cost_uv : txb_costs->base_lf_eob_cost;
-  const int(*base_eob_cost_ptr)[3] =
-      plane > 0 ? txb_costs->base_eob_cost_uv : txb_costs->base_eob_cost;
-
-  cost += limits ? base_lf_eob_cost_ptr[coeff_ctx]
-                                       [AOMMIN(abs_qc, LF_BASE_SYMBOLS - 1) - 1]
-                 : base_eob_cost_ptr[coeff_ctx][AOMMIN(abs_qc, 3) - 1];
-#else
-  if (limits) {
-    cost +=
-        txb_costs->base_lf_eob_cost[coeff_ctx]
-                                   [AOMMIN(abs_qc, LF_BASE_SYMBOLS - 1) - 1];
-  } else {
-    cost += txb_costs->base_eob_cost[coeff_ctx][AOMMIN(abs_qc, 3) - 1];
-  }
-#endif  // CONFIG_LCCHROMA
-  if (abs_qc != 0) {
-#if CONFIG_IMPROVEIDTX_CTXS
-    const int dc_ph_group = 0;  // PH disabled
-    const bool dc_2dtx = (ci == 0);
-    const bool dc_hor = (col == 0) && tx_class == TX_CLASS_HORIZ;
-    const bool dc_ver = (row == 0) && tx_class == TX_CLASS_VERT;
-    if (dc_2dtx || dc_hor || dc_ver) {
-      if (plane == AOM_PLANE_V)
-        cost += txb_costs->v_dc_sign_cost[tmp_sign[ci]][dc_sign_ctx][sign];
-      else
-        cost += txb_costs->dc_sign_cost[dc_ph_group][dc_sign_ctx][sign];
-    } else {
-      if (plane == AOM_PLANE_V)
-        cost += txb_costs->v_ac_sign_cost[tmp_sign[ci]][sign];
-      else
-        cost += av1_cost_literal(1);
-    }
-#else
-    if (ci == 0) {
-#if CONFIG_CONTEXT_DERIVATION
-      if (plane == AOM_PLANE_V)
-        cost += txb_costs->v_dc_sign_cost[tmp_sign[0]][dc_sign_ctx][sign];
-      else
-        cost += txb_costs->dc_sign_cost[dc_sign_ctx][sign];
-#else
-      cost += txb_costs->dc_sign_cost[dc_sign_ctx][sign];
-#endif  // CONFIG_CONTEXT_DERIVATION
-    } else {
-#if CONFIG_CONTEXT_DERIVATION
-      if (plane == AOM_PLANE_V)
-        cost += txb_costs->v_ac_sign_cost[tmp_sign[ci]][sign];
-      else
-        cost += av1_cost_literal(1);
-#else
-      cost += av1_cost_literal(1);
-#endif  // CONFIG_CONTEXT_DERIVATION
-    }
-#endif  // CONFIG_IMPROVEIDTX_CTXS
-#if CONFIG_LCCHROMA
-    if (plane > 0) {
-      if (limits) {
-        if (abs_qc > LF_NUM_BASE_LEVELS) {
-          int br_ctx = get_br_ctx_lf_eob_chroma(ci, tx_class);
-          cost += get_br_lf_cost(abs_qc, txb_costs->lps_lf_cost_uv[br_ctx]);
-        }
-      } else {
-        if (abs_qc > NUM_BASE_LEVELS) {
-          int br_ctx = 0; /* get_br_ctx_eob_chroma */
-          cost += get_br_cost(abs_qc, txb_costs->lps_cost_uv[br_ctx]);
-        }
-      }
-    } else {
-      if (limits) {
-        if (abs_qc > LF_NUM_BASE_LEVELS) {
-          int br_ctx = get_br_ctx_lf_eob(ci, tx_class);
-          cost += get_br_lf_cost(abs_qc, txb_costs->lps_lf_cost[br_ctx]);
-        }
-      } else {
-        if (abs_qc > NUM_BASE_LEVELS) {
-          int br_ctx = 0; /* get_br_ctx_eob */
-          cost += get_br_cost(abs_qc, txb_costs->lps_cost[br_ctx]);
-        }
-      }
-    }
-#else
-    if (limits) {
-      if (abs_qc > LF_NUM_BASE_LEVELS) {
-        int br_ctx = get_br_ctx_lf_eob(ci, tx_class);
-        cost += get_br_lf_cost(abs_qc, txb_costs->lps_lf_cost[br_ctx]);
-      }
-    } else {
-      if (abs_qc > NUM_BASE_LEVELS) {
-        int br_ctx = 0; /* get_br_ctx_eob */
-        cost += get_br_cost(abs_qc, txb_costs->lps_cost[br_ctx]);
-      }
-    }
-#endif  // CONFIG_LCCHROMA
-  }
-  return cost;
-}
-
-static INLINE int get_coeff_cost_general(int is_last, int ci, tran_low_t abs_qc,
-                                         int sign, int coeff_ctx,
-                                         int dc_sign_ctx,
-                                         const LV_MAP_COEFF_COST *txb_costs,
-                                         int bwl, TX_CLASS tx_class,
-                                         const uint8_t *levels
-#if CONFIG_CONTEXT_DERIVATION
-                                         ,
-                                         int32_t *tmp_sign
-#endif  // CONFIG_CONTEXT_DERIVATION
-                                         ,
-                                         int plane, int limits) {
-  int cost = 0;
-  if (is_last) {
-#if CONFIG_LCCHROMA
-    const int(*base_lf_eob_cost_ptr)[LF_BASE_SYMBOLS - 1] =
-        plane > 0 ? txb_costs->base_lf_eob_cost_uv
-                  : txb_costs->base_lf_eob_cost;
-    const int(*base_eob_cost_ptr)[3] =
-        plane > 0 ? txb_costs->base_eob_cost_uv : txb_costs->base_eob_cost;
-
-    cost += limits
-                ? base_lf_eob_cost_ptr[coeff_ctx]
-                                      [AOMMIN(abs_qc, LF_BASE_SYMBOLS - 1) - 1]
-                : base_eob_cost_ptr[coeff_ctx][AOMMIN(abs_qc, 3) - 1];
-
-#else
-    if (limits) {
-      cost +=
-          txb_costs->base_lf_eob_cost[coeff_ctx]
-                                     [AOMMIN(abs_qc, LF_BASE_SYMBOLS - 1) - 1];
-    } else {
-      cost += txb_costs->base_eob_cost[coeff_ctx][AOMMIN(abs_qc, 3) - 1];
-    }
-#endif  // CONFIG_LCCHROMA
-  } else {
-#if CONFIG_LCCHROMA && CONFIG_DQ
-    const int(*base_lf_cost_ptr)[DQ_CTXS][LF_BASE_SYMBOLS * 2] =
-        plane > 0 ? txb_costs->base_lf_cost_uv : txb_costs->base_lf_cost;
-    const int(*base_cost_ptr)[DQ_CTXS][8] =
-        plane > 0 ? txb_costs->base_cost_uv : txb_costs->base_cost;
-    cost += limits ? base_lf_cost_ptr[coeff_ctx][0]
-                                     [AOMMIN(abs_qc, LF_BASE_SYMBOLS - 1)]
-                   : base_cost_ptr[coeff_ctx][0][AOMMIN(abs_qc, 3)];
-#elif CONFIG_LCCHROMA
-    const int(*base_lf_cost_ptr)[LF_BASE_SYMBOLS * 2] =
-        plane > 0 ? txb_costs->base_lf_cost_uv : txb_costs->base_lf_cost;
-    const int(*base_cost_ptr)[8] =
-        plane > 0 ? txb_costs->base_cost_uv : txb_costs->base_cost;
-    cost +=
-        limits
-            ? base_lf_cost_ptr[coeff_ctx][AOMMIN(abs_qc, LF_BASE_SYMBOLS - 1)]
-            : base_cost_ptr[coeff_ctx][AOMMIN(abs_qc, 3)];
-#else
-    if (limits) {
-      cost +=
-          txb_costs
-              ->base_lf_cost[coeff_ctx][AOMMIN(abs_qc, LF_BASE_SYMBOLS - 1)];
-    } else {
-      cost += txb_costs->base_cost[coeff_ctx][AOMMIN(abs_qc, 3)];
-    }
-#endif  // CONFIG_LCCHROMA
-  }
-  if (abs_qc != 0) {
-#if CONFIG_IMPROVEIDTX_CTXS
-    const int dc_ph_group = 0;  // PH disabled
-    const int row = ci >> bwl;
-    const int col = ci - (row << bwl);
-    const bool dc_2dtx = (ci == 0);
-    const bool dc_hor = (col == 0) && tx_class == TX_CLASS_HORIZ;
-    const bool dc_ver = (row == 0) && tx_class == TX_CLASS_VERT;
-    if (dc_2dtx || dc_hor || dc_ver) {
-      if (plane == AOM_PLANE_V)
-        cost += txb_costs->v_dc_sign_cost[tmp_sign[ci]][dc_sign_ctx][sign];
-      else
-        cost += txb_costs->dc_sign_cost[dc_ph_group][dc_sign_ctx][sign];
-    } else {
-      if (plane == AOM_PLANE_V)
-        cost += txb_costs->v_ac_sign_cost[tmp_sign[ci]][sign];
-      else
-        cost += av1_cost_literal(1);
-    }
-#else
-    if (ci == 0) {
-#if CONFIG_CONTEXT_DERIVATION
-      if (plane == AOM_PLANE_V)
-        cost += txb_costs->v_dc_sign_cost[tmp_sign[0]][dc_sign_ctx][sign];
-      else
-        cost += txb_costs->dc_sign_cost[dc_sign_ctx][sign];
-#else
-      cost += txb_costs->dc_sign_cost[dc_sign_ctx][sign];
-#endif  // CONFIG_CONTEXT_DERIVATION
-    } else {
-#if CONFIG_CONTEXT_DERIVATION
-      if (plane == AOM_PLANE_V)
-        cost += txb_costs->v_ac_sign_cost[tmp_sign[ci]][sign];
-      else
-        cost += av1_cost_literal(1);
-#else
-      cost += av1_cost_literal(1);
-#endif  // CONFIG_CONTEXT_DERIVATION
-    }
-#endif  // CONFIG_IMPROVEIDTX_CTXS
-#if CONFIG_LCCHROMA
-    if (plane > 0) {
-      if (limits) {
-        if (abs_qc > LF_NUM_BASE_LEVELS) {
-          int br_ctx;
-          if (is_last)
-            br_ctx = get_br_ctx_lf_eob_chroma(ci, tx_class);
-          else
-            br_ctx = get_br_lf_ctx_chroma(levels, ci, bwl, tx_class);
-          cost += get_br_lf_cost(abs_qc, txb_costs->lps_lf_cost_uv[br_ctx]);
-        }
-      } else {
-        if (abs_qc > NUM_BASE_LEVELS) {
-          int br_ctx;
-          if (is_last)
-            br_ctx = 0; /* get_br_ctx_eob_chroma */
-          else
-            br_ctx = get_br_ctx_chroma(levels, ci, bwl, tx_class);
-          cost += get_br_cost(abs_qc, txb_costs->lps_cost_uv[br_ctx]);
-        }
-      }
-    } else {
-      if (limits) {
-        if (abs_qc > LF_NUM_BASE_LEVELS) {
-          int br_ctx;
-          if (is_last)
-            br_ctx = get_br_ctx_lf_eob(ci, tx_class);
-          else
-            br_ctx = get_br_lf_ctx(levels, ci, bwl, tx_class);
-          cost += get_br_lf_cost(abs_qc, txb_costs->lps_lf_cost[br_ctx]);
-        }
-      } else {
-        if (abs_qc > NUM_BASE_LEVELS) {
-          int br_ctx;
-          if (is_last)
-            br_ctx = 0; /* get_br_ctx_eob */
-          else
-            br_ctx = get_br_ctx(levels, ci, bwl, tx_class);
-          cost += get_br_cost(abs_qc, txb_costs->lps_cost[br_ctx]);
-        }
-      }
-    }
-#else
-    if (limits) {
-      if (abs_qc > LF_NUM_BASE_LEVELS) {
-        int br_ctx;
-        if (is_last)
-          br_ctx = get_br_ctx_lf_eob(ci, tx_class);
-        else
-          br_ctx = get_br_lf_ctx(levels, ci, bwl, tx_class);
-        cost += get_br_lf_cost(abs_qc, txb_costs->lps_lf_cost[br_ctx]);
-      }
-    } else {
-      if (abs_qc > NUM_BASE_LEVELS) {
-        int br_ctx;
-        if (is_last)
-          br_ctx = 0; /* get_br_ctx_eob */
-        else
-          br_ctx = get_br_ctx(levels, ci, bwl, tx_class);
-        cost += get_br_cost(abs_qc, txb_costs->lps_cost[br_ctx]);
-      }
-    }
-#endif  // CONFIG_LCCHROMA
-  }
-  return cost;
-}
-
-static INLINE int get_coeff_cost_general_q1(int is_last, int ci,
-                                            tran_low_t abs_qc, int sign,
-                                            int coeff_ctx, int dc_sign_ctx,
-                                            const LV_MAP_COEFF_COST *txb_costs,
-                                            int bwl, TX_CLASS tx_class,
-                                            const uint8_t *levels
-#if CONFIG_CONTEXT_DERIVATION
-                                            ,
-                                            int32_t *tmp_sign
-#endif  // CONFIG_CONTEXT_DERIVATION
-                                            ,
-                                            int plane, int limits) {
-  int cost = 0;
-  if (is_last) {
-    // quantizer 1 can not be used for last non-zero coeff.
-    assert(0);
-  } else {
-#if CONFIG_LCCHROMA
-    const int(*base_lf_cost_ptr)[DQ_CTXS][LF_BASE_SYMBOLS * 2] =
-        plane > 0 ? txb_costs->base_lf_cost_uv : txb_costs->base_lf_cost;
-    const int(*base_cost_ptr)[DQ_CTXS][8] =
-        plane > 0 ? txb_costs->base_cost_uv : txb_costs->base_cost;
-    cost += limits ? base_lf_cost_ptr[coeff_ctx][1]
-                                     [AOMMIN(abs_qc, LF_BASE_SYMBOLS - 1)]
-                   : base_cost_ptr[coeff_ctx][1][AOMMIN(abs_qc, 3)];
-#else
-    if (limits) {
-      cost += txb_costs->base_lf_cost_tcq[coeff_ctx]
-                                         [AOMMIN(abs_qc, LF_BASE_SYMBOLS - 1)];
-    } else {
-      cost += txb_costs->base_cost_tcq[coeff_ctx][AOMMIN(abs_qc, 3)];
-    }
-#endif  // CONFIG_LCCHROMA
-  }
-  if (abs_qc != 0) {
-#if CONFIG_IMPROVEIDTX_CTXS
-    const int dc_ph_group = 0;  // PH disabled
-    const int row = ci >> bwl;
-    const int col = ci - (row << bwl);
-    const bool dc_2dtx = (ci == 0);
-    const bool dc_hor = (col == 0) && tx_class == TX_CLASS_HORIZ;
-    const bool dc_ver = (row == 0) && tx_class == TX_CLASS_VERT;
-    if (dc_2dtx || dc_hor || dc_ver) {
-      if (plane == AOM_PLANE_V)
-        cost += txb_costs->v_dc_sign_cost[tmp_sign[ci]][dc_sign_ctx][sign];
-      else
-        cost += txb_costs->dc_sign_cost[dc_ph_group][dc_sign_ctx][sign];
-    } else {
-      if (plane == AOM_PLANE_V)
-        cost += txb_costs->v_ac_sign_cost[tmp_sign[ci]][sign];
-      else
-        cost += av1_cost_literal(1);
-    }
-#else
-    if (ci == 0) {
-#if CONFIG_CONTEXT_DERIVATION
-      if (plane == AOM_PLANE_V)
-        cost += txb_costs->v_dc_sign_cost[tmp_sign[0]][dc_sign_ctx][sign];
-      else
-        cost += txb_costs->dc_sign_cost[dc_sign_ctx][sign];
-#else
-      cost += txb_costs->dc_sign_cost[dc_sign_ctx][sign];
-#endif  // CONFIG_CONTEXT_DERIVATION
-    } else {
-#if CONFIG_CONTEXT_DERIVATION
-      if (plane == AOM_PLANE_V)
-        cost += txb_costs->v_ac_sign_cost[tmp_sign[ci]][sign];
-      else
-        cost += av1_cost_literal(1);
-#else
-      cost += av1_cost_literal(1);
-#endif  // CONFIG_CONTEXT_DERIVATION
-    }
-#endif  // CONFIG_IMPROVEIDTX_CTXS
-#if CONFIG_LCCHROMA
-    if (plane > 0) {
-      if (limits) {
-        if (abs_qc > LF_NUM_BASE_LEVELS) {
-          int br_ctx;
-          if (is_last)
-            br_ctx = get_br_ctx_lf_eob_chroma(ci, tx_class);
-          else
-            br_ctx = get_br_lf_ctx_chroma(levels, ci, bwl, tx_class);
-          cost += get_br_lf_cost(abs_qc, txb_costs->lps_lf_cost_uv[br_ctx]);
-        }
-      } else {
-        if (abs_qc > NUM_BASE_LEVELS) {
-          int br_ctx;
-          if (is_last)
-            br_ctx = 0; /* get_br_ctx_eob_chroma */
-          else
-            br_ctx = get_br_ctx_chroma(levels, ci, bwl, tx_class);
-          cost += get_br_cost(abs_qc, txb_costs->lps_cost_uv[br_ctx]);
-        }
-      }
-    } else {
-      if (limits) {
-        if (abs_qc > LF_NUM_BASE_LEVELS) {
-          int br_ctx;
-          if (is_last)
-            br_ctx = get_br_ctx_lf_eob(ci, tx_class);
-          else
-            br_ctx = get_br_lf_ctx(levels, ci, bwl, tx_class);
-          cost += get_br_lf_cost(abs_qc, txb_costs->lps_lf_cost[br_ctx]);
-        }
-      } else {
-        if (abs_qc > NUM_BASE_LEVELS) {
-          int br_ctx;
-          if (is_last)
-            br_ctx = 0; /* get_br_ctx_eob */
-          else
-            br_ctx = get_br_ctx(levels, ci, bwl, tx_class);
-          cost += get_br_cost(abs_qc, txb_costs->lps_cost[br_ctx]);
-        }
-      }
-    }
-#else
-    if (limits) {
-      if (abs_qc > LF_NUM_BASE_LEVELS) {
-        int br_ctx;
-        if (is_last)
-          br_ctx = get_br_ctx_lf_eob(ci, tx_class);
-        else
-          br_ctx = get_br_lf_ctx(levels, ci, bwl, tx_class);
-        cost += get_br_lf_cost(abs_qc, txb_costs->lps_lf_cost[br_ctx]);
-      }
-    } else {
-      if (abs_qc > NUM_BASE_LEVELS) {
-        int br_ctx;
-        if (is_last)
-          br_ctx = 0; /* get_br_ctx_eob */
-        else
-          br_ctx = get_br_ctx(levels, ci, bwl, tx_class);
-        cost += get_br_cost(abs_qc, txb_costs->lps_cost[br_ctx]);
-      }
-    }
-#endif  // CONFIG_LCCHROMA
-  }
-  return cost;
-}
-
-static void decide(int64_t distA, int64_t distB, int64_t distzero,
-                   int64_t rdmult, int rateA, int rateB, int rate_zero,
-                   PQData *pqDataA, PQData *pqDataB, int limits, int prev_state,
-                   DECISION *decision_02, DECISION *decision_1) {
-  int parityA = tcq_parity(pqDataA->absLevel, limits);
-  int parityB = tcq_parity(pqDataB->absLevel, limits);
-  int64_t costA = RDCOST(rdmult, rateA, distA);
-  int64_t costB = RDCOST(rdmult, rateB, distB);
-  int64_t cost_zero = RDCOST(rdmult, rate_zero, distzero);
-  if (parityA) {
-    if (costA < decision_1->rdCost) {
-      decision_1->rdCost = costA;
-      decision_1->dist = distA;
-      decision_1->rate = rateA;
-      decision_1->prevId = prev_state;
-      decision_1->absLevel = pqDataA->absLevel;
-      decision_1->dqc = pqDataA->dqc;
-    }
-  } else {
-    if (costA < decision_02->rdCost) {
-      decision_02->rdCost = costA;
-      decision_02->dist = distA;
-      decision_02->rate = rateA;
-      decision_02->prevId = prev_state;
-      decision_02->absLevel = pqDataA->absLevel;
-      decision_02->dqc = pqDataA->dqc;
-    }
-  }
-
-  if (parityB) {
-    if (costB < decision_1->rdCost) {
-      decision_1->rdCost = costB;
-      decision_1->dist = distB;
-      decision_1->rate = rateB;
-      decision_1->prevId = prev_state;
-      decision_1->absLevel = pqDataB->absLevel;
-      decision_1->dqc = pqDataB->dqc;
-    }
-  } else {
-    if (costB < decision_02->rdCost) {
-      decision_02->rdCost = costB;
-      decision_02->dist = distB;
-      decision_02->rate = rateB;
-      decision_02->prevId = prev_state;
-      decision_02->absLevel = pqDataB->absLevel;
-      decision_02->dqc = pqDataB->dqc;
-    }
-  }
-  if (cost_zero < decision_02->rdCost) {
-    decision_02->rdCost = cost_zero;
-    decision_02->dist = distzero;
-    decision_02->rate = rate_zero;
-    decision_02->prevId = prev_state;
-    decision_02->absLevel = 0;
-    decision_02->dqc = 0;
-  }
-}
-
-void pre_quant(tran_low_t tqc, PQData *pqData, const int32_t *quant_ptr,
-               int dqv, int log_scale, int scan_pos) {
-  // calculate qIdx
-  const int shift = 16 - log_scale + QUANT_FP_BITS;
-  tran_low_t add = -((3 << shift) >> 1);
-  tran_low_t abs_tqc = abs(tqc);
-
-  tran_low_t qIdx = (int)AOMMAX(
-      1, AOMMIN(((1 << 16) - 1),
-                ((int64_t)abs_tqc * quant_ptr[scan_pos != 0] + add) >> shift));
-
-  const int64_t dist0 = get_coeff_dist(abs_tqc, 0, log_scale - 1);
-
-  int Idx_a = qIdx & 3;
-
-  tran_low_t dqca = (tran_low_t)ROUND_POWER_OF_TWO_64((tran_high_t)qIdx * dqv,
-                                                      QUANT_TABLE_BITS) >>
-                    log_scale;
-
-  pqData[Idx_a].absLevel = (++qIdx) >> 1;
-  pqData[Idx_a].deltaDist =
-      get_coeff_dist(abs_tqc, dqca, log_scale - 1) - dist0;
-  pqData[Idx_a].dqc = dqca;
-
-  int Idx_b = qIdx & 3;
-
-  tran_low_t dqcb = (tran_low_t)ROUND_POWER_OF_TWO_64((tran_high_t)qIdx * dqv,
-                                                      QUANT_TABLE_BITS) >>
-                    log_scale;
-
-  pqData[Idx_b].absLevel = (++qIdx) >> 1;
-  pqData[Idx_b].deltaDist =
-      get_coeff_dist(abs_tqc, dqcb, log_scale - 1) - dist0;
-  pqData[Idx_b].dqc = dqcb;
-
-  int Idx_c = qIdx & 3;
-
-  tran_low_t dqcc = (tran_low_t)ROUND_POWER_OF_TWO_64((tran_high_t)qIdx * dqv,
-                                                      QUANT_TABLE_BITS) >>
-                    log_scale;
-
-  pqData[Idx_c].absLevel = (++qIdx) >> 1;
-  pqData[Idx_c].deltaDist =
-      get_coeff_dist(abs_tqc, dqcc, log_scale - 1) - dist0;
-  pqData[Idx_c].dqc = dqcc;
-
-  int Idx_d = qIdx & 3;
-
-  tran_low_t dqcd = (tran_low_t)ROUND_POWER_OF_TWO_64((tran_high_t)qIdx * dqv,
-                                                      QUANT_TABLE_BITS) >>
-                    log_scale;
-
-  pqData[Idx_d].absLevel = (++qIdx) >> 1;
-  pqData[Idx_d].deltaDist =
-      get_coeff_dist(abs_tqc, dqcd, log_scale - 1) - dist0;
-  pqData[Idx_d].dqc = dqcd;
 }
 
 // This function gets the estimated bit cost for a 'secondary tx set'
@@ -757,7 +137,6 @@ static int get_sec_tx_set_cost(const MACROBLOCK *x, const MB_MODE_INFO *mbmi,
 #endif  // CONFIG_INTRA_TX_IST_PARSE
 }
 
-// TODO(angiebird): use this function whenever it's possible
 static int get_tx_type_cost(const MACROBLOCK *x, const MACROBLOCKD *xd,
                             int plane, TX_SIZE tx_size, TX_TYPE tx_type,
                             int reduced_tx_set_used, int eob, int bob_code,
@@ -877,13 +256,1481 @@ static int get_tx_type_cost(const MACROBLOCK *x, const MACROBLOCKD *xd,
   return 0;
 }
 
-static AOM_FORCE_INLINE int get_dqv(const int32_t *dequant, int coeff_idx,
-                                    const qm_val_t *iqmatrix) {
-  int dqv = dequant[!!coeff_idx];
-  if (iqmatrix != NULL)
-    dqv =
-        ((iqmatrix[coeff_idx] * dqv) + (1 << (AOM_QM_BITS - 1))) >> AOM_QM_BITS;
-  return dqv;
+static AOM_FORCE_INLINE int get_golomb_cost(int abs_qc) {
+#if NEWHR
+  if (abs_qc >= NUM_BASE_LEVELS + COEFF_BASE_RANGE) {
+    const int r = 1 + get_high_range(abs_qc, 0);
+    const int length = get_msb(r) + 1;
+    return av1_cost_literal(2 * length - 1);
+  }
+#else
+  if (abs_qc >= 1 + NUM_BASE_LEVELS + COEFF_BASE_RANGE) {
+    const int r = abs_qc - COEFF_BASE_RANGE - NUM_BASE_LEVELS;
+    const int length = get_msb(r) + 1;
+    return av1_cost_literal(2 * length - 1);
+  }
+#endif
+  return 0;
+}
+
+// Golomb cost of coding bypass coded level values in the
+// low-frequency region.
+static AOM_FORCE_INLINE int get_golomb_cost_lf(int abs_qc) {
+#if NEWHR
+  if (abs_qc >= LF_NUM_BASE_LEVELS + COEFF_BASE_RANGE) {
+    const int r = 1 + get_high_range(abs_qc, 1);
+    const int length = get_msb(r) + 1;
+    return av1_cost_literal(2 * length - 1);
+  }
+#else
+  if (abs_qc >= 1 + LF_NUM_BASE_LEVELS + COEFF_BASE_RANGE) {
+    const int r = abs_qc - COEFF_BASE_RANGE - LF_NUM_BASE_LEVELS;
+    const int length = get_msb(r) + 1;
+    return av1_cost_literal(2 * length - 1);
+  }
+#endif
+  return 0;
+}
+
+// Base range cost of coding level values in the
+// low-frequency region, includes the bypass cost.
+static AOM_FORCE_INLINE int get_br_lf_cost(tran_low_t level,
+                                           const int *coeff_lps) {
+  const int base_range =
+      AOMMIN(level - 1 - LF_NUM_BASE_LEVELS, COEFF_BASE_RANGE);
+  return coeff_lps[base_range] + get_golomb_cost_lf(level);
+}
+
+static AOM_FORCE_INLINE int get_br_cost(tran_low_t level,
+                                        const int *coeff_lps) {
+  const int base_range = AOMMIN(level - 1 - NUM_BASE_LEVELS, COEFF_BASE_RANGE);
+  return coeff_lps[base_range] + get_golomb_cost(level);
+}
+
+static INLINE int get_coeff_cost_eob(int ci, tran_low_t abs_qc, int sign,
+                                     int coeff_ctx, int dc_sign_ctx,
+                                     const LV_MAP_COEFF_COST *txb_costs,
+                                     int bwl, TX_CLASS tx_class
+#if CONFIG_CONTEXT_DERIVATION
+                                     ,
+                                     int32_t *tmp_sign
+#endif  // CONFIG_CONTEXT_DERIVATION
+                                     ,
+                                     int plane) {
+  int cost = 0;
+  const int row = ci >> bwl;
+  const int col = ci - (row << bwl);
+  int limits = get_lf_limits(row, col, tx_class, plane);
+#if CONFIG_LCCHROMA
+  const int(*base_lf_eob_cost_ptr)[LF_BASE_SYMBOLS - 1] =
+      plane > 0 ? txb_costs->base_lf_eob_cost_uv : txb_costs->base_lf_eob_cost;
+  const int(*base_eob_cost_ptr)[3] =
+      plane > 0 ? txb_costs->base_eob_cost_uv : txb_costs->base_eob_cost;
+
+  cost += limits ? base_lf_eob_cost_ptr[coeff_ctx]
+                                       [AOMMIN(abs_qc, LF_BASE_SYMBOLS - 1) - 1]
+                 : base_eob_cost_ptr[coeff_ctx][AOMMIN(abs_qc, 3) - 1];
+#else
+  if (limits) {
+    cost +=
+        txb_costs->base_lf_eob_cost[coeff_ctx]
+                                   [AOMMIN(abs_qc, LF_BASE_SYMBOLS - 1) - 1];
+  } else {
+    cost += txb_costs->base_eob_cost[coeff_ctx][AOMMIN(abs_qc, 3) - 1];
+  }
+#endif  // CONFIG_LCCHROMA
+  if (abs_qc != 0) {
+#if CONFIG_IMPROVEIDTX_CTXS
+    const int dc_ph_group = 0;  // PH disabled
+    const bool dc_2dtx = (ci == 0);
+    const bool dc_hor = (col == 0) && tx_class == TX_CLASS_HORIZ;
+    const bool dc_ver = (row == 0) && tx_class == TX_CLASS_VERT;
+    if (dc_2dtx || dc_hor || dc_ver) {
+      if (plane == AOM_PLANE_V)
+        cost += txb_costs->v_dc_sign_cost[tmp_sign[ci]][dc_sign_ctx][sign];
+      else
+        cost += txb_costs->dc_sign_cost[dc_ph_group][dc_sign_ctx][sign];
+    } else {
+      if (plane == AOM_PLANE_V)
+        cost += txb_costs->v_ac_sign_cost[tmp_sign[ci]][sign];
+      else
+        cost += av1_cost_literal(1);
+    }
+#else
+    if (ci == 0) {
+#if CONFIG_CONTEXT_DERIVATION
+      if (plane == AOM_PLANE_V)
+        cost += txb_costs->v_dc_sign_cost[tmp_sign[0]][dc_sign_ctx][sign];
+      else
+        cost += txb_costs->dc_sign_cost[dc_sign_ctx][sign];
+#else
+      cost += txb_costs->dc_sign_cost[dc_sign_ctx][sign];
+#endif  // CONFIG_CONTEXT_DERIVATION
+    } else {
+#if CONFIG_CONTEXT_DERIVATION
+      if (plane == AOM_PLANE_V)
+        cost += txb_costs->v_ac_sign_cost[tmp_sign[ci]][sign];
+      else
+        cost += av1_cost_literal(1);
+#else
+      cost += av1_cost_literal(1);
+#endif  // CONFIG_CONTEXT_DERIVATION
+    }
+#endif  // CONFIG_IMPROVEIDTX_CTXS
+#if CONFIG_LCCHROMA
+    if (plane > 0) {
+      if (limits) {
+        if (abs_qc > LF_NUM_BASE_LEVELS) {
+          int br_ctx = get_br_ctx_lf_eob_chroma(ci, tx_class);
+          cost += get_br_lf_cost(abs_qc, txb_costs->lps_lf_cost_uv[br_ctx]);
+        }
+      } else {
+        if (abs_qc > NUM_BASE_LEVELS) {
+          int br_ctx = 0; /* get_br_ctx_eob_chroma */
+          cost += get_br_cost(abs_qc, txb_costs->lps_cost_uv[br_ctx]);
+        }
+      }
+    } else {
+      if (limits) {
+        if (abs_qc > LF_NUM_BASE_LEVELS) {
+          int br_ctx = get_br_ctx_lf_eob(ci, tx_class);
+          cost += get_br_lf_cost(abs_qc, txb_costs->lps_lf_cost[br_ctx]);
+        }
+      } else {
+        if (abs_qc > NUM_BASE_LEVELS) {
+          int br_ctx = 0; /* get_br_ctx_eob */
+          cost += get_br_cost(abs_qc, txb_costs->lps_cost[br_ctx]);
+        }
+      }
+    }
+#else
+    if (limits) {
+      if (abs_qc > LF_NUM_BASE_LEVELS) {
+        int br_ctx = get_br_ctx_lf_eob(ci, tx_class);
+        cost += get_br_lf_cost(abs_qc, txb_costs->lps_lf_cost[br_ctx]);
+      }
+    } else {
+      if (abs_qc > NUM_BASE_LEVELS) {
+        int br_ctx = 0; /* get_br_ctx_eob */
+        cost += get_br_cost(abs_qc, txb_costs->lps_cost[br_ctx]);
+      }
+    }
+#endif  // CONFIG_LCCHROMA
+  }
+  return cost;
+}
+
+#if CONFIG_CONTEXT_DERIVATION && CONFIG_LCCHROMA && CONFIG_IMPROVEIDTX_CTXS
+static int get_coeff_cost_def(tran_low_t abs_qc, int coeff_ctx, int diag_ctx,
+                              const LV_MAP_COEFF_COST *txb_costs, int dq) {
+  int base_ctx = diag_ctx + (coeff_ctx & 15);
+  int mid_ctx = coeff_ctx >> 4;
+  int cost = txb_costs->base_cost[base_ctx][dq][AOMMIN(abs_qc, 3)];
+  if (abs_qc != 0) {
+    cost += av1_cost_literal(1);
+    if (abs_qc > NUM_BASE_LEVELS)
+      cost += get_br_cost(abs_qc, txb_costs->lps_cost[mid_ctx]);
+  }
+  return cost;
+}
+
+static INLINE int get_coeff_cost_general(
+    int ci, tran_low_t abs_qc, int sign, int coeff_ctx, int mid_ctx,
+    int dc_sign_ctx, const LV_MAP_COEFF_COST *txb_costs, int bwl,
+    TX_CLASS tx_class, int32_t *tmp_sign, int plane, int limits, int dq) {
+  int cost = 0;
+  const int(*base_lf_cost_ptr)[DQ_CTXS][LF_BASE_SYMBOLS * 2] =
+      plane > 0 ? txb_costs->base_lf_cost_uv : txb_costs->base_lf_cost;
+  const int(*base_cost_ptr)[DQ_CTXS][8] =
+      plane > 0 ? txb_costs->base_cost_uv : txb_costs->base_cost;
+  cost +=
+      limits
+          ? base_lf_cost_ptr[coeff_ctx][dq][AOMMIN(abs_qc, LF_BASE_SYMBOLS - 1)]
+          : base_cost_ptr[coeff_ctx][dq][AOMMIN(abs_qc, 3)];
+  if (abs_qc != 0) {
+    const int dc_ph_group = 0;  // PH disabled
+    const int row = ci >> bwl;
+    const int col = ci - (row << bwl);
+    const bool dc_2dtx = (ci == 0);
+    const bool dc_hor = (col == 0) && tx_class == TX_CLASS_HORIZ;
+    const bool dc_ver = (row == 0) && tx_class == TX_CLASS_VERT;
+    if (limits && (dc_2dtx || dc_hor || dc_ver)) {
+      if (plane == AOM_PLANE_V)
+        cost += txb_costs->v_dc_sign_cost[tmp_sign[ci]][dc_sign_ctx][sign];
+      else
+        cost += txb_costs->dc_sign_cost[dc_ph_group][dc_sign_ctx][sign];
+    } else {
+      if (plane == AOM_PLANE_V)
+        cost += txb_costs->v_ac_sign_cost[tmp_sign[ci]][sign];
+      else
+        cost += av1_cost_literal(1);
+    }
+    if (plane > 0) {
+      if (limits) {
+        if (abs_qc > LF_NUM_BASE_LEVELS) {
+          cost += get_br_lf_cost(abs_qc, txb_costs->lps_lf_cost_uv[mid_ctx]);
+        }
+      } else {
+        if (abs_qc > NUM_BASE_LEVELS) {
+          cost += get_br_cost(abs_qc, txb_costs->lps_cost_uv[mid_ctx]);
+        }
+      }
+    } else {
+      if (limits) {
+        if (abs_qc > LF_NUM_BASE_LEVELS) {
+          cost += get_br_lf_cost(abs_qc, txb_costs->lps_lf_cost[mid_ctx]);
+        }
+      } else {
+        if (abs_qc > NUM_BASE_LEVELS) {
+          cost += get_br_cost(abs_qc, txb_costs->lps_cost[mid_ctx]);
+        }
+      }
+    }
+  }
+  return cost;
+}
+#else
+static INLINE int get_coeff_cost_general(int ci, tran_low_t abs_qc, int sign,
+                                         int coeff_ctx, int mid_ctx,
+                                         int dc_sign_ctx,
+                                         const LV_MAP_COEFF_COST *txb_costs,
+                                         int bwl, TX_CLASS tx_class,
+#if CONFIG_CONTEXT_DERIVATION
+                                         int32_t *tmp_sign,
+#endif  // CONFIG_CONTEXT_DERIVATION
+                                         int plane, int limits, int dq) {
+  int cost = 0;
+  const int is_last = 0;
+  if (is_last) {
+#if CONFIG_LCCHROMA
+    const int(*base_lf_eob_cost_ptr)[LF_BASE_SYMBOLS - 1] =
+        plane > 0 ? txb_costs->base_lf_eob_cost_uv
+                  : txb_costs->base_lf_eob_cost;
+    const int(*base_eob_cost_ptr)[3] =
+        plane > 0 ? txb_costs->base_eob_cost_uv : txb_costs->base_eob_cost;
+
+    cost += limits
+                ? base_lf_eob_cost_ptr[coeff_ctx]
+                                      [AOMMIN(abs_qc, LF_BASE_SYMBOLS - 1) - 1]
+                : base_eob_cost_ptr[coeff_ctx][AOMMIN(abs_qc, 3) - 1];
+
+#else
+    if (limits) {
+      cost +=
+          txb_costs->base_lf_eob_cost[coeff_ctx]
+                                     [AOMMIN(abs_qc, LF_BASE_SYMBOLS - 1) - 1];
+    } else {
+      cost += txb_costs->base_eob_cost[coeff_ctx][AOMMIN(abs_qc, 3) - 1];
+    }
+#endif  // CONFIG_LCCHROMA
+  } else {
+#if CONFIG_LCCHROMA && CONFIG_DQ
+    const int(*base_lf_cost_ptr)[DQ_CTXS][LF_BASE_SYMBOLS * 2] =
+        plane > 0 ? txb_costs->base_lf_cost_uv : txb_costs->base_lf_cost;
+    const int(*base_cost_ptr)[DQ_CTXS][8] =
+        plane > 0 ? txb_costs->base_cost_uv : txb_costs->base_cost;
+    cost += limits ? base_lf_cost_ptr[coeff_ctx][dq]
+                                     [AOMMIN(abs_qc, LF_BASE_SYMBOLS - 1)]
+                   : base_cost_ptr[coeff_ctx][dq][AOMMIN(abs_qc, 3)];
+#elif CONFIG_LCCHROMA
+    const int(*base_lf_cost_ptr)[LF_BASE_SYMBOLS * 2] =
+        plane > 0 ? txb_costs->base_lf_cost_uv : txb_costs->base_lf_cost;
+    const int(*base_cost_ptr)[8] =
+        plane > 0 ? txb_costs->base_cost_uv : txb_costs->base_cost;
+    cost +=
+        limits
+            ? base_lf_cost_ptr[coeff_ctx][AOMMIN(abs_qc, LF_BASE_SYMBOLS - 1)]
+            : base_cost_ptr[coeff_ctx][AOMMIN(abs_qc, 3)];
+#else
+    if (limits) {
+      cost +=
+          txb_costs
+              ->base_lf_cost[coeff_ctx][AOMMIN(abs_qc, LF_BASE_SYMBOLS - 1)];
+    } else {
+      cost += txb_costs->base_cost[coeff_ctx][AOMMIN(abs_qc, 3)];
+    }
+#endif  // CONFIG_LCCHROMA
+  }
+  if (abs_qc != 0) {
+#if CONFIG_IMPROVEIDTX_CTXS
+    const int dc_ph_group = 0;  // PH disabled
+    const int row = ci >> bwl;
+    const int col = ci - (row << bwl);
+    const bool dc_2dtx = (ci == 0);
+    const bool dc_hor = (col == 0) && tx_class == TX_CLASS_HORIZ;
+    const bool dc_ver = (row == 0) && tx_class == TX_CLASS_VERT;
+    if (limits && (dc_2dtx || dc_hor || dc_ver)) {
+      if (plane == AOM_PLANE_V)
+        cost += txb_costs->v_dc_sign_cost[tmp_sign[ci]][dc_sign_ctx][sign];
+      else
+        cost += txb_costs->dc_sign_cost[dc_ph_group][dc_sign_ctx][sign];
+    } else {
+      if (plane == AOM_PLANE_V)
+        cost += txb_costs->v_ac_sign_cost[tmp_sign[ci]][sign];
+      else
+        cost += av1_cost_literal(1);
+    }
+#else
+    if (ci == 0) {
+#if CONFIG_CONTEXT_DERIVATION
+      if (plane == AOM_PLANE_V)
+        cost += txb_costs->v_dc_sign_cost[tmp_sign[0]][dc_sign_ctx][sign];
+      else
+        cost += txb_costs->dc_sign_cost[dc_sign_ctx][sign];
+#else
+      cost += txb_costs->dc_sign_cost[dc_sign_ctx][sign];
+#endif  // CONFIG_CONTEXT_DERIVATION
+    } else {
+#if CONFIG_CONTEXT_DERIVATION
+      if (plane == AOM_PLANE_V)
+        cost += txb_costs->v_ac_sign_cost[tmp_sign[ci]][sign];
+      else
+        cost += av1_cost_literal(1);
+#else
+      cost += av1_cost_literal(1);
+#endif  // CONFIG_CONTEXT_DERIVATION
+    }
+#endif  // CONFIG_IMPROVEIDTX_CTXS
+#if CONFIG_LCCHROMA
+    if (plane > 0) {
+      if (limits) {
+        if (abs_qc > LF_NUM_BASE_LEVELS) {
+          int br_ctx;
+          if (is_last)
+            br_ctx = get_br_ctx_lf_eob_chroma(ci, tx_class);
+          else
+            br_ctx = mid_ctx;
+          cost += get_br_lf_cost(abs_qc, txb_costs->lps_lf_cost_uv[br_ctx]);
+        }
+      } else {
+        if (abs_qc > NUM_BASE_LEVELS) {
+          int br_ctx;
+          if (is_last)
+            br_ctx = 0; /* get_br_ctx_eob_chroma */
+          else
+            br_ctx = mid_ctx;
+          cost += get_br_cost(abs_qc, txb_costs->lps_cost_uv[br_ctx]);
+        }
+      }
+    } else {
+      if (limits) {
+        if (abs_qc > LF_NUM_BASE_LEVELS) {
+          int br_ctx;
+          if (is_last)
+            br_ctx = get_br_ctx_lf_eob(ci, tx_class);
+          else
+            br_ctx = mid_ctx;
+          cost += get_br_lf_cost(abs_qc, txb_costs->lps_lf_cost[br_ctx]);
+        }
+      } else {
+        if (abs_qc > NUM_BASE_LEVELS) {
+          int br_ctx;
+          if (is_last)
+            br_ctx = 0; /* get_br_ctx_eob */
+          else
+            br_ctx = mid_ctx;
+          cost += get_br_cost(abs_qc, txb_costs->lps_cost[br_ctx]);
+        }
+      }
+    }
+#else
+    if (limits) {
+      if (abs_qc > LF_NUM_BASE_LEVELS) {
+        int br_ctx;
+        if (is_last)
+          br_ctx = get_br_ctx_lf_eob(ci, tx_class);
+        else
+          br_ctx = get_br_lf_ctx(levels, ci, bwl, tx_class);
+        cost += get_br_lf_cost(abs_qc, txb_costs->lps_lf_cost[br_ctx]);
+      }
+    } else {
+      if (abs_qc > NUM_BASE_LEVELS) {
+        int br_ctx;
+        if (is_last)
+          br_ctx = 0; /* get_br_ctx_eob */
+        else
+          br_ctx = get_br_ctx(levels, ci, bwl, tx_class);
+        cost += get_br_cost(abs_qc, txb_costs->lps_cost[br_ctx]);
+      }
+    }
+#endif  // CONFIG_LCCHROMA
+  }
+  return cost;
+}
+#endif
+
+static void decide(int64_t rdCost, int64_t distA, int64_t distB, int64_t rdmult,
+                   int rateA, int rateB, int rate_zero, tran_low_t absA,
+                   tran_low_t absB, int limits, int prev_rate, int prev_state,
+                   tcq_node_t *decision_02, tcq_node_t *decision_1) {
+#if NEWHR
+  (void)limits;
+  int parityA = 0;
+  int parityB = 1;
+  assert(parityA == tcq_parity(absA, limits));
+  assert(parityB == tcq_parity(absB, limits));
+#else
+  int parityA = tcq_parity(absA, limits);
+  int parityB = tcq_parity(absB, limits);
+#endif
+  int64_t costA = rdCost + RDCOST(rdmult, rateA, distA);
+  int64_t costB = rdCost + RDCOST(rdmult, rateB, distB);
+  int64_t cost_zero = rdCost + RDCOST(rdmult, rate_zero, 0);
+  rateA += prev_rate;
+  rateB += prev_rate;
+  rate_zero += prev_rate;
+  if (parityA) {
+    if (costA < decision_1->rdCost) {
+      decision_1->rdCost = costA;
+      decision_1->rate = rateA;
+      decision_1->prevId = prev_state;
+      decision_1->absLevel = absA;
+    }
+  } else {
+    if (costA < decision_02->rdCost) {
+      decision_02->rdCost = costA;
+      decision_02->rate = rateA;
+      decision_02->prevId = prev_state;
+      decision_02->absLevel = absA;
+    }
+  }
+
+  if (parityB) {
+    if (costB < decision_1->rdCost) {
+      decision_1->rdCost = costB;
+      decision_1->rate = rateB;
+      decision_1->prevId = prev_state;
+      decision_1->absLevel = absB;
+    }
+  } else {
+    if (costB < decision_02->rdCost) {
+      decision_02->rdCost = costB;
+      decision_02->rate = rateB;
+      decision_02->prevId = prev_state;
+      decision_02->absLevel = absB;
+    }
+  }
+  if (cost_zero < decision_02->rdCost) {
+    decision_02->rdCost = cost_zero;
+    decision_02->rate = rate_zero;
+    decision_02->prevId = prev_state;
+    decision_02->absLevel = 0;
+  }
+}
+
+#if NEWHR
+static void decide_new(int64_t costA, int64_t costB, int64_t cost_zero,
+                       int rateA, int rateB, int rate_zero, tran_low_t absA,
+                       tran_low_t absB, int limits, int prev_rate,
+                       int prev_state, tcq_node_t *decision_02,
+                       tcq_node_t *decision_1) {
+  assert(tcq_parity(absA, limits) == 0);
+  assert(tcq_parity(absB, limits) == 1);
+
+  (void)limits;
+  int even_bias = 1;
+  rateA += prev_rate;
+  rateB += prev_rate;
+  rate_zero += prev_rate;
+
+  if (cost_zero < costA && cost_zero < decision_02->rdCost + even_bias) {
+    decision_02->rdCost = cost_zero;
+    decision_02->rate = rate_zero;
+    decision_02->prevId = prev_state;
+    decision_02->absLevel = 0;
+  } else if (costA < decision_02->rdCost + even_bias) {
+    decision_02->rdCost = costA;
+    decision_02->rate = rateA;
+    decision_02->prevId = prev_state;
+    decision_02->absLevel = absA;
+  }
+
+  if (costB < decision_1->rdCost) {
+    decision_1->rdCost = costB;
+    decision_1->rate = rateB;
+    decision_1->prevId = prev_state;
+    decision_1->absLevel = absB;
+  }
+}
+#else
+static void decide_new(int64_t costA, int64_t costB, int64_t cost_zero,
+                       int rateA, int rateB, int rate_zero, tran_low_t absA,
+                       tran_low_t absB, int limits, int prev_rate,
+                       int prev_state, tcq_node_t *decision_02,
+                       tcq_node_t *decision_1) {
+  int parityA = tcq_parity(absA, limits);
+  int parityB = tcq_parity(absB, limits);
+  rateA += prev_rate;
+  rateB += prev_rate;
+  rate_zero += prev_rate;
+  if (parityA) {
+    if (costA < decision_1->rdCost) {
+      decision_1->rdCost = costA;
+      decision_1->rate = rateA;
+      decision_1->prevId = prev_state;
+      decision_1->absLevel = absA;
+    }
+  } else {
+    if (costA < decision_02->rdCost) {
+      decision_02->rdCost = costA;
+      decision_02->rate = rateA;
+      decision_02->prevId = prev_state;
+      decision_02->absLevel = absA;
+    }
+  }
+
+  if (parityB) {
+    if (costB < decision_1->rdCost) {
+      decision_1->rdCost = costB;
+      decision_1->rate = rateB;
+      decision_1->prevId = prev_state;
+      decision_1->absLevel = absB;
+    }
+  } else {
+    if (costB < decision_02->rdCost) {
+      decision_02->rdCost = costB;
+      decision_02->rate = rateB;
+      decision_02->prevId = prev_state;
+      decision_02->absLevel = absB;
+    }
+  }
+  if (cost_zero - even_bias < decision_02->rdCost) {
+    decision_02->rdCost = cost_zero;
+    decision_02->rate = rate_zero;
+    decision_02->prevId = prev_state;
+    decision_02->absLevel = 0;
+  }
+}
+#endif
+
+void av1_decide_states_c(const struct tcq_node_t *prev,
+                         const int64_t dist[2 * TOTALSTATES],
+                         const int32_t rate[2 * TOTALSTATES],
+                         const int32_t rate_zero[TOTALSTATES],
+                         const struct prequant_t *pq, int limits,
+                         int64_t rdmult, struct tcq_node_t *decision) {
+  int64_t rdCost[2 * TOTALSTATES];
+  int64_t rdCost_zero[TOTALSTATES];
+  for (int i = 0; i < 2 * TOTALSTATES; i++) {
+    rdCost[i] = prev[i >> 1].rdCost + RDCOST(rdmult, rate[i], dist[i]);
+  }
+  for (int i = 0; i < TOTALSTATES; i++) {
+    rdCost_zero[i] = prev[i].rdCost + RDCOST(rdmult, rate_zero[i], 0);
+  }
+#if MORESTATES
+  decide_new(rdCost[0], rdCost[1], rdCost_zero[0], rate[0], rate[1],
+             rate_zero[0], pq->absLevel[0], pq->absLevel[2], limits,
+             prev[0].rate, 0, &decision[0], &decision[4]);
+  decide_new(rdCost[2], rdCost[3], rdCost_zero[1], rate[2], rate[3],
+             rate_zero[1], pq->absLevel[0], pq->absLevel[2], limits,
+             prev[1].rate, 1, &decision[4], &decision[0]);
+  decide_new(rdCost[5], rdCost[4], rdCost_zero[2], rate[5], rate[4],
+             rate_zero[2], pq->absLevel[3], pq->absLevel[1], limits,
+             prev[2].rate, 2, &decision[1], &decision[5]);
+  decide_new(rdCost[7], rdCost[6], rdCost_zero[3], rate[7], rate[6],
+             rate_zero[3], pq->absLevel[3], pq->absLevel[1], limits,
+             prev[3].rate, 3, &decision[5], &decision[1]);
+  decide_new(rdCost[8], rdCost[9], rdCost_zero[4], rate[8], rate[9],
+             rate_zero[4], pq->absLevel[0], pq->absLevel[2], limits,
+             prev[4].rate, 4, &decision[6], &decision[2]);
+  decide_new(rdCost[10], rdCost[11], rdCost_zero[5], rate[10], rate[11],
+             rate_zero[5], pq->absLevel[0], pq->absLevel[2], limits,
+             prev[5].rate, 5, &decision[2], &decision[6]);
+  decide_new(rdCost[13], rdCost[12], rdCost_zero[6], rate[13], rate[12],
+             rate_zero[6], pq->absLevel[3], pq->absLevel[1], limits,
+             prev[6].rate, 6, &decision[7], &decision[3]);
+  decide_new(rdCost[15], rdCost[14], rdCost_zero[7], rate[15], rate[14],
+             rate_zero[7], pq->absLevel[3], pq->absLevel[1], limits,
+             prev[7].rate, 7, &decision[3], &decision[7]);
+#else
+  decide_new(rdCost[0], rdCost[1], rdCost_zero[0], rate[0], rate[1],
+             rate_zero[0], pq->absLevel[0], pq->absLevel[2], limits,
+             prev[0].rate, 0, &decision[0], &decision[2]);
+  decide_new(rdCost[2], rdCost[3], rdCost_zero[1], rate[2], rate[3],
+             rate_zero[1], pq->absLevel[0], pq->absLevel[2], limits,
+             prev[1].rate, 1, &decision[2], &decision[0]);
+  decide_new(rdCost[5], rdCost[4], rdCost_zero[2], rate[5], rate[4],
+             rate_zero[2], pq->absLevel[3], pq->absLevel[1], limits,
+             prev[2].rate, 2, &decision[1], &decision[3]);
+  decide_new(rdCost[7], rdCost[6], rdCost_zero[3], rate[7], rate[6],
+             rate_zero[3], pq->absLevel[3], pq->absLevel[1], limits,
+             prev[3].rate, 3, &decision[3], &decision[1]);
+#endif
+}
+
+void av1_pre_quant_c(tran_low_t tqc, struct prequant_t *pqData,
+                     const int32_t *quant_ptr, int dqv, int log_scale,
+                     int scan_pos) {
+  // calculate qIdx
+  const int shift = 16 - log_scale + QUANT_FP_BITS;
+  tran_low_t add = -((2 << shift) >> 1);
+  tran_low_t abs_tqc = abs(tqc);
+
+  tran_low_t qIdx = (int)AOMMAX(
+      1, AOMMIN(((1 << 16) - 1),
+                ((int64_t)abs_tqc * quant_ptr[scan_pos != 0] + add) >> shift));
+  pqData->qIdx = qIdx;
+
+  const int64_t dist0 = get_coeff_dist(abs_tqc, 0, log_scale - 1);
+
+  int Idx_a = qIdx & 3;
+
+  tran_low_t dqca = (tran_low_t)ROUND_POWER_OF_TWO_64((tran_high_t)qIdx * dqv,
+                                                      QUANT_TABLE_BITS) >>
+                    log_scale;
+
+  pqData->absLevel[Idx_a] = (++qIdx) >> 1;
+  pqData->deltaDist[Idx_a] =
+      get_coeff_dist(abs_tqc, dqca, log_scale - 1) - dist0;
+
+  int Idx_b = qIdx & 3;
+
+  tran_low_t dqcb = (tran_low_t)ROUND_POWER_OF_TWO_64((tran_high_t)qIdx * dqv,
+                                                      QUANT_TABLE_BITS) >>
+                    log_scale;
+
+  pqData->absLevel[Idx_b] = (++qIdx) >> 1;
+  pqData->deltaDist[Idx_b] =
+      get_coeff_dist(abs_tqc, dqcb, log_scale - 1) - dist0;
+
+  int Idx_c = qIdx & 3;
+
+  tran_low_t dqcc = (tran_low_t)ROUND_POWER_OF_TWO_64((tran_high_t)qIdx * dqv,
+                                                      QUANT_TABLE_BITS) >>
+                    log_scale;
+
+  pqData->absLevel[Idx_c] = (++qIdx) >> 1;
+  pqData->deltaDist[Idx_c] =
+      get_coeff_dist(abs_tqc, dqcc, log_scale - 1) - dist0;
+
+  int Idx_d = qIdx & 3;
+
+  tran_low_t dqcd = (tran_low_t)ROUND_POWER_OF_TWO_64((tran_high_t)qIdx * dqv,
+                                                      QUANT_TABLE_BITS) >>
+                    log_scale;
+
+  pqData->absLevel[Idx_d] = (++qIdx) >> 1;
+  pqData->deltaDist[Idx_d] =
+      get_coeff_dist(abs_tqc, dqcd, log_scale - 1) - dist0;
+}
+
+static int get_coeff_cost(int ci, tran_low_t abs_qc, int sign, int coeff_ctx,
+                          int mid_ctx, int dc_sign_ctx,
+                          const LV_MAP_COEFF_COST *txb_costs, int bwl,
+                          TX_CLASS tx_class, int32_t *tmp_sign, int plane,
+                          int limits, int dq) {
+  return get_coeff_cost_general(ci, abs_qc, sign, coeff_ctx, mid_ctx,
+                                dc_sign_ctx, txb_costs, bwl, tx_class,
+#if CONFIG_CONTEXT_DERIVATION
+                                tmp_sign,
+#endif  // CONFIG_CONTEXT_DERIVATION
+                                plane, limits, dq);
+}
+
+void trellis_first_pos(int scan_pos, int plane, TX_SIZE tx_size,
+                       TX_TYPE tx_type, int32_t *tmp_sign, int sharpness,
+                       tcq_levels_t *tcq_lev,
+                       tcq_node_t trellis[MAX_TRELLIS][TOTALSTATES],
+                       tran_low_t *qcoeff, const int64_t rdmult,
+                       const int16_t *scan, const tran_low_t *tcoeff,
+                       const int32_t *dequant, const int32_t *quant,
+                       const qm_val_t *iqmatrix, const uint16_t *block_eob_rate,
+                       const TXB_CTX *const txb_ctx,
+                       const LV_MAP_COEFF_COST *txb_costs) {
+  const int bwl = get_txb_bwl(tx_size);
+  const int height = get_txb_high(tx_size);
+  const int shift = av1_get_tx_scale(tx_size);
+  const TX_CLASS tx_class = tx_type_to_class[get_primary_tx_type(tx_type)];
+
+  int blk_pos = scan[scan_pos];
+  tcq_node_t *decision = trellis[scan_pos];
+
+  prequant_t pqData;
+  int tempdqv = get_dqv(dequant, scan[scan_pos], iqmatrix);
+  av1_pre_quant(tcoeff[blk_pos], &pqData, quant, tempdqv, shift + 1, scan_pos);
+
+  // init state
+  init_tcq_decision(decision);
+
+  const int row = blk_pos >> bwl;
+  const int col = blk_pos - (row << bwl);
+  int limits = get_lf_limits(row, col, tx_class, plane);
+
+  // calculate rate distortion
+  // try to quantize first coeff to nzcoeff
+  int coeff_ctx = get_lower_levels_ctx_eob(bwl, height, scan_pos);
+  int eob_rate = block_eob_rate[scan_pos];
+  int dc_sign_ctx = txb_ctx->dc_sign_ctx;
+  int rate_Q0_a =
+      get_coeff_cost_eob(blk_pos, pqData.absLevel[0], (qcoeff[blk_pos] < 0),
+                         coeff_ctx, dc_sign_ctx, txb_costs, bwl, tx_class
+#if CONFIG_CONTEXT_DERIVATION
+                         ,
+                         tmp_sign
+#endif  // CONFIG_CONTEXT_DERIVATION
+                         ,
+                         plane) +
+      eob_rate;
+  int rate_Q0_b =
+      get_coeff_cost_eob(blk_pos, pqData.absLevel[2], (qcoeff[blk_pos] < 0),
+                         coeff_ctx, dc_sign_ctx, txb_costs, bwl, tx_class
+#if CONFIG_CONTEXT_DERIVATION
+                         ,
+                         tmp_sign
+#endif  // CONFIG_CONTEXT_DERIVATION
+                         ,
+                         plane) +
+      eob_rate;
+  const int state0 = next_st[0][0];
+  const int state1 = next_st[0][1];
+  decide(0, pqData.deltaDist[0], pqData.deltaDist[2], rdmult, rate_Q0_a,
+         rate_Q0_b, INT32_MAX >> 1, pqData.absLevel[0], pqData.absLevel[2],
+         limits, 0, -1, &decision[state0], &decision[state1]);
+
+  uint8_t *levels0 = tcq_levels_cur(tcq_lev, state0);
+  uint8_t *levels1 = tcq_levels_cur(tcq_lev, state1);
+  set_levels_buf(decision[state0].prevId, decision[state0].absLevel, levels0,
+                 scan, scan_pos, scan_pos, bwl, sharpness);
+  set_levels_buf(decision[state1].prevId, decision[state1].absLevel, levels1,
+                 scan, scan_pos, scan_pos, bwl, sharpness);
+}
+
+void av1_get_rate_dist_def_c(const struct LV_MAP_COEFF_COST *txb_costs,
+                             const struct prequant_t *pq,
+                             const uint8_t coeff_ctx[2 * TOTALSTATES],
+                             int diag_ctx, int plane,
+                             int32_t rate_zero[TOTALSTATES],
+                             int32_t rate[2 * TOTALSTATES],
+                             int64_t dist[2 * TOTALSTATES]) {
+  const tran_low_t *absLevel = pq->absLevel;
+  const int64_t *deltaDist = pq->deltaDist;
+  for (int i = 0; i < TOTALSTATES; i++) {
+    int base_ctx = diag_ctx + (coeff_ctx[i] & 15);
+    int dq = tcq_quant(i);
+    const int(*base_cost_ptr)[DQ_CTXS][8] =
+        plane > 0 ? txb_costs->base_cost_uv : txb_costs->base_cost;
+    rate_zero[i] = base_cost_ptr[base_ctx][dq][0];
+  }
+  rate[0] =
+      get_coeff_cost_def(absLevel[0], coeff_ctx[0], diag_ctx, txb_costs, 0);
+  rate[1] =
+      get_coeff_cost_def(absLevel[2], coeff_ctx[0], diag_ctx, txb_costs, 0);
+  rate[2] =
+      get_coeff_cost_def(absLevel[0], coeff_ctx[1], diag_ctx, txb_costs, 0);
+  rate[3] =
+      get_coeff_cost_def(absLevel[2], coeff_ctx[1], diag_ctx, txb_costs, 0);
+  rate[4] =
+      get_coeff_cost_def(absLevel[1], coeff_ctx[2], diag_ctx, txb_costs, 1);
+  rate[5] =
+      get_coeff_cost_def(absLevel[3], coeff_ctx[2], diag_ctx, txb_costs, 1);
+  rate[6] =
+      get_coeff_cost_def(absLevel[1], coeff_ctx[3], diag_ctx, txb_costs, 1);
+  rate[7] =
+      get_coeff_cost_def(absLevel[3], coeff_ctx[3], diag_ctx, txb_costs, 1);
+  dist[0] = deltaDist[0];
+  dist[1] = deltaDist[2];
+  dist[2] = deltaDist[0];
+  dist[3] = deltaDist[2];
+  dist[4] = deltaDist[1];
+  dist[5] = deltaDist[3];
+  dist[6] = deltaDist[1];
+  dist[7] = deltaDist[3];
+#if MORESTATES
+  rate[8] =
+      get_coeff_cost_def(absLevel[0], coeff_ctx[4], diag_ctx, txb_costs, 0);
+  rate[9] =
+      get_coeff_cost_def(absLevel[2], coeff_ctx[4], diag_ctx, txb_costs, 0);
+  rate[10] =
+      get_coeff_cost_def(absLevel[0], coeff_ctx[5], diag_ctx, txb_costs, 0);
+  rate[11] =
+      get_coeff_cost_def(absLevel[2], coeff_ctx[5], diag_ctx, txb_costs, 0);
+  rate[12] =
+      get_coeff_cost_def(absLevel[1], coeff_ctx[6], diag_ctx, txb_costs, 1);
+  rate[13] =
+      get_coeff_cost_def(absLevel[3], coeff_ctx[6], diag_ctx, txb_costs, 1);
+  rate[14] =
+      get_coeff_cost_def(absLevel[1], coeff_ctx[7], diag_ctx, txb_costs, 1);
+  rate[15] =
+      get_coeff_cost_def(absLevel[3], coeff_ctx[7], diag_ctx, txb_costs, 1);
+  dist[8] = deltaDist[0];
+  dist[9] = deltaDist[2];
+  dist[10] = deltaDist[0];
+  dist[11] = deltaDist[2];
+  dist[12] = deltaDist[1];
+  dist[13] = deltaDist[3];
+  dist[14] = deltaDist[1];
+  dist[15] = deltaDist[3];
+#endif
+}
+
+void av1_calc_diag_ctx_c(int scan_hi, int scan_lo, int bwl,
+                         const uint8_t *prev_levels, const int16_t *scan,
+                         uint8_t *ctx) {
+  for (int scan_pos = scan_hi; scan_pos >= scan_lo; scan_pos--) {
+    int blk_pos = scan[scan_pos];
+    int coeff_mag = get_nz_mag(prev_levels + get_padded_idx(blk_pos, bwl), bwl,
+                               TX_CLASS_2D);
+    int coeff_ctx = AOMMIN((coeff_mag + 1) >> 1, 4);
+    int br_ctx = get_br_ctx(prev_levels, blk_pos, bwl, 0);
+    ctx[scan_pos - scan_lo] = (br_ctx << 4) | coeff_ctx;
+  }
+}
+
+void av1_update_states_c(tcq_node_t *decision, int scan_idx,
+                         struct tcq_ctx_t *tcq_ctx) {
+  tcq_ctx_t save[TOTALSTATES];
+  memcpy(save, tcq_ctx, TOTALSTATES * sizeof(save[0]));
+  for (int i = 0; i < TOTALSTATES; i++) {
+    int prevId = decision[i].prevId;
+    int absLevel = decision[i].absLevel;
+    if (prevId >= 0 && prevId != i) {
+      memcpy(&tcq_ctx[i], &save[prevId], sizeof(tcq_ctx_t));
+    } else if (prevId == -1) {
+      // New EOB; reset contexts
+      memset(tcq_ctx[i].lev, 0, sizeof(tcq_ctx[i].lev));
+      memset(tcq_ctx[i].ctx, 0, sizeof(tcq_ctx[i].ctx));
+      tcq_ctx[i].orig_id = -1;
+    }
+    tcq_ctx[i].lev[scan_idx] = AOMMIN(absLevel, INT8_MAX);
+  }
+}
+
+static void update_levels_diagonal(uint8_t *levels[TOTALSTATES],
+                                   uint8_t *prev_levels[TOTALSTATES],
+                                   const int16_t *scan, int bufsize, int bwl,
+                                   int scan_hi, int scan_lo,
+                                   tcq_ctx_t *tcq_ctx) {
+  for (int i = 0; i < TOTALSTATES; i++) {
+    int orig_id = tcq_ctx[i].orig_id;
+    if (orig_id >= 0) {
+      memcpy(levels[i], prev_levels[orig_id], bufsize);
+    } else {
+      memset(levels[i], 0, bufsize);
+    }
+    for (int sc = scan_lo; sc <= scan_hi; sc++) {
+      int lev = tcq_ctx[i].lev[sc - scan_lo];
+      levels[i][get_padded_idx(scan[sc], bwl)] = lev;
+    }
+  }
+}
+
+void trellis_loop_diagonal(
+    int scan_hi, int scan_lo, int plane, TX_SIZE tx_size, TX_TYPE tx_type,
+    int32_t *tmp_sign, int sharpness, tcq_levels_t *tcq_lev,
+    tcq_ctx_t tcq_ctx[TOTALSTATES],
+    tcq_node_t trellis[MAX_TRELLIS][TOTALSTATES], tran_low_t *qcoeff,
+    const int64_t rdmult, const int16_t *scan, const tran_low_t *tcoeff,
+    const int32_t *dequant, const int32_t *quant, const qm_val_t *iqmatrix,
+    const uint16_t *block_eob_rate, const TXB_CTX *const txb_ctx,
+    const LV_MAP_COEFF_COST *txb_costs) {
+  const int bwl = get_txb_bwl(tx_size);
+  const int height = get_txb_high(tx_size);
+  const int shift = av1_get_tx_scale(tx_size);
+  const TX_CLASS tx_class = tx_type_to_class[get_primary_tx_type(tx_type)];
+  const int pos0 = scan[scan_hi];
+  const int row0 = pos0 >> bwl;
+  const int col0 = pos0 - (row0 << bwl);
+  const int diag_ctx = (plane != 0 || row0 + col0 < 6) ? 0
+                       : row0 + col0 < 8               ? 5
+                                                       : 10;
+
+  assert(plane == 0);
+  assert(tx_class == TX_CLASS_2D);
+
+  // Precompute base and mid ctx values, as they are independent across
+  // the diagonal pass.
+  tcq_levels_swap(tcq_lev);
+  for (int i = 0; i < TOTALSTATES; i++) {
+    uint8_t *prev_levels = tcq_levels_prev(tcq_lev, i);
+    av1_calc_diag_ctx(scan_hi, scan_lo, bwl, prev_levels, scan, tcq_ctx[i].ctx);
+    tcq_ctx[i].orig_id = i;
+  }
+
+  for (int scan_pos = scan_hi; scan_pos >= scan_lo; scan_pos--) {
+    const int blk_pos = scan[scan_pos];
+    tcq_node_t *decision = trellis[scan_pos];
+    tcq_node_t *prev_decision = trellis[scan_pos + 1];
+
+    prequant_t pqData;
+    int tempdqv = get_dqv(dequant, scan[scan_pos], iqmatrix);
+    av1_pre_quant(tcoeff[blk_pos], &pqData, quant, tempdqv, shift + 1,
+                  scan_pos);
+
+    // init state
+    init_tcq_decision(decision);
+    const int limits = 0;
+    int32_t rate_zero[TOTALSTATES];
+    int32_t rate[2 * TOTALSTATES];
+    int64_t dist[2 * TOTALSTATES];
+
+    // calculate rate distortion
+    uint8_t coeff_ctx[2 * TOTALSTATES];  // extra alloc for simd (loadu_si64)
+    for (int i = 0; i < TOTALSTATES; i++) {
+      coeff_ctx[i] = tcq_ctx[i].ctx[scan_pos - scan_lo];
+    }
+
+    av1_get_rate_dist_def(txb_costs, &pqData, coeff_ctx, diag_ctx, plane,
+                          rate_zero, rate, dist);
+
+    av1_decide_states(prev_decision, dist, rate, rate_zero, &pqData, limits,
+                      rdmult, decision);
+
+    // assume current state is 0, current coeff is new eob.
+    // input: scan_pos,pqData[0],pqData[2], decison[0] and decision[2]
+    //  update eob if better use current position as eob
+    if (sharpness == 0) {
+      int new_eob_rate = block_eob_rate[scan_pos];
+      int new_eob_ctx = get_lower_levels_ctx_eob(bwl, height, scan_pos);
+      int rate_Q0_a =
+          get_coeff_cost_eob(blk_pos, pqData.absLevel[0], (qcoeff[blk_pos] < 0),
+                             new_eob_ctx, txb_ctx->dc_sign_ctx, txb_costs, bwl,
+                             tx_class
+#if CONFIG_CONTEXT_DERIVATION
+                             ,
+                             tmp_sign
+#endif  // CONFIG_CONTEXT_DERIVATION
+                             ,
+                             plane) +
+          new_eob_rate;
+      int rate_Q0_b =
+          get_coeff_cost_eob(blk_pos, pqData.absLevel[2], (qcoeff[blk_pos] < 0),
+                             new_eob_ctx, txb_ctx->dc_sign_ctx, txb_costs, bwl,
+                             tx_class
+#if CONFIG_CONTEXT_DERIVATION
+                             ,
+                             tmp_sign
+#endif  // CONFIG_CONTEXT_DERIVATION
+                             ,
+                             plane) +
+          new_eob_rate;
+      const int state0 = next_st[0][0];
+      const int state1 = next_st[0][1];
+      decide(0, pqData.deltaDist[0], pqData.deltaDist[2], rdmult, rate_Q0_a,
+             rate_Q0_b, INT32_MAX >> 1, pqData.absLevel[0], pqData.absLevel[2],
+             limits, 0, -1, &decision[state0], &decision[state1]);
+    }
+
+    av1_update_states(decision, scan_pos - scan_lo, tcq_ctx);
+  }
+
+  uint8_t *levels[TOTALSTATES];
+  uint8_t *prev_levels[TOTALSTATES];
+  for (int i = 0; i < TOTALSTATES; i++) {
+    prev_levels[i] = tcq_levels_prev(tcq_lev, i);
+    levels[i] = tcq_levels_cur(tcq_lev, i);
+  }
+  update_levels_diagonal(levels, prev_levels, scan, tcq_lev->bufsize, bwl,
+                         scan_hi, scan_lo, tcq_ctx);
+}
+
+void trellis_loop_lf(int first_scan_pos, int scan_hi, int scan_lo, int plane,
+                     TX_SIZE tx_size, TX_TYPE tx_type, int32_t *tmp_sign,
+                     int sharpness, tcq_levels_t *tcq_lev,
+                     tcq_node_t trellis[MAX_TRELLIS][TOTALSTATES],
+                     tran_low_t *qcoeff, const int64_t rdmult,
+                     const int16_t *scan, const tran_low_t *tcoeff,
+                     const int32_t *dequant, const int32_t *quant,
+                     const qm_val_t *iqmatrix, const uint16_t *block_eob_rate,
+                     const TXB_CTX *const txb_ctx,
+                     const LV_MAP_COEFF_COST *txb_costs) {
+  const int bwl = get_txb_bwl(tx_size);
+  const int height = get_txb_high(tx_size);
+  const int shift = av1_get_tx_scale(tx_size);
+  const TX_CLASS tx_class = tx_type_to_class[get_primary_tx_type(tx_type)];
+
+  for (int scan_pos = scan_hi; scan_pos >= scan_lo; scan_pos--) {
+    tcq_levels_swap(tcq_lev);
+
+    int blk_pos = scan[scan_pos];
+    tcq_node_t *decision = trellis[scan_pos];
+    tcq_node_t *prd = trellis[scan_pos + 1];
+
+    prequant_t pqData;
+    int tempdqv = get_dqv(dequant, scan[scan_pos], iqmatrix);
+    av1_pre_quant(tcoeff[blk_pos], &pqData, quant, tempdqv, shift + 1,
+                  scan_pos);
+
+    // init state
+    init_tcq_decision(decision);
+    const int coeff_sign = tcoeff[blk_pos] < 0;
+    const int limits = 1;  // Always in LF region.
+    int rate_zero[TOTALSTATES];
+    int rate[2 * TOTALSTATES];
+    int64_t dist[2 * TOTALSTATES];
+
+    // calculate rate distortion
+    uint8_t coeff_ctx[TOTALSTATES];
+    uint8_t mid_ctx[TOTALSTATES];
+    for (int i = 0; i < TOTALSTATES; i++) {
+      uint8_t *prev_lev = tcq_levels_prev(tcq_lev, i);
+      coeff_ctx[i] = get_lower_levels_lf_ctx(prev_lev, blk_pos, bwl, tx_class);
+      int br_ctx = plane
+                       ? get_br_lf_ctx_chroma(prev_lev, blk_pos, bwl, tx_class)
+                       : get_br_lf_ctx(prev_lev, blk_pos, bwl, tx_class);
+      mid_ctx[i] = br_ctx;
+    }
+
+    // calculate RDcost
+    for (int i = 0; i < TOTALSTATES; i++) {
+      int dq = tcq_quant(i);
+#if CONFIG_LCCHROMA
+      const int(*base_lf_cost_ptr)[DQ_CTXS][LF_BASE_SYMBOLS * 2] =
+          plane > 0 ? txb_costs->base_lf_cost_uv : txb_costs->base_lf_cost;
+      rate_zero[i] = base_lf_cost_ptr[coeff_ctx[i]][dq][0];
+#else
+      rate_zero[i] = txb_costs->base_lf_cost[coeff_ctx[i]][0];
+#endif
+    }
+
+    int dc_sign_ctx = txb_ctx->dc_sign_ctx;
+    rate[0] = get_coeff_cost(blk_pos, pqData.absLevel[0], coeff_sign,
+                             coeff_ctx[0], mid_ctx[0], dc_sign_ctx, txb_costs,
+                             bwl, tx_class, tmp_sign, plane, 1, 0);
+    rate[1] = get_coeff_cost(blk_pos, pqData.absLevel[2], coeff_sign,
+                             coeff_ctx[0], mid_ctx[0], dc_sign_ctx, txb_costs,
+                             bwl, tx_class, tmp_sign, plane, 1, 0);
+    rate[2] = get_coeff_cost(blk_pos, pqData.absLevel[0], coeff_sign,
+                             coeff_ctx[1], mid_ctx[1], dc_sign_ctx, txb_costs,
+                             bwl, tx_class, tmp_sign, plane, 1, 0);
+    rate[3] = get_coeff_cost(blk_pos, pqData.absLevel[2], coeff_sign,
+                             coeff_ctx[1], mid_ctx[1], dc_sign_ctx, txb_costs,
+                             bwl, tx_class, tmp_sign, plane, 1, 0);
+    rate[4] = get_coeff_cost(blk_pos, pqData.absLevel[1], coeff_sign,
+                             coeff_ctx[2], mid_ctx[2], dc_sign_ctx, txb_costs,
+                             bwl, tx_class, tmp_sign, plane, 1, 1);
+    rate[5] = get_coeff_cost(blk_pos, pqData.absLevel[3], coeff_sign,
+                             coeff_ctx[2], mid_ctx[2], dc_sign_ctx, txb_costs,
+                             bwl, tx_class, tmp_sign, plane, 1, 1);
+    rate[6] = get_coeff_cost(blk_pos, pqData.absLevel[1], coeff_sign,
+                             coeff_ctx[3], mid_ctx[3], dc_sign_ctx, txb_costs,
+                             bwl, tx_class, tmp_sign, plane, 1, 1);
+    rate[7] = get_coeff_cost(blk_pos, pqData.absLevel[3], coeff_sign,
+                             coeff_ctx[3], mid_ctx[3], dc_sign_ctx, txb_costs,
+                             bwl, tx_class, tmp_sign, plane, 1, 1);
+#if MORESTATES
+    rate[8] = get_coeff_cost(blk_pos, pqData.absLevel[0], coeff_sign,
+                             coeff_ctx[4], mid_ctx[4], dc_sign_ctx, txb_costs,
+                             bwl, tx_class, tmp_sign, plane, 1, 0);
+    rate[9] = get_coeff_cost(blk_pos, pqData.absLevel[2], coeff_sign,
+                             coeff_ctx[4], mid_ctx[4], dc_sign_ctx, txb_costs,
+                             bwl, tx_class, tmp_sign, plane, 1, 0);
+    rate[10] = get_coeff_cost(blk_pos, pqData.absLevel[0], coeff_sign,
+                              coeff_ctx[5], mid_ctx[5], dc_sign_ctx, txb_costs,
+                              bwl, tx_class, tmp_sign, plane, 1, 0);
+    rate[11] = get_coeff_cost(blk_pos, pqData.absLevel[2], coeff_sign,
+                              coeff_ctx[5], mid_ctx[5], dc_sign_ctx, txb_costs,
+                              bwl, tx_class, tmp_sign, plane, 1, 0);
+    rate[12] = get_coeff_cost(blk_pos, pqData.absLevel[1], coeff_sign,
+                              coeff_ctx[6], mid_ctx[6], dc_sign_ctx, txb_costs,
+                              bwl, tx_class, tmp_sign, plane, 1, 1);
+    rate[13] = get_coeff_cost(blk_pos, pqData.absLevel[3], coeff_sign,
+                              coeff_ctx[6], mid_ctx[6], dc_sign_ctx, txb_costs,
+                              bwl, tx_class, tmp_sign, plane, 1, 1);
+    rate[14] = get_coeff_cost(blk_pos, pqData.absLevel[1], coeff_sign,
+                              coeff_ctx[7], mid_ctx[7], dc_sign_ctx, txb_costs,
+                              bwl, tx_class, tmp_sign, plane, 1, 1);
+    rate[15] = get_coeff_cost(blk_pos, pqData.absLevel[3], coeff_sign,
+                              coeff_ctx[7], mid_ctx[7], dc_sign_ctx, txb_costs,
+                              bwl, tx_class, tmp_sign, plane, 1, 1);
+#endif
+    dist[0] = pqData.deltaDist[0];
+    dist[1] = pqData.deltaDist[2];
+    dist[2] = pqData.deltaDist[0];
+    dist[3] = pqData.deltaDist[2];
+    dist[4] = pqData.deltaDist[1];
+    dist[5] = pqData.deltaDist[3];
+    dist[6] = pqData.deltaDist[1];
+    dist[7] = pqData.deltaDist[3];
+#if MORESTATES
+    dist[8] = pqData.deltaDist[0];
+    dist[9] = pqData.deltaDist[2];
+    dist[10] = pqData.deltaDist[0];
+    dist[11] = pqData.deltaDist[2];
+    dist[12] = pqData.deltaDist[1];
+    dist[13] = pqData.deltaDist[3];
+    dist[14] = pqData.deltaDist[1];
+    dist[15] = pqData.deltaDist[3];
+#endif
+
+    // todo: Q0 can skip the sig_flag or skip some another flag. This is not
+    // included in the calculation of RDcost now.
+    av1_decide_states(prd, dist, rate, rate_zero, &pqData, limits, rdmult,
+                      decision);
+
+    // assume current state is 0, current coeff is new eob.
+    // input: scan_pos,pqData[0],pqData[2], decison[0] and decision[2]
+    //  update eob if better use current position as eob
+
+    if (sharpness == 0) {
+      int new_eob_rate = block_eob_rate[scan_pos];
+      int new_eob_ctx = get_lower_levels_ctx_eob(bwl, height, scan_pos);
+      int rate_Q0_a =
+          get_coeff_cost_eob(blk_pos, pqData.absLevel[0], (qcoeff[blk_pos] < 0),
+                             new_eob_ctx, txb_ctx->dc_sign_ctx, txb_costs, bwl,
+                             tx_class
+#if CONFIG_CONTEXT_DERIVATION
+                             ,
+                             tmp_sign
+#endif  // CONFIG_CONTEXT_DERIVATION
+                             ,
+                             plane) +
+          new_eob_rate;
+      int rate_Q0_b =
+          get_coeff_cost_eob(blk_pos, pqData.absLevel[2], (qcoeff[blk_pos] < 0),
+                             new_eob_ctx, txb_ctx->dc_sign_ctx, txb_costs, bwl,
+                             tx_class
+#if CONFIG_CONTEXT_DERIVATION
+                             ,
+                             tmp_sign
+#endif  // CONFIG_CONTEXT_DERIVATION
+                             ,
+                             plane) +
+          new_eob_rate;
+      const int state0 = next_st[0][0];
+      const int state1 = next_st[0][1];
+      decide(0, pqData.deltaDist[0], pqData.deltaDist[2], rdmult, rate_Q0_a,
+             rate_Q0_b, INT32_MAX >> 1, pqData.absLevel[0], pqData.absLevel[2],
+             limits, 0, -1, &decision[state0], &decision[state1]);
+    }
+
+    // copy corresponding context from previous level buffer
+    for (int state = 0; state < TOTALSTATES && scan_pos != first_scan_pos;
+         state++) {
+      if (decision[state].prevId >= 0) {
+        uint8_t *prev_lev = tcq_levels_prev(tcq_lev, decision[state].prevId);
+        uint8_t *cur_lev = tcq_levels_cur(tcq_lev, state);
+        memcpy(cur_lev, prev_lev, sizeof(uint8_t) * tcq_lev->bufsize);
+      }
+    }
+    // update levels_buf
+    for (int state = 0; state < TOTALSTATES && scan_pos != 0; state++) {
+      uint8_t *cur_lev = tcq_levels_cur(tcq_lev, state);
+      set_levels_buf(decision[state].prevId, decision[state].absLevel, cur_lev,
+                     scan, first_scan_pos, scan_pos, bwl, sharpness);
+    }
+  }
+}
+
+void trellis_loop(int first_scan_pos, int scan_hi, int scan_lo, int plane,
+                  TX_SIZE tx_size, TX_TYPE tx_type, int32_t *tmp_sign,
+                  int sharpness, tcq_levels_t *tcq_lev,
+                  tcq_node_t trellis[MAX_TRELLIS][TOTALSTATES],
+                  tran_low_t *qcoeff, const int64_t rdmult, const int16_t *scan,
+                  const tran_low_t *tcoeff, const int32_t *dequant,
+                  const int32_t *quant, const qm_val_t *iqmatrix,
+                  const uint16_t *block_eob_rate, const TXB_CTX *const txb_ctx,
+                  const LV_MAP_COEFF_COST *txb_costs) {
+  const int bwl = get_txb_bwl(tx_size);
+  const int height = get_txb_high(tx_size);
+  const int shift = av1_get_tx_scale(tx_size);
+  const TX_CLASS tx_class = tx_type_to_class[get_primary_tx_type(tx_type)];
+
+  for (int scan_pos = scan_hi; scan_pos >= scan_lo; scan_pos--) {
+    tcq_levels_swap(tcq_lev);
+    uint8_t *levels[TOTALSTATES];
+    uint8_t *prev_levels[TOTALSTATES];
+    for (int i = 0; i < TOTALSTATES; i++) {
+      prev_levels[i] = tcq_levels_prev(tcq_lev, i);
+      levels[i] = tcq_levels_cur(tcq_lev, i);
+    }
+
+    int blk_pos = scan[scan_pos];
+    tcq_node_t *decision = trellis[scan_pos];
+
+    prequant_t pqData;
+    int tempdqv = get_dqv(dequant, scan[scan_pos], iqmatrix);
+    av1_pre_quant(tcoeff[blk_pos], &pqData, quant, tempdqv, shift + 1,
+                  scan_pos);
+
+    // init state
+    init_tcq_decision(decision);
+    const int coeff_sign = tcoeff[blk_pos] < 0;
+
+    const int row = blk_pos >> bwl;
+    const int col = blk_pos - (row << bwl);
+    int limits = get_lf_limits(row, col, tx_class, plane);
+
+    // calculate rate distortion
+    uint8_t coeff_ctx[TOTALSTATES];
+    if (limits) {
+      for (int i = 0; i < TOTALSTATES; i++) {
+        coeff_ctx[i] =
+            get_lower_levels_lf_ctx(prev_levels[i], blk_pos, bwl, tx_class);
+      }
+    } else {
+      for (int i = 0; i < TOTALSTATES; i++) {
+        coeff_ctx[i] =
+            get_lower_levels_ctx(prev_levels[i], blk_pos, bwl, tx_class
+#if CONFIG_CHROMA_TX_COEFF_CODING
+                                 ,
+                                 plane
+#endif  // CONFIG_CHROMA_TX_COEFF_CODING
+            );
+      }
+    }
+    uint8_t mid_ctx[TOTALSTATES];
+    if (limits) {
+      for (int i = 0; i < TOTALSTATES; i++) {
+        int br_ctx =
+            plane ? get_br_lf_ctx_chroma(prev_levels[i], blk_pos, bwl, tx_class)
+                  : get_br_lf_ctx(prev_levels[i], blk_pos, bwl, tx_class);
+        mid_ctx[i] = br_ctx;
+      }
+    } else {
+      for (int i = 0; i < TOTALSTATES; i++) {
+        int br_ctx =
+            plane ? get_br_ctx_chroma(prev_levels[i], blk_pos, bwl, tx_class)
+                  : get_br_ctx(prev_levels[i], blk_pos, bwl, tx_class);
+        mid_ctx[i] = br_ctx;
+      }
+    }
+
+    // calculate RDcost
+    int rate_zero[TOTALSTATES];
+    if (limits) {
+      for (int i = 0; i < TOTALSTATES; i++) {
+        int dq = tcq_quant(i);
+#if CONFIG_LCCHROMA
+        const int(*base_lf_cost_ptr)[DQ_CTXS][LF_BASE_SYMBOLS * 2] =
+            plane > 0 ? txb_costs->base_lf_cost_uv : txb_costs->base_lf_cost;
+        rate_zero[i] = base_lf_cost_ptr[coeff_ctx[i]][dq][0];
+#else
+        rate_zero[i] = txb_costs->base_lf_cost[coeff_ctx[i]][0];
+#endif
+      }
+    } else {
+      for (int i = 0; i < TOTALSTATES; i++) {
+        int dq = tcq_quant(i);
+#if CONFIG_LCCHROMA
+        const int(*base_cost_ptr)[DQ_CTXS][8] =
+            plane > 0 ? txb_costs->base_cost_uv : txb_costs->base_cost;
+        rate_zero[i] = base_cost_ptr[coeff_ctx[i]][dq][0];
+#else
+        rate_zero[i] = txb_costs->base_cost[coeff_ctx[i]][0];
+#endif
+      }
+    }
+
+    tcq_node_t *prd = trellis[scan_pos + 1];
+    int rate[2 * TOTALSTATES];
+    int dc_sign_ctx = txb_ctx->dc_sign_ctx;
+    if (limits) {
+      rate[0] = get_coeff_cost(blk_pos, pqData.absLevel[0], coeff_sign,
+                               coeff_ctx[0], mid_ctx[0], dc_sign_ctx, txb_costs,
+                               bwl, tx_class, tmp_sign, plane, 1, 0);
+      rate[1] = get_coeff_cost(blk_pos, pqData.absLevel[2], coeff_sign,
+                               coeff_ctx[0], mid_ctx[0], dc_sign_ctx, txb_costs,
+                               bwl, tx_class, tmp_sign, plane, 1, 0);
+      rate[2] = get_coeff_cost(blk_pos, pqData.absLevel[0], coeff_sign,
+                               coeff_ctx[1], mid_ctx[1], dc_sign_ctx, txb_costs,
+                               bwl, tx_class, tmp_sign, plane, 1, 0);
+      rate[3] = get_coeff_cost(blk_pos, pqData.absLevel[2], coeff_sign,
+                               coeff_ctx[1], mid_ctx[1], dc_sign_ctx, txb_costs,
+                               bwl, tx_class, tmp_sign, plane, 1, 0);
+      rate[4] = get_coeff_cost(blk_pos, pqData.absLevel[1], coeff_sign,
+                               coeff_ctx[2], mid_ctx[2], dc_sign_ctx, txb_costs,
+                               bwl, tx_class, tmp_sign, plane, 1, 1);
+      rate[5] = get_coeff_cost(blk_pos, pqData.absLevel[3], coeff_sign,
+                               coeff_ctx[2], mid_ctx[2], dc_sign_ctx, txb_costs,
+                               bwl, tx_class, tmp_sign, plane, 1, 1);
+      rate[6] = get_coeff_cost(blk_pos, pqData.absLevel[1], coeff_sign,
+                               coeff_ctx[3], mid_ctx[3], dc_sign_ctx, txb_costs,
+                               bwl, tx_class, tmp_sign, plane, 1, 1);
+      rate[7] = get_coeff_cost(blk_pos, pqData.absLevel[3], coeff_sign,
+                               coeff_ctx[3], mid_ctx[3], dc_sign_ctx, txb_costs,
+                               bwl, tx_class, tmp_sign, plane, 1, 1);
+#if MORESTATES
+      rate[8] = get_coeff_cost(blk_pos, pqData.absLevel[0], coeff_sign,
+                               coeff_ctx[4], mid_ctx[4], dc_sign_ctx, txb_costs,
+                               bwl, tx_class, tmp_sign, plane, 1, 0);
+      rate[9] = get_coeff_cost(blk_pos, pqData.absLevel[2], coeff_sign,
+                               coeff_ctx[4], mid_ctx[4], dc_sign_ctx, txb_costs,
+                               bwl, tx_class, tmp_sign, plane, 1, 0);
+      rate[10] = get_coeff_cost(
+          blk_pos, pqData.absLevel[0], coeff_sign, coeff_ctx[5], mid_ctx[5],
+          dc_sign_ctx, txb_costs, bwl, tx_class, tmp_sign, plane, 1, 0);
+      rate[11] = get_coeff_cost(
+          blk_pos, pqData.absLevel[2], coeff_sign, coeff_ctx[5], mid_ctx[5],
+          dc_sign_ctx, txb_costs, bwl, tx_class, tmp_sign, plane, 1, 0);
+      rate[12] = get_coeff_cost(
+          blk_pos, pqData.absLevel[1], coeff_sign, coeff_ctx[6], mid_ctx[6],
+          dc_sign_ctx, txb_costs, bwl, tx_class, tmp_sign, plane, 1, 1);
+      rate[13] = get_coeff_cost(
+          blk_pos, pqData.absLevel[3], coeff_sign, coeff_ctx[6], mid_ctx[6],
+          dc_sign_ctx, txb_costs, bwl, tx_class, tmp_sign, plane, 1, 1);
+      rate[14] = get_coeff_cost(
+          blk_pos, pqData.absLevel[1], coeff_sign, coeff_ctx[7], mid_ctx[7],
+          dc_sign_ctx, txb_costs, bwl, tx_class, tmp_sign, plane, 1, 1);
+      rate[15] = get_coeff_cost(
+          blk_pos, pqData.absLevel[3], coeff_sign, coeff_ctx[7], mid_ctx[7],
+          dc_sign_ctx, txb_costs, bwl, tx_class, tmp_sign, plane, 1, 1);
+#endif
+    } else {
+      rate[0] = get_coeff_cost(blk_pos, pqData.absLevel[0], coeff_sign,
+                               coeff_ctx[0], mid_ctx[0], dc_sign_ctx, txb_costs,
+                               bwl, tx_class, tmp_sign, plane, 0, 0);
+      rate[1] = get_coeff_cost(blk_pos, pqData.absLevel[2], coeff_sign,
+                               coeff_ctx[0], mid_ctx[0], dc_sign_ctx, txb_costs,
+                               bwl, tx_class, tmp_sign, plane, 0, 0);
+      rate[2] = get_coeff_cost(blk_pos, pqData.absLevel[0], coeff_sign,
+                               coeff_ctx[1], mid_ctx[1], dc_sign_ctx, txb_costs,
+                               bwl, tx_class, tmp_sign, plane, 0, 0);
+      rate[3] = get_coeff_cost(blk_pos, pqData.absLevel[2], coeff_sign,
+                               coeff_ctx[1], mid_ctx[1], dc_sign_ctx, txb_costs,
+                               bwl, tx_class, tmp_sign, plane, 0, 0);
+      rate[4] = get_coeff_cost(blk_pos, pqData.absLevel[1], coeff_sign,
+                               coeff_ctx[2], mid_ctx[2], dc_sign_ctx, txb_costs,
+                               bwl, tx_class, tmp_sign, plane, 0, 1);
+      rate[5] = get_coeff_cost(blk_pos, pqData.absLevel[3], coeff_sign,
+                               coeff_ctx[2], mid_ctx[2], dc_sign_ctx, txb_costs,
+                               bwl, tx_class, tmp_sign, plane, 0, 1);
+      rate[6] = get_coeff_cost(blk_pos, pqData.absLevel[1], coeff_sign,
+                               coeff_ctx[3], mid_ctx[3], dc_sign_ctx, txb_costs,
+                               bwl, tx_class, tmp_sign, plane, 0, 1);
+      rate[7] = get_coeff_cost(blk_pos, pqData.absLevel[3], coeff_sign,
+                               coeff_ctx[3], mid_ctx[3], dc_sign_ctx, txb_costs,
+                               bwl, tx_class, tmp_sign, plane, 0, 1);
+#if MORESTATES
+      rate[8] = get_coeff_cost(blk_pos, pqData.absLevel[0], coeff_sign,
+                               coeff_ctx[4], mid_ctx[4], dc_sign_ctx, txb_costs,
+                               bwl, tx_class, tmp_sign, plane, 0, 0);
+      rate[9] = get_coeff_cost(blk_pos, pqData.absLevel[2], coeff_sign,
+                               coeff_ctx[4], mid_ctx[4], dc_sign_ctx, txb_costs,
+                               bwl, tx_class, tmp_sign, plane, 0, 0);
+      rate[10] = get_coeff_cost(
+          blk_pos, pqData.absLevel[0], coeff_sign, coeff_ctx[5], mid_ctx[5],
+          dc_sign_ctx, txb_costs, bwl, tx_class, tmp_sign, plane, 0, 0);
+      rate[11] = get_coeff_cost(
+          blk_pos, pqData.absLevel[2], coeff_sign, coeff_ctx[5], mid_ctx[5],
+          dc_sign_ctx, txb_costs, bwl, tx_class, tmp_sign, plane, 0, 0);
+      rate[12] = get_coeff_cost(
+          blk_pos, pqData.absLevel[1], coeff_sign, coeff_ctx[6], mid_ctx[6],
+          dc_sign_ctx, txb_costs, bwl, tx_class, tmp_sign, plane, 0, 1);
+      rate[13] = get_coeff_cost(
+          blk_pos, pqData.absLevel[3], coeff_sign, coeff_ctx[6], mid_ctx[6],
+          dc_sign_ctx, txb_costs, bwl, tx_class, tmp_sign, plane, 0, 1);
+      rate[14] = get_coeff_cost(
+          blk_pos, pqData.absLevel[1], coeff_sign, coeff_ctx[7], mid_ctx[7],
+          dc_sign_ctx, txb_costs, bwl, tx_class, tmp_sign, plane, 0, 1);
+      rate[15] = get_coeff_cost(
+          blk_pos, pqData.absLevel[3], coeff_sign, coeff_ctx[7], mid_ctx[7],
+          dc_sign_ctx, txb_costs, bwl, tx_class, tmp_sign, plane, 0, 1);
+#endif
+    }
+    int64_t dist[2 * TOTALSTATES];
+    {
+      dist[0] = pqData.deltaDist[0];
+      dist[1] = pqData.deltaDist[2];
+      dist[2] = pqData.deltaDist[0];
+      dist[3] = pqData.deltaDist[2];
+      dist[4] = pqData.deltaDist[1];
+      dist[5] = pqData.deltaDist[3];
+      dist[6] = pqData.deltaDist[1];
+      dist[7] = pqData.deltaDist[3];
+#if MORESTATES
+      dist[8] = pqData.deltaDist[0];
+      dist[9] = pqData.deltaDist[2];
+      dist[10] = pqData.deltaDist[0];
+      dist[11] = pqData.deltaDist[2];
+      dist[12] = pqData.deltaDist[1];
+      dist[13] = pqData.deltaDist[3];
+      dist[14] = pqData.deltaDist[1];
+      dist[15] = pqData.deltaDist[3];
+#endif
+      av1_decide_states(prd, dist, rate, rate_zero, &pqData, limits, rdmult,
+                        decision);
+
+      if (sharpness == 0) {
+        int new_eob_rate = block_eob_rate[scan_pos];
+        int new_eob_ctx = get_lower_levels_ctx_eob(bwl, height, scan_pos);
+        int rate_Q0_a =
+            get_coeff_cost_eob(blk_pos, pqData.absLevel[0],
+                               (qcoeff[blk_pos] < 0), new_eob_ctx,
+                               txb_ctx->dc_sign_ctx, txb_costs, bwl, tx_class
+#if CONFIG_CONTEXT_DERIVATION
+                               ,
+                               tmp_sign
+#endif  // CONFIG_CONTEXT_DERIVATION
+                               ,
+                               plane) +
+            new_eob_rate;
+        int rate_Q0_b =
+            get_coeff_cost_eob(blk_pos, pqData.absLevel[2],
+                               (qcoeff[blk_pos] < 0), new_eob_ctx,
+                               txb_ctx->dc_sign_ctx, txb_costs, bwl, tx_class
+#if CONFIG_CONTEXT_DERIVATION
+                               ,
+                               tmp_sign
+#endif  // CONFIG_CONTEXT_DERIVATION
+                               ,
+                               plane) +
+            new_eob_rate;
+        const int state0 = next_st[0][0];
+        const int state1 = next_st[0][1];
+        decide(0, pqData.deltaDist[0], pqData.deltaDist[2], rdmult, rate_Q0_a,
+               rate_Q0_b, INT32_MAX >> 1, pqData.absLevel[0],
+               pqData.absLevel[2], limits, 0, -1, &decision[state0],
+               &decision[state1]);
+      }
+    }
+
+    // copy corresponding context from previous level buffer
+    for (int state = 0; state < TOTALSTATES && scan_pos != first_scan_pos;
+         state++) {
+      int prevId = decision[state].prevId;
+      if (prevId >= 0)
+        memcpy(levels[state], prev_levels[prevId],
+               sizeof(uint8_t) * tcq_lev->bufsize);
+    }
+    // update levels_buf
+    for (int state = 0; state < TOTALSTATES && scan_pos != 0; state++) {
+      set_levels_buf(decision[state].prevId, decision[state].absLevel,
+                     levels[state], scan, first_scan_pos, scan_pos, bwl,
+                     sharpness);
+    }
+  }
+}
+
+// Pre-calculate eob bits (rate) for each EOB candidate position from 1 (DC
+// only) to the initial eob location. Store rate in array block_eob_rate[],
+// starting with index.
+void av1_calc_block_eob_rate(MACROBLOCK *x, int plane, TX_SIZE tx_size, int eob,
+                             uint16_t *block_eob_rate) {
+  const MACROBLOCKD *xd = &x->e_mbd;
+  const MB_MODE_INFO *mbmi = xd->mi[0];
+  const int is_inter = is_inter_block(mbmi, xd->tree_type);
+  const PLANE_TYPE plane_type = get_plane_type(plane);
+  const TX_SIZE txs_ctx = get_txsize_entropy_ctx(tx_size);
+  const CoeffCosts *coeff_costs = &x->coeff_costs;
+  const LV_MAP_COEFF_COST *txb_costs =
+      &coeff_costs->coeff_costs[txs_ctx][plane_type];
+  const int eob_multi_size = txsize_log2_minus4[tx_size];
+  const LV_MAP_EOB_COST *txb_eob_costs =
+      &coeff_costs->eob_costs[eob_multi_size][plane_type];
+
+#if CONFIG_EOB_POS_LUMA
+  const int *tbl_eob_cost = txb_eob_costs->eob_cost[is_inter];
+#else
+  const int *tbl_eob_cost = txb_eob_costs->eob_cost;
+#endif
+
+  block_eob_rate[0] = tbl_eob_cost[0];
+  block_eob_rate[1] = tbl_eob_cost[1];
+  int scan_pos = 2;
+  int n_offset_bits = 0;
+  while (scan_pos < eob) {
+    int eob_pt_rate = tbl_eob_cost[2 + n_offset_bits];
+    for (int bit = 0; bit < 2; bit++) {
+      int eob_ctx = n_offset_bits;
+      int extra_bit_rate = txb_costs->eob_extra_cost[eob_ctx][bit];
+      int eob_rate =
+          eob_pt_rate + extra_bit_rate + av1_cost_literal(n_offset_bits);
+      for (int i = 0; i < (1 << n_offset_bits); i++) {
+        block_eob_rate[scan_pos++] = eob_rate;
+      }
+    }
+    n_offset_bits++;
+  }
 }
 
 int av1_dep_quant(const struct AV1_COMP *cpi, MACROBLOCK *x, int plane,
@@ -897,7 +1744,6 @@ int av1_dep_quant(const struct AV1_COMP *cpi, MACROBLOCK *x, int plane,
       get_scan(tx_size, get_primary_tx_type(tx_type));
 
   const int16_t *scan = scan_order->scan;
-  const int shift = av1_get_tx_scale(tx_size);
   int eob = p->eobs[block];
 
   const int32_t *dequant = p->dequant_QTX;
@@ -933,9 +1779,6 @@ int av1_dep_quant(const struct AV1_COMP *cpi, MACROBLOCK *x, int plane,
                      use_inter_fsc(&cpi->common, plane, tx_type, is_inter);
   const LV_MAP_COEFF_COST *txb_costs =
       &coeff_costs->coeff_costs[txs_ctx][plane_type];
-  const int eob_multi_size = txsize_log2_minus4[tx_size];
-  const LV_MAP_EOB_COST *txb_eob_costs =
-      &coeff_costs->eob_costs[eob_multi_size][plane_type];
 
   const int rshift =
       (sharpness +
@@ -963,543 +1806,50 @@ int av1_dep_quant(const struct AV1_COMP *cpi, MACROBLOCK *x, int plane,
   if (eob > 1) {
     memset(mem_tcq, 0, mem_tcq_sz);
   }
+  tcq_levels_t tcq_lev;
+  tcq_levels_init(&tcq_lev, mem_tcq, bufsize);
 
   int si = eob - 1;
   // populate trellis
   assert(si < MAX_TRELLIS);
-  DECISION trellis[MAX_TRELLIS][TOTALSTATES];
+  tcq_node_t trellis[MAX_TRELLIS][TOTALSTATES];
+  tcq_ctx_t tcq_ctx[TOTALSTATES];
 
-  int first_test_pos = si;
-  for (int scan_pos = first_test_pos; scan_pos >= 0; scan_pos--) {
-    uint8_t *levels[TOTALSTATES];
-    uint8_t *prev_levels[TOTALSTATES];
-    for (int i = 0; i < TOTALSTATES; i++) {
-      if (scan_pos & 1) {
-        levels[i] = &mem_tcq[(TOTALSTATES + i) * bufsize];
-        prev_levels[i] = &mem_tcq[i * bufsize];
-      } else {
-        levels[i] = &mem_tcq[i * bufsize];
-        prev_levels[i] = &mem_tcq[(TOTALSTATES + i) * bufsize];
+  // Precalc block eob rate.
+  uint16_t block_eob_rate[MAX_TRELLIS];
+  av1_calc_block_eob_rate(x, plane, tx_size, eob, block_eob_rate);
+
+  int first_scan_pos = si;
+  trellis_first_pos(first_scan_pos, plane, tx_size, tx_class, xd->tmp_sign,
+                    sharpness, &tcq_lev, trellis, qcoeff, rdmult, scan, tcoeff,
+                    dequant, quant, iqmatrix, block_eob_rate, txb_ctx,
+                    txb_costs);
+  int scan_hi = first_scan_pos - 1;
+
+  if (scan_hi >= 0) {
+    if (plane == 0 && tx_class == TX_CLASS_2D) {
+      const int scan_lf_start = 9;
+      while (scan_hi > scan_lf_start) {
+        int blk_pos = scan[scan_hi];
+        int row = blk_pos >> bwl;
+        int col = blk_pos - (row << bwl);
+        int inc = AOMMIN(height - 1 - row, col);
+        int scan_lo = AOMMAX(scan_lf_start + 1, scan_hi - inc);
+        trellis_loop_diagonal(scan_hi, scan_lo, 0, tx_size, TX_CLASS_2D, 0,
+                              sharpness, &tcq_lev, tcq_ctx, trellis, qcoeff,
+                              rdmult, scan, tcoeff, dequant, quant, iqmatrix,
+                              block_eob_rate, txb_ctx, txb_costs);
+        scan_hi = scan_lo - 1;
       }
-    }
-
-    int blk_pos = scan[scan_pos];
-    DECISION *decision = trellis[scan_pos];
-
-    PQData pqData[4];
-    int tempdqv = get_dqv(dequant, scan[scan_pos], iqmatrix);
-    // preQuant tcoeff qcoeff dqcoeff shift dequant, scan[si], iqmatrix
-
-    pre_quant(tcoeff[blk_pos], pqData, quant, tempdqv, shift + 1, scan_pos);
-    // pre_quant(tcoeff[blk_pos], pqData, quant, tempdqv, shift, scan_pos);
-
-    // init state
-    for (int state = 0; state < TOTALSTATES; state++) {
-      decision[state].rdCost = INT64_MAX >> 1;
-      decision[state].dist = INT64_MAX >> 10;
-      decision[state].rate = INT32_MAX >> 10;
-      decision[state].absLevel = -1;
-      decision[state].prevId = -2;
-      decision[state].dqc = INT32_MAX;
-    }
-    const int coeff_sign = tcoeff[blk_pos] < 0;
-
-    const int row = blk_pos >> bwl;
-    const int col = blk_pos - (row << bwl);
-    int limits = get_lf_limits(row, col, tx_class, plane);
-
-    // calculate rate distortion
-    bool is_first_pos = (scan_pos == first_test_pos);
-    if (is_first_pos) {
-      // try to quantize first coeff to nzcoeff
-      int coeff_ctx = get_lower_levels_ctx_eob(bwl, height, si);
-#if CONFIG_EOB_POS_LUMA
-      const int eob_rate =
-          get_eob_cost(si + 1, txb_eob_costs, txb_costs, is_inter);
-#else
-      const int eob_rate = get_eob_cost(si + 1, txb_eob_costs, txb_costs);
-#endif  // CONFIG_EOB_POS_LUMA
-
-      int rate_Q0_a =
-          get_coeff_cost_eob(blk_pos, pqData[0].absLevel, (qcoeff[blk_pos] < 0),
-                             coeff_ctx, txb_ctx->dc_sign_ctx, txb_costs, bwl,
-                             tx_class
-#if CONFIG_CONTEXT_DERIVATION
-                             ,
-                             xd->tmp_sign
-#endif  // CONFIG_CONTEXT_DERIVATION
-                             ,
-                             plane) +
-          eob_rate;
-      int rate_Q0_b =
-          get_coeff_cost_eob(blk_pos, pqData[2].absLevel, (qcoeff[blk_pos] < 0),
-                             coeff_ctx, txb_ctx->dc_sign_ctx, txb_costs, bwl,
-                             tx_class
-#if CONFIG_CONTEXT_DERIVATION
-                             ,
-                             xd->tmp_sign
-#endif  // CONFIG_CONTEXT_DERIVATION
-                             ,
-                             plane) +
-          eob_rate;
-#if MORESTATES
-      decide(pqData[0].deltaDist, pqData[2].deltaDist, INT32_MAX >> 1, rdmult,
-             rate_Q0_a, rate_Q0_b, INT32_MAX >> 1, &pqData[0], &pqData[2],
-             limits, -1, &decision[0], &decision[4]);
-#else
-      decide(pqData[0].deltaDist, pqData[2].deltaDist, INT32_MAX >> 1, rdmult,
-             rate_Q0_a, rate_Q0_b, INT32_MAX >> 1, &pqData[0], &pqData[2],
-             limits, -1, &decision[0], &decision[2]);
-#endif
+      trellis_loop_lf(first_scan_pos, scan_hi, 0, plane, tx_size, tx_type,
+                      xd->tmp_sign, sharpness, &tcq_lev, trellis, qcoeff,
+                      rdmult, scan, tcoeff, dequant, quant, iqmatrix,
+                      block_eob_rate, txb_ctx, txb_costs);
     } else {
-      int coeff_ctx0 = 0;
-      int coeff_ctx1 = 0;
-      int coeff_ctx2 = 0;
-      int coeff_ctx3 = 0;
-#if MORESTATES
-      int coeff_ctx4 = 0;
-      int coeff_ctx5 = 0;
-      int coeff_ctx6 = 0;
-      int coeff_ctx7 = 0;
-#endif
-      if (limits) {
-        coeff_ctx0 =
-            get_lower_levels_lf_ctx(prev_levels[0], blk_pos, bwl, tx_class);
-        coeff_ctx1 =
-            get_lower_levels_lf_ctx(prev_levels[1], blk_pos, bwl, tx_class);
-        coeff_ctx2 =
-            get_lower_levels_lf_ctx(prev_levels[2], blk_pos, bwl, tx_class);
-        coeff_ctx3 =
-            get_lower_levels_lf_ctx(prev_levels[3], blk_pos, bwl, tx_class);
-#if MORESTATES
-        coeff_ctx4 =
-            get_lower_levels_lf_ctx(prev_levels[4], blk_pos, bwl, tx_class);
-        coeff_ctx5 =
-            get_lower_levels_lf_ctx(prev_levels[5], blk_pos, bwl, tx_class);
-        coeff_ctx6 =
-            get_lower_levels_lf_ctx(prev_levels[6], blk_pos, bwl, tx_class);
-        coeff_ctx7 =
-            get_lower_levels_lf_ctx(prev_levels[7], blk_pos, bwl, tx_class);
-
-#endif
-      } else {
-        coeff_ctx0 = get_lower_levels_ctx(prev_levels[0], blk_pos, bwl, tx_class
-#if CONFIG_CHROMA_TX_COEFF_CODING
-                                          ,
-                                          plane
-#endif  // CONFIG_CHROMA_TX_COEFF_CODING
-        );
-        coeff_ctx1 = get_lower_levels_ctx(prev_levels[1], blk_pos, bwl, tx_class
-#if CONFIG_CHROMA_TX_COEFF_CODING
-                                          ,
-                                          plane
-#endif  // CONFIG_CHROMA_TX_COEFF_CODING
-        );
-        coeff_ctx2 = get_lower_levels_ctx(prev_levels[2], blk_pos, bwl, tx_class
-#if CONFIG_CHROMA_TX_COEFF_CODING
-                                          ,
-                                          plane
-#endif  // CONFIG_CHROMA_TX_COEFF_CODING
-        );
-        coeff_ctx3 = get_lower_levels_ctx(prev_levels[3], blk_pos, bwl, tx_class
-#if CONFIG_CHROMA_TX_COEFF_CODING
-                                          ,
-                                          plane
-#endif  // CONFIG_CHROMA_TX_COEFF_CODING
-        );
-#if MORESTATES
-        coeff_ctx4 = get_lower_levels_ctx(prev_levels[4], blk_pos, bwl, tx_class
-#if CONFIG_CHROMA_TX_COEFF_CODING
-                                          ,
-                                          plane
-#endif  // CONFIG_CHROMA_TX_COEFF_CODING
-        );
-        coeff_ctx5 = get_lower_levels_ctx(prev_levels[5], blk_pos, bwl, tx_class
-#if CONFIG_CHROMA_TX_COEFF_CODING
-                                          ,
-                                          plane
-#endif  // CONFIG_CHROMA_TX_COEFF_CODING
-        );
-        coeff_ctx6 = get_lower_levels_ctx(prev_levels[6], blk_pos, bwl, tx_class
-#if CONFIG_CHROMA_TX_COEFF_CODING
-                                          ,
-                                          plane
-#endif  // CONFIG_CHROMA_TX_COEFF_CODING
-        );
-        coeff_ctx7 = get_lower_levels_ctx(prev_levels[7], blk_pos, bwl, tx_class
-#if CONFIG_CHROMA_TX_COEFF_CODING
-                                          ,
-                                          plane
-#endif  // CONFIG_CHROMA_TX_COEFF_CODING
-        );
-#endif
-      }
-      // calculate RDcost
-
-      int rate_zero_0 = 0;
-      int rate_zero_1 = 0;
-      int rate_zero_2 = 0;
-      int rate_zero_3 = 0;
-#if MORESTATES
-      int rate_zero_4 = 0;
-      int rate_zero_5 = 0;
-      int rate_zero_6 = 0;
-      int rate_zero_7 = 0;
-
-#endif
-      if (limits) {
-#if CONFIG_LCCHROMA
-        const int(*base_lf_cost_ptr)[DQ_CTXS][LF_BASE_SYMBOLS * 2] =
-            plane > 0 ? txb_costs->base_lf_cost_uv : txb_costs->base_lf_cost;
-        rate_zero_0 = base_lf_cost_ptr[coeff_ctx0][0][0];
-        rate_zero_1 = base_lf_cost_ptr[coeff_ctx1][0][0];
-        rate_zero_2 = base_lf_cost_ptr[coeff_ctx2][1][0];
-        rate_zero_3 = base_lf_cost_ptr[coeff_ctx3][1][0];
-#if MORESTATES
-        rate_zero_4 = base_lf_cost_ptr[coeff_ctx4][0][0];
-        rate_zero_5 = base_lf_cost_ptr[coeff_ctx5][0][0];
-        rate_zero_6 = base_lf_cost_ptr[coeff_ctx6][1][0];
-        rate_zero_7 = base_lf_cost_ptr[coeff_ctx7][1][0];
-#endif
-#else
-        rate_zero_0 = txb_costs->base_lf_cost[coeff_ctx0][0];
-        rate_zero_1 = txb_costs->base_lf_cost[coeff_ctx1][0];
-        rate_zero_2 = txb_costs->base_lf_cost_tcq[coeff_ctx2][0];
-        rate_zero_3 = txb_costs->base_lf_cost_tcq[coeff_ctx3][0];
-#if MORESTATES
-        rate_zero_4 = txb_costs->base_lf_cost[coeff_ctx4][0];
-        rate_zero_5 = txb_costs->base_lf_cost[coeff_ctx5][0];
-        rate_zero_6 = txb_costs->base_lf_cost_tcq[coeff_ctx6][0];
-        rate_zero_7 = txb_costs->base_lf_cost_tcq[coeff_ctx7][0];
-#endif
-#endif
-
-      } else {
-#if CONFIG_LCCHROMA
-        const int(*base_cost_ptr)[DQ_CTXS][8] =
-            plane > 0 ? txb_costs->base_cost_uv : txb_costs->base_cost;
-        rate_zero_0 = base_cost_ptr[coeff_ctx0][0][0];
-        rate_zero_1 = base_cost_ptr[coeff_ctx1][0][0];
-        rate_zero_2 = base_cost_ptr[coeff_ctx2][1][0];
-        rate_zero_3 = base_cost_ptr[coeff_ctx3][1][0];
-#if MORESTATES
-        rate_zero_4 = base_cost_ptr[coeff_ctx4][0][0];
-        rate_zero_5 = base_cost_ptr[coeff_ctx5][0][0];
-        rate_zero_6 = base_cost_ptr[coeff_ctx6][1][0];
-        rate_zero_7 = base_cost_ptr[coeff_ctx7][1][0];
-#endif
-#else
-        rate_zero_0 = txb_costs->base_cost[coeff_ctx0][0];
-        rate_zero_1 = txb_costs->base_cost[coeff_ctx1][0];
-        rate_zero_2 = txb_costs->base_cost_tcq[coeff_ctx2][0];
-        rate_zero_3 = txb_costs->base_cost_tcq[coeff_ctx3][0];
-#if MORESTATES
-        rate_zero_4 = txb_costs->base_cost[coeff_ctx4][0];
-        rate_zero_5 = txb_costs->base_cost[coeff_ctx5][0];
-        rate_zero_6 = txb_costs->base_cost_tcq[coeff_ctx6][0];
-        rate_zero_7 = txb_costs->base_cost_tcq[coeff_ctx7][0];
-#endif
-#endif
-      }
-
-      DECISION *prd = trellis[scan_pos + 1];
-      int rate_Q0_a_prd0 = get_coeff_cost_general(
-          0, blk_pos, pqData[0].absLevel, coeff_sign, coeff_ctx0,
-          txb_ctx->dc_sign_ctx, txb_costs, bwl, tx_class, prev_levels[0]
-#if CONFIG_CONTEXT_DERIVATION
-          ,
-          xd->tmp_sign
-#endif
-          ,
-          plane, limits);
-      int rate_Q0_a_prd1 = get_coeff_cost_general(
-          0, blk_pos, pqData[0].absLevel, coeff_sign, coeff_ctx1,
-          txb_ctx->dc_sign_ctx, txb_costs, bwl, tx_class, prev_levels[1]
-#if CONFIG_CONTEXT_DERIVATION
-          ,
-          xd->tmp_sign
-#endif
-          ,
-          plane, limits);
-      int rate_Q0_b_prd0 = get_coeff_cost_general(
-          0, blk_pos, pqData[2].absLevel, coeff_sign, coeff_ctx0,
-          txb_ctx->dc_sign_ctx, txb_costs, bwl, tx_class, prev_levels[0]
-#if CONFIG_CONTEXT_DERIVATION
-          ,
-          xd->tmp_sign
-#endif
-          ,
-          plane, limits);
-      int rate_Q0_b_prd1 = get_coeff_cost_general(
-          0, blk_pos, pqData[2].absLevel, coeff_sign, coeff_ctx1,
-          txb_ctx->dc_sign_ctx, txb_costs, bwl, tx_class, prev_levels[1]
-#if CONFIG_CONTEXT_DERIVATION
-          ,
-          xd->tmp_sign
-#endif
-          ,
-          plane, limits);
-      int rate_Q1_a_prd2 = get_coeff_cost_general_q1(
-          0, blk_pos, pqData[1].absLevel, coeff_sign, coeff_ctx2,
-          txb_ctx->dc_sign_ctx, txb_costs, bwl, tx_class, prev_levels[2]
-#if CONFIG_CONTEXT_DERIVATION
-          ,
-          xd->tmp_sign
-#endif
-          ,
-          plane, limits);
-      int rate_Q1_a_prd3 = get_coeff_cost_general_q1(
-          0, blk_pos, pqData[1].absLevel, coeff_sign, coeff_ctx3,
-          txb_ctx->dc_sign_ctx, txb_costs, bwl, tx_class, prev_levels[3]
-#if CONFIG_CONTEXT_DERIVATION
-          ,
-          xd->tmp_sign
-#endif
-          ,
-          plane, limits);
-      int rate_Q1_b_prd2 = get_coeff_cost_general_q1(
-          0, blk_pos, pqData[3].absLevel, coeff_sign, coeff_ctx2,
-          txb_ctx->dc_sign_ctx, txb_costs, bwl, tx_class, prev_levels[2]
-#if CONFIG_CONTEXT_DERIVATION
-          ,
-          xd->tmp_sign
-#endif
-          ,
-          plane, limits);
-      int rate_Q1_b_prd3 = get_coeff_cost_general_q1(
-          0, blk_pos, pqData[3].absLevel, coeff_sign, coeff_ctx3,
-          txb_ctx->dc_sign_ctx, txb_costs, bwl, tx_class, prev_levels[3]
-#if CONFIG_CONTEXT_DERIVATION
-          ,
-          xd->tmp_sign
-#endif
-          ,
-          plane, limits);
-#if MORESTATES
-      int rate_Q0_a_prd4 = get_coeff_cost_general(
-          0, blk_pos, pqData[0].absLevel, coeff_sign, coeff_ctx4,
-          txb_ctx->dc_sign_ctx, txb_costs, bwl, tx_class, prev_levels[4]
-#if CONFIG_CONTEXT_DERIVATION
-          ,
-          xd->tmp_sign
-#endif
-          ,
-          plane, limits);
-      int rate_Q0_a_prd5 = get_coeff_cost_general(
-          0, blk_pos, pqData[0].absLevel, coeff_sign, coeff_ctx5,
-          txb_ctx->dc_sign_ctx, txb_costs, bwl, tx_class, prev_levels[5]
-#if CONFIG_CONTEXT_DERIVATION
-          ,
-          xd->tmp_sign
-#endif
-          ,
-          plane, limits);
-      int rate_Q0_b_prd4 = get_coeff_cost_general(
-          0, blk_pos, pqData[2].absLevel, coeff_sign, coeff_ctx4,
-          txb_ctx->dc_sign_ctx, txb_costs, bwl, tx_class, prev_levels[4]
-#if CONFIG_CONTEXT_DERIVATION
-          ,
-          xd->tmp_sign
-#endif
-          ,
-          plane, limits);
-      int rate_Q0_b_prd5 = get_coeff_cost_general(
-          0, blk_pos, pqData[2].absLevel, coeff_sign, coeff_ctx5,
-          txb_ctx->dc_sign_ctx, txb_costs, bwl, tx_class, prev_levels[5]
-#if CONFIG_CONTEXT_DERIVATION
-          ,
-          xd->tmp_sign
-#endif
-          ,
-          plane, limits);
-      int rate_Q1_a_prd6 = get_coeff_cost_general_q1(
-          0, blk_pos, pqData[1].absLevel, coeff_sign, coeff_ctx6,
-          txb_ctx->dc_sign_ctx, txb_costs, bwl, tx_class, prev_levels[6]
-#if CONFIG_CONTEXT_DERIVATION
-          ,
-          xd->tmp_sign
-#endif
-          ,
-          plane, limits);
-      int rate_Q1_a_prd7 = get_coeff_cost_general_q1(
-          0, blk_pos, pqData[1].absLevel, coeff_sign, coeff_ctx7,
-          txb_ctx->dc_sign_ctx, txb_costs, bwl, tx_class, prev_levels[7]
-#if CONFIG_CONTEXT_DERIVATION
-          ,
-          xd->tmp_sign
-#endif
-          ,
-          plane, limits);
-      int rate_Q1_b_prd6 = get_coeff_cost_general_q1(
-          0, blk_pos, pqData[3].absLevel, coeff_sign, coeff_ctx6,
-          txb_ctx->dc_sign_ctx, txb_costs, bwl, tx_class, prev_levels[6]
-#if CONFIG_CONTEXT_DERIVATION
-          ,
-          xd->tmp_sign
-#endif
-          ,
-          plane, limits);
-      int rate_Q1_b_prd7 = get_coeff_cost_general_q1(
-          0, blk_pos, pqData[3].absLevel, coeff_sign, coeff_ctx7,
-          txb_ctx->dc_sign_ctx, txb_costs, bwl, tx_class, prev_levels[7]
-#if CONFIG_CONTEXT_DERIVATION
-          ,
-          xd->tmp_sign
-#endif
-          ,
-          plane, limits);
-#endif
-      rate_Q0_a_prd0 += prd[0].rate;
-      rate_Q0_a_prd1 += prd[1].rate;
-      rate_Q0_b_prd0 += prd[0].rate;
-      rate_Q0_b_prd1 += prd[1].rate;
-      rate_Q1_a_prd2 += prd[2].rate;
-      rate_Q1_a_prd3 += prd[3].rate;
-      rate_Q1_b_prd2 += prd[2].rate;
-      rate_Q1_b_prd3 += prd[3].rate;
-#if MORESTATES
-      rate_Q0_a_prd4 += prd[4].rate;
-      rate_Q0_a_prd5 += prd[5].rate;
-      rate_Q0_b_prd4 += prd[4].rate;
-      rate_Q0_b_prd5 += prd[5].rate;
-      rate_Q1_a_prd6 += prd[6].rate;
-      rate_Q1_a_prd7 += prd[7].rate;
-      rate_Q1_b_prd6 += prd[6].rate;
-      rate_Q1_b_prd7 += prd[7].rate;
-
-#endif
-      {
-        int64_t dist_Q0_a_prd0 = pqData[0].deltaDist + prd[0].dist;
-        int64_t dist_Q0_a_prd1 = pqData[0].deltaDist + prd[1].dist;
-        int64_t dist_Q0_b_prd0 = pqData[2].deltaDist + prd[0].dist;
-        int64_t dist_Q0_b_prd1 = pqData[2].deltaDist + prd[1].dist;
-        int64_t dist_Q1_a_prd2 = pqData[1].deltaDist + prd[2].dist;
-        int64_t dist_Q1_a_prd3 = pqData[1].deltaDist + prd[3].dist;
-        int64_t dist_Q1_b_prd2 = pqData[3].deltaDist + prd[2].dist;
-        int64_t dist_Q1_b_prd3 = pqData[3].deltaDist + prd[3].dist;
-#if MORESTATES
-        int64_t dist_Q0_a_prd4 = pqData[0].deltaDist + prd[4].dist;
-        int64_t dist_Q0_a_prd5 = pqData[0].deltaDist + prd[5].dist;
-        int64_t dist_Q0_b_prd4 = pqData[2].deltaDist + prd[4].dist;
-        int64_t dist_Q0_b_prd5 = pqData[2].deltaDist + prd[5].dist;
-        int64_t dist_Q1_a_prd6 = pqData[1].deltaDist + prd[6].dist;
-        int64_t dist_Q1_a_prd7 = pqData[1].deltaDist + prd[7].dist;
-        int64_t dist_Q1_b_prd6 = pqData[3].deltaDist + prd[6].dist;
-        int64_t dist_Q1_b_prd7 = pqData[3].deltaDist + prd[7].dist;
-
-#endif
-        // todo: Q0 can skip the sig_flag or skip some another flag. This is not
-        // included in the calculation of RDcost now.
-#if MORESTATES
-        // pre_state is 0
-        decide(dist_Q0_a_prd0, dist_Q0_b_prd0, prd[0].dist, rdmult,
-               rate_Q0_a_prd0, rate_Q0_b_prd0, rate_zero_0 + prd[0].rate,
-               &pqData[0], &pqData[2], limits, 0, &decision[0], &decision[4]);
-        // pre_state is 1
-        decide(dist_Q0_a_prd1, dist_Q0_b_prd1, prd[1].dist, rdmult,
-               rate_Q0_a_prd1, rate_Q0_b_prd1, rate_zero_1 + prd[1].rate,
-               &pqData[0], &pqData[2], limits, 1, &decision[4], &decision[0]);
-        // pre_state is 2
-        decide(dist_Q1_a_prd2, dist_Q1_b_prd2, prd[2].dist, rdmult,
-               rate_Q1_a_prd2, rate_Q1_b_prd2, rate_zero_2 + prd[2].rate,
-               &pqData[1], &pqData[3], limits, 2, &decision[1], &decision[5]);
-        // pre_state is 3
-        decide(dist_Q1_a_prd3, dist_Q1_b_prd3, prd[3].dist, rdmult,
-               rate_Q1_a_prd3, rate_Q1_b_prd3, rate_zero_3 + prd[3].rate,
-               &pqData[1], &pqData[3], limits, 3, &decision[5], &decision[1]);
-        // pre_state is 4
-        decide(dist_Q0_a_prd4, dist_Q0_b_prd4, prd[4].dist, rdmult,
-               rate_Q0_a_prd4, rate_Q0_b_prd4, rate_zero_4 + prd[4].rate,
-               &pqData[0], &pqData[2], limits, 4, &decision[6], &decision[2]);
-        // pre_state is 5
-        decide(dist_Q0_a_prd5, dist_Q0_b_prd5, prd[5].dist, rdmult,
-               rate_Q0_a_prd5, rate_Q0_b_prd5, rate_zero_5 + prd[5].rate,
-               &pqData[0], &pqData[2], limits, 5, &decision[2], &decision[6]);
-        // pre_state is 6
-        decide(dist_Q1_a_prd6, dist_Q1_b_prd6, prd[6].dist, rdmult,
-               rate_Q1_a_prd6, rate_Q1_b_prd6, rate_zero_6 + prd[6].rate,
-               &pqData[1], &pqData[3], limits, 6, &decision[7], &decision[3]);
-        // pre_state is 7
-        decide(dist_Q1_a_prd7, dist_Q1_b_prd7, prd[7].dist, rdmult,
-               rate_Q1_a_prd7, rate_Q1_b_prd7, rate_zero_7 + prd[7].rate,
-               &pqData[1], &pqData[3], limits, 7, &decision[3], &decision[7]);
-
-#else
-        // pre_state is 0
-        decide(dist_Q0_a_prd0, dist_Q0_b_prd0, prd[0].dist, rdmult,
-               rate_Q0_a_prd0, rate_Q0_b_prd0, rate_zero_0 + prd[0].rate,
-               &pqData[0], &pqData[2], limits, 0, &decision[0], &decision[2]);
-        // pre_state is 1
-        decide(dist_Q0_a_prd1, dist_Q0_b_prd1, prd[1].dist, rdmult,
-               rate_Q0_a_prd1, rate_Q0_b_prd1, rate_zero_1 + prd[1].rate,
-               &pqData[0], &pqData[2], limits, 1, &decision[2], &decision[0]);
-        // pre_state is 2
-        decide(dist_Q1_a_prd2, dist_Q1_b_prd2, prd[2].dist, rdmult,
-               rate_Q1_a_prd2, rate_Q1_b_prd2, rate_zero_2 + prd[2].rate,
-               &pqData[1], &pqData[3], limits, 2, &decision[1], &decision[3]);
-        // pre_state is 3
-        decide(dist_Q1_a_prd3, dist_Q1_b_prd3, prd[3].dist, rdmult,
-               rate_Q1_a_prd3, rate_Q1_b_prd3, rate_zero_3 + prd[3].rate,
-               &pqData[1], &pqData[3], limits, 3, &decision[3], &decision[1]);
-#endif
-        // assume current state is 0, current coeff is new eob.
-        // input: scan_pos,pqData[0],pqData[2], decison[0] and decision[2]
-        //  update eob if better use current position as eob
-
-        if (sharpness == 0) {
-#if CONFIG_EOB_POS_LUMA
-          const int new_eob_rate =
-              get_eob_cost(scan_pos + 1, txb_eob_costs, txb_costs, is_inter);
-#else
-          const int new_eob_rate =
-              get_eob_cost(scan_pos + 1, txb_eob_costs, txb_costs);
-#endif  // CONFIG_EOB_POS_LUMA
-          int new_eob_ctx = get_lower_levels_ctx_eob(bwl, height, scan_pos);
-          int rate_Q0_a =
-              get_coeff_cost_eob(blk_pos, pqData[0].absLevel,
-                                 (qcoeff[blk_pos] < 0), new_eob_ctx,
-                                 txb_ctx->dc_sign_ctx, txb_costs, bwl, tx_class
-#if CONFIG_CONTEXT_DERIVATION
-                                 ,
-                                 xd->tmp_sign
-#endif  // CONFIG_CONTEXT_DERIVATION
-                                 ,
-                                 plane) +
-              new_eob_rate;
-          int rate_Q0_b =
-              get_coeff_cost_eob(blk_pos, pqData[2].absLevel,
-                                 (qcoeff[blk_pos] < 0), new_eob_ctx,
-                                 txb_ctx->dc_sign_ctx, txb_costs, bwl, tx_class
-#if CONFIG_CONTEXT_DERIVATION
-                                 ,
-                                 xd->tmp_sign
-#endif  // CONFIG_CONTEXT_DERIVATION
-                                 ,
-                                 plane) +
-              new_eob_rate;
-#if MORESTATES
-          decide(pqData[0].deltaDist, pqData[2].deltaDist, INT32_MAX >> 1,
-                 rdmult, rate_Q0_a, rate_Q0_b, INT32_MAX >> 1, &pqData[0],
-                 &pqData[2], limits, -1, &decision[0], &decision[4]);
-#else
-          decide(pqData[0].deltaDist, pqData[2].deltaDist, INT32_MAX >> 1,
-                 rdmult, rate_Q0_a, rate_Q0_b, INT32_MAX >> 1, &pqData[0],
-                 &pqData[2], limits, -1, &decision[0], &decision[2]);
-#endif
-        }
-      }
-    }
-
-    // copy corresponding context from previous level buffer
-    for (int state = 0; state < TOTALSTATES && scan_pos != si; state++) {
-      if (decision[state].prevId >= 0)
-        memcpy(levels[state], prev_levels[decision[state].prevId],
-               sizeof(uint8_t) * bufsize);
-    }
-    // update levels_buf
-    for (int state = 0; state < TOTALSTATES && scan_pos != 0; state++) {
-      set_levels_buf(&decision[state], levels[state], scan, si, scan_pos, bwl,
-                     sharpness);
+      trellis_loop(first_scan_pos, scan_hi, 0, plane, tx_size, tx_type,
+                   xd->tmp_sign, sharpness, &tcq_lev, trellis, qcoeff, rdmult,
+                   scan, tcoeff, dequant, quant, iqmatrix, block_eob_rate,
+                   txb_ctx, txb_costs);
     }
   }
 
@@ -1508,15 +1858,13 @@ int av1_dep_quant(const struct AV1_COMP *cpi, MACROBLOCK *x, int plane,
   // find best path
   int64_t min_path_cost = INT64_MAX;
   int min_rate = INT32_MAX;
-  int64_t min_dist = INT32_MAX;
-  DECISION decision;
+  tcq_node_t decision;
   decision.prevId = -2;
   for (int state = 0; state < TOTALSTATES; state++) {
     if (trellis[0][state].rdCost < min_path_cost) {
       decision.prevId = state;
       min_path_cost = trellis[0][state].rdCost;
       min_rate = trellis[0][state].rate;
-      min_dist = trellis[0][state].dist;
     }
   }
   // backward scannig  dqc,tqc,qc,level
@@ -1528,11 +1876,18 @@ int av1_dep_quant(const struct AV1_COMP *cpi, MACROBLOCK *x, int plane,
     int blk_pos = scan[scan_pos];
     qcoeff[blk_pos] =
         (tcoeff[blk_pos] < 0 ? -decision.absLevel : decision.absLevel);
-    dqcoeff[blk_pos] = (tcoeff[blk_pos] < 0 ? -decision.dqc : decision.dqc);
+    int dqv = get_dqv(dequant, blk_pos, iqmatrix);
+    int log_scale = av1_get_tx_scale(tx_size) + 1;
+    int dq = decision.prevId >= 0 ? tcq_quant(decision.prevId) : 0;
+    int qc = decision.absLevel == 0 ? 0 : (2 * decision.absLevel - dq);
+    int dqc = (tran_low_t)ROUND_POWER_OF_TWO_64((tran_high_t)qc * dqv,
+                                                QUANT_TABLE_BITS) >>
+              log_scale;
+    dqcoeff[blk_pos] = (tcoeff[blk_pos] < 0 ? -dqc : dqc);
   }
 
   eob = scan_pos;
-  for (; scan_pos <= first_test_pos; scan_pos++) {
+  for (; scan_pos <= first_scan_pos; scan_pos++) {
     int blk_pos = scan[scan_pos];
     qcoeff[blk_pos] = 0;
     dqcoeff[blk_pos] = 0;
@@ -1572,11 +1927,14 @@ int av1_dep_quant(const struct AV1_COMP *cpi, MACROBLOCK *x, int plane,
     const int tx_type_cost = get_tx_type_cost(x, xd, plane, tx_size, tx_type,
                                               cm->features.reduced_tx_set_used,
                                               eob, bob_code, is_fsc);
-    accu_rate += non_skip_cost + tx_type_cost + min_rate;
+    int64_t rd_cost_skip = RDCOST(rdmult, skip_cost, 0);
+    accu_rate = non_skip_cost + tx_type_cost + min_rate;
+    int64_t rd_cost_coded =
+        min_path_cost +
+        (int64_t)RDCOST(rdmult, non_skip_cost + tx_type_cost, 0);
     // skip block
-    if (RDCOST(rdmult, accu_rate, min_dist) > RDCOST(rdmult, skip_cost, 0) &&
-        sharpness == 0) {
-      for (int scan_idx = 0; scan_idx <= first_test_pos; scan_idx++) {
+    if ((rd_cost_coded > rd_cost_skip) && sharpness == 0) {
+      for (int scan_idx = 0; scan_idx <= first_scan_pos; scan_idx++) {
         int blk_idx = scan[scan_idx];
         qcoeff[blk_idx] = 0;
         dqcoeff[blk_idx] = 0;

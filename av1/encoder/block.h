@@ -149,7 +149,7 @@ typedef struct macroblock_plane {
  *
  * Covers everything including txb_skip, eob, dc_sign,
  */
-typedef struct {
+typedef struct LV_MAP_COEFF_COST {
   //! Cost to skip txfm for the current txfm block.
 #if CONFIG_TX_SKIP_FLAG_MODE_DEP_CTX
   int txb_skip_cost[2][TXB_SKIP_CONTEXTS][2];
@@ -225,6 +225,11 @@ typedef struct {
                [DQ_CTXS]
 #endif
                [8];
+#if CONFIG_DQ
+  //! Quick access to base costs 0-3 for optimized access.
+  int base_cost_low[DQ_CTXS][4][SIG_COEF_CONTEXTS];
+  uint16_t base_cost_low_tbl[5][SIG_COEF_CONTEXTS][DQ_CTXS][2];
+#endif
 #if CONFIG_DQ && !CONFIG_LCCHROMA
   //! Cost for encoding the base level of a low-frequency coefficient
   int base_lf_cost_tcq[LF_SIG_COEF_CONTEXTS][LF_BASE_SYMBOLS * 2];

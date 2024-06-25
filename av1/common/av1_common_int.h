@@ -3072,7 +3072,9 @@ static AOM_INLINE PARTITION_TYPE av1_get_normative_forced_partition_type(
   const bool is_part_implied = is_partition_implied_at_boundary(
       mi_params, tree_type, ss_x, ss_y, mi_row, mi_col, bsize, chroma_ref_info,
       &implied_partition);
-  if (is_part_implied) return implied_partition;
+  if (is_part_implied) {
+    return implied_partition;
+  }
 
   // No forced partitions
   return PARTITION_INVALID;

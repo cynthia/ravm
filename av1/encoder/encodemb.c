@@ -35,6 +35,7 @@
 #include "av1/encoder/hybrid_fwd_txfm.h"
 #include "av1/encoder/rd.h"
 #include "av1/encoder/rdopt.h"
+#include "av1/encoder/trellis_quant.h"
 
 void av1_subtract_block(const MACROBLOCKD *xd, int rows, int cols,
                         int16_t *diff, ptrdiff_t diff_stride,

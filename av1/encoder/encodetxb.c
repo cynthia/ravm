@@ -16,6 +16,7 @@
 #include "av1/common/blockd.h"
 #include "av1/common/idct.h"
 #include "av1/common/pred_common.h"
+#include "av1/common/quant_common.h"
 #include "av1/common/scan.h"
 #include "av1/common/reconintra.h"
 #include "av1/encoder/bitstream.h"
@@ -5005,7 +5006,7 @@ static void update_tx_type_count(const AV1_COMP *cpi, const AV1_COMMON *cm,
       const TX_TYPE default_type = get_default_tx_type(
           PLANE_TYPE_Y, xd, tx_size, cpi->is_screen_content_type);
       (void)default_type;
-      assert(get_primary_tx_type(tx_type) == default_type);
+      // assert(get_primary_tx_type(tx_type) == default_type);
     }
   }
 

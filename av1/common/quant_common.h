@@ -27,24 +27,16 @@ extern "C" {
 #define DQENABLE 0    // Determine whether to use DQ by dq_enable()
 #define NEWQINDEX 1   // QP shift
 #define MORESTATES 0  // 1: 8-state; 0: 4-state
+#define NEWHR 1       // 1:parity is determined by (base + LR)
+#else
+#define DQENABLE 0   // Determine whether to use DQ by dq_enable()
+#define NEWQINDEX 0  // QP shift
+#define NEWHR 0
+#endif
 #if MORESTATES
 #define TOTALSTATES 8
 #else
 #define TOTALSTATES 4
-#endif
-#if CONFIG_LCCHROMA
-#define NEWHR \
-  1  // 1:parity is determined by (base + LR) levels and not changed by HR
-#else
-#define NEWHR \
-  1  // 1:parity is determined by (base + LR) levels and not changed by HR
-#endif
-#else
-#define DQENABLE 0   // Determine whether to use DQ by dq_enable()
-#define NEWQINDEX 0  // QP shift
-#define MORESTATES 0
-#define NEWHR \
-  0  // 1:parity is determined by (base + LR) levels and not changed by HR
 #endif
 
 #define PHTHRESH 4
@@ -74,26 +66,11 @@ struct AV1Common;
 struct CommonQuantParams;
 struct macroblockd;
 
-typedef struct {
-  int rate;
-  int ctx;
-} sr_t;
-
 #if CONFIG_DQ
-typedef struct _DECISION {
-  int64_t rdCost;
-  int16_t absLevel;
-  int8_t prevId;
-  tran_low_t dqc;
-  int rate;
-  int64_t dist;
-  sr_t sr;
-} DECISION;
-
 int tcq_parity(int absLevel, int limits);
 bool tcq_quant(const int state);
+int tcq_parity(int absLevel, int limits);
 int tcq_next_state(const int curState, const int absLevel, const int limits);
-
 #if DQENABLE
 bool dq_enable(const TX_SIZE tx_size, int plane);
 #endif

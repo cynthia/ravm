@@ -1200,6 +1200,40 @@ void av1_fill_coeff_costs(CoeffCosts *coeff_costs, FRAME_CONTEXT *fc,
                                    fc->coeff_base_uv_cdf[ctx][dq], NULL);
         }
       }
+      // Rearrange costs into base_cost_low[] array for quicker access.
+      for (int dq = 0; dq < DQ_CTXS; dq++) {
+        for (int lev = 0; lev < 4; lev++) {
+          for (int ctx = 0; ctx < SIG_COEF_CONTEXTS; ++ctx) {
+            pcost->base_cost_low[dq][lev][ctx] = pcost->base_cost[ctx][dq][lev];
+          }
+        }
+      }
+      // Precompute some base_costs for trellis, interleaved for quick access.
+      static const uint8_t trel_abslev[5][4] = {
+        { 2, 1, 1, 2 },  // qIdx = 1
+        { 2, 3, 1, 2 },  // qIdx = 2
+        { 2, 3, 3, 2 },  // qIdx = 3
+        { 2, 3, 3, 3 },  // qIdx = 4
+        { 3, 3, 3, 3 },  // qIdx = 5+
+      };
+      for (int idx = 0; idx < 5; idx++) {
+        for (int ctx = 0; ctx < SIG_COEF_CONTEXTS; ++ctx) {
+          int a0 = trel_abslev[idx][0];
+          int a1 = trel_abslev[idx][1];
+          int a2 = trel_abslev[idx][2];
+          int a3 = trel_abslev[idx][3];
+          // DQ0, absLev 0 / 2
+          pcost->base_cost_low_tbl[idx][ctx][0][0] =
+              pcost->base_cost[ctx][0][a0] + av1_cost_literal(1);
+          pcost->base_cost_low_tbl[idx][ctx][0][1] =
+              pcost->base_cost[ctx][0][a2] + av1_cost_literal(1);
+          // DQ1, absLev 1 / 3
+          pcost->base_cost_low_tbl[idx][ctx][1][0] =
+              pcost->base_cost[ctx][1][a1] + av1_cost_literal(1);
+          pcost->base_cost_low_tbl[idx][ctx][1][1] =
+              pcost->base_cost[ctx][1][a3] + av1_cost_literal(1);
+        }
+      }
 #else
       for (int ctx = 0; ctx < LF_SIG_COEF_CONTEXTS_UV; ++ctx) {
         av1_cost_tokens_from_cdf(pcost->base_lf_cost_uv[ctx],

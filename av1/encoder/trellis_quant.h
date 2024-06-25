@@ -25,6 +25,30 @@
 extern "C" {
 #endif
 
+#define MAX_DIAG 32
+
+typedef struct tcq_node_t {
+  int64_t rdCost : 64;
+  int32_t rate : 32;
+  int32_t absLevel : 24;
+  int8_t prevId : 8;
+} tcq_node_t;
+
+typedef struct tcq_ctx_t {
+  uint8_t ctx[MAX_DIAG];
+  uint8_t lev[MAX_DIAG];
+  int8_t orig_id;
+} tcq_ctx_t;
+
+typedef struct prequant_t {
+  int32_t absLevel[4];
+  int64_t deltaDist[4];
+  int16_t qIdx;
+} prequant_t;
+
+void av1_calc_block_eob_rate(MACROBLOCK *x, int plane, TX_SIZE tx_size, int eob,
+                             uint16_t *block_eob_rate);
+
 int av1_dep_quant(const struct AV1_COMP *cpi, MACROBLOCK *x, int plane,
                   int block, TX_SIZE tx_size, TX_TYPE tx_type,
                   CctxType cctx_type, const TXB_CTX *const txb_ctx,

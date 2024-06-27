@@ -146,6 +146,7 @@ set_aom_config_var(CONFIG_IST_REDUCE_METHOD1 1 "AV2 IST reduction.")
 set_aom_config_var(CONFIG_IST_REDUCE_METHOD4 1 "AV2 remove worst-case multiplications.")
 set_aom_config_var(CONFIG_IST_REDUCE_METHOD2 0 "AV2 remove IST from ADST.")
 set_aom_config_var(CONFIG_IST_REDUCE_METHOD3 0 "AV2 IST reduction 8x8 size.")
+set_aom_config_var(CONFIG_IST_REDUCE_RETRAIN 1 "AV2 trained IST kernels 1+4.")
 
 # AV2 experiment flags.
 set_aom_config_var(CONFIG_IMPROVEIDTX 1

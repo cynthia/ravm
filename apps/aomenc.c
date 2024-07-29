@@ -587,6 +587,7 @@ struct stream_config {
 #if CONFIG_FGS_BLOCK_SIZE
   int film_grain_block_size;
 #endif
+  const char *py_datafile_name;
   int write_ivf;
 #if CONFIG_TUNE_VMAF
   const char *vmaf_model_path;

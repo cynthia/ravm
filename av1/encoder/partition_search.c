@@ -6167,11 +6167,12 @@ BEGIN_PARTITION_SEARCH:
     // Note2: prune split doesn't mean prune both splits on l2, it means
     //        prune either one or both.
     if (!force_prune_flags[PRUNE_OTHER]) {
-      bool prune_list[2];
+      bool prune_list[4];
       int ml_result =
           av1_ml_part_split_infer(cpi, x, mi_row, mi_col, bsize, tile_info, td,
-                                  search_none_after_rect, prune_list);
-      if (ml_result == ML_PART_FORCE_NONE || ml_result == ML_PART_FORCE_SPLIT) {
+              search_none_after_rect, prune_list);
+      if (ml_result == ML_PART_FORCE_NONE || ml_result == ML_PART_FORCE_SPLIT ||
+          ml_result == ML_PART_FORCE_VERT || ml_result == ML_PART_FORCE_HORZ) {
         part_search_state.prune_partition_3[0] = 1;
         part_search_state.prune_partition_3[1] = 1;
         part_search_state.prune_partition_4a[0] = 1;
@@ -6193,17 +6194,36 @@ BEGIN_PARTITION_SEARCH:
           next_force_prune_flags[HORZ][PRUNE_HORZ] = 1;
           next_force_prune_flags[VERT][PRUNE_VERT] = 1;
         }
+        // td->force_spl[bsize] += 1;
+      } else if (ml_result == ML_PART_FORCE_VERT) {
+        part_search_state.prune_partition_none = 1;
+        part_search_state.prune_rect_part[HORZ] = 1;
+        // td->force_ver[bsize] += 1;
+      } else if (ml_result == ML_PART_FORCE_HORZ) {
+        part_search_state.prune_partition_none = 1;
+        part_search_state.prune_rect_part[VERT] = 1;
+        // td->force_hor[bsize] += 1;
       } else {
-        if (prune_list[PT_NONE]) {
+        if (prune_list[0]) {  // none
           part_search_state.prune_partition_none = 1;
+          // td->prune_non[bsize] += 1;
         }
-        if (prune_list[PT_SPLIT]) {
+        if (prune_list[1]) {  // split
           if (is_square_split_eligible(bsize, cm->sb_size)) {
             part_search_state.prune_partition_split = 1;
           } else {
             next_force_prune_flags[HORZ][PRUNE_VERT] = 1;
             next_force_prune_flags[VERT][PRUNE_HORZ] = 1;
           }
+          // td->prune_spl[bsize] += 1;
+        }
+        if (prune_list[2]) {  // vert
+          part_search_state.prune_rect_part[VERT] = 1;
+          // td->prune_ver[bsize] += 1;
+        }
+        if (prune_list[3]) {  // horz
+          part_search_state.prune_rect_part[HORZ] = 1;
+          // td->prune_hor[bsize] += 1;
         }
       }
     }

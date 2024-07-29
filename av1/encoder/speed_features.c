@@ -675,8 +675,7 @@ static AOM_INLINE void init_part_sf(PARTITION_SPEED_FEATURES *part_sf) {
   part_sf->prune_part_h_with_partition_boundary = 0;
 #if CONFIG_ML_PART_SPLIT
   part_sf->prune_split_with_ml = 0;
-  part_sf->prune_none_with_ml = 0;
-  part_sf->prune_split_ml_level = -2;  // default pruning
+  part_sf->prune_split_ml_level = 0;  // default pruning
   part_sf->prune_split_ml_level_inter = -1;
 #endif  // CONFIG_ML_PART_SPLIT
 }
@@ -908,13 +907,13 @@ static AOM_INLINE void set_erp_speed_features_framesize_dependent(
       if (is_2k_or_larger) {
         sf->part_sf.prune_split_ml_level = 1;
       } else if (is_1080p_or_larger) {
-        sf->part_sf.prune_split_ml_level = 1;
-      } else if (is_720p_or_larger) {
         sf->part_sf.prune_split_ml_level = 0;
-        sf->part_sf.prune_none_with_ml = 0;
+      } else if (is_720p_or_larger) {
+        sf->part_sf.prune_split_ml_level = -2;
       } else {
-        sf->part_sf.prune_split_with_ml = 1;
-        sf->part_sf.prune_none_with_ml = 0;
+        // Not pruning in anything lower than A2
+        sf->part_sf.prune_split_ml_level = -2;
+        // sf->part_sf.prune_split_with_ml = 0;
       }
       sf->part_sf.prune_split_ml_level_inter =
           sf->part_sf.prune_none_with_ml ? -1 : 0;

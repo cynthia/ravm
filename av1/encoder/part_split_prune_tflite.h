@@ -30,22 +30,34 @@ typedef enum {
   MODEL_16X16,
   MODEL_INTER_NONE_64X64_110,
   MODEL_INTER_NONE_64X64_135,
+  MODEL_INTER_NONE_64X64_160,
   MODEL_INTER_NONE_32X32_110,
   MODEL_INTER_NONE_32X32_135,
+  MODEL_INTER_NONE_32X32_160,
   MODEL_INTER_NONE_16X16_110,
   MODEL_INTER_NONE_16X16_135,
+  MODEL_INTER_NONE_16X16_160,
+  MODEL_INTER_NONE_8X8_110,
+  MODEL_INTER_NONE_8X8_135,
+  MODEL_INTER_NONE_8X8_160,
   MODEL_INTER_NONE_BS11_110,
   MODEL_INTER_NONE_BS11_135,
+  MODEL_INTER_NONE_BS11_160,
   MODEL_INTER_NONE_BS10_110,
   MODEL_INTER_NONE_BS10_135,
+  MODEL_INTER_NONE_BS10_160,
   MODEL_INTER_NONE_BS8_110,
   MODEL_INTER_NONE_BS8_135,
+  MODEL_INTER_NONE_BS8_160,
   MODEL_INTER_NONE_BS7_110,
   MODEL_INTER_NONE_BS7_135,
+  MODEL_INTER_NONE_BS7_160,
   MODEL_INTER_NONE_BS5_110,
   MODEL_INTER_NONE_BS5_135,
+  MODEL_INTER_NONE_BS5_160,
   MODEL_INTER_NONE_BS4_110,
   MODEL_INTER_NONE_BS4_135,
+  MODEL_INTER_NONE_BS4_160,
   MODEL_INTER_SPLIT_64X64,
   MODEL_INTER_SPLIT_32X32,
   MODEL_INTER_SPLIT_16X16,
@@ -129,20 +141,20 @@ enum {
   FEATURE_INTER_MAX
 };
 
-enum { PT_INVAL = -1, PT_NONE = 0, PT_SPLIT };
-
-struct InputNorm {
+struct InputSpec {
   bool valid;
-  double *mean;
-  double *std;
-  double *invstd;
+  double* mean;
+  double* std;
+  double* invstd;
 };
 
 int av2_part_prune_tflite_exec(void **context, const float *ml_input,
                                float *ml_output, MODEL_TYPE model_type);
 void av2_part_prune_tflite_close(void **context);
-int av2_model_input_norm(MODEL_TYPE model_type, struct InputNorm *norm);
+int av2_model_input_spec(MODEL_TYPE model_type, struct InputSpec *params);
+const char *get_model_name(MODEL_TYPE type);
 int get_model_part_type(MODEL_TYPE type);
+int get_model_n_features(MODEL_TYPE type);
 
 #ifdef __cplusplus
 }

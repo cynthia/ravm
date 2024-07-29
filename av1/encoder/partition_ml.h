@@ -46,21 +46,36 @@ enum {
   FEATURE_INTRA_NORM_BEST_VAR_2_10,
   FEATURE_INTRA_NORM_BEST_SSE_2_11,
   FEATURE_INTRA_NORM_BEST_VAR_2_11,
+  // V1 features
+  // NONE w RECT switch, search_none_after_rect
+  FEATURE_INTRA_SWITCH,
+  // partition type: mixed, luma, chroma
+  FEATURE_INTRA_PART_T,
 
   FEATURE_INTRA_MAX
 };
 
-void compute_residual_stats(AV1_COMP *const cpi, ThreadData *td, MACROBLOCK *x,
-                            BLOCK_SIZE bsize, ResidualStats *out);
+void compute_residual_stats(AV1_COMP *const cpi, ThreadData *td,
+                                   MACROBLOCK *x, BLOCK_SIZE bsize,
+                                   ResidualStats *out);
 enum {
   ML_PART_DONT_FORCE = 0,
   ML_PART_FORCE_NONE,
   ML_PART_FORCE_SPLIT,
+  ML_PART_FORCE_VERT,
+  ML_PART_FORCE_HORZ
 };
+
+typedef struct {
+  MODEL_TYPE model;
+  float x[FEATURE_INTER_MAX];
+  size_t x_shape;
+  float y;
+} MLResult;
 
 int av1_ml_part_split_infer(AV1_COMP *const cpi, MACROBLOCK *x, int mi_row,
                             int mi_col, BLOCK_SIZE bsize,
                             const TileInfo *tile_info, ThreadData *td,
-                            bool search_none_after_rect, bool *prune_list);
-
+                            bool search_none_after_rect,
+                            bool* prune_list);
 #endif  // AV1_ENCODER_PARTITION_ML_H_

@@ -1756,6 +1756,7 @@ typedef struct ThreadData {
   void *partition_model;
 #endif  // CONFIG_ML_PART_SPLIT
   void *dip_pruning_model;
+  struct buf_2d sms_pred_buf;
 } ThreadData;
 
 struct EncWorkerData;

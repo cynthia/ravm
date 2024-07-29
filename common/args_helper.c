@@ -94,11 +94,12 @@ unsigned int arg_parse_uint_helper(const struct arg *arg, char *err_msg) {
 
   if (arg->val[0] != '\0' && endptr[0] == '\0') {
     if (rawval <= UINT_MAX) return (unsigned int)rawval;
-    SET_ERR_STRING("Option %s: Value %lu out of range for unsigned int\n",
+    SET_ERR_STRING("uint Option %s: Value %lu out of range for unsigned int\n",
                    arg->name, rawval);
     return 0;
   }
-  SET_ERR_STRING("Option %s: Invalid character '%c'\n", arg->name, *endptr);
+  SET_ERR_STRING("uint Option %s: Invalid character '%c'\n", arg->name,
+                 *endptr);
   return 0;
 }
 
@@ -110,11 +111,11 @@ int arg_parse_int_helper(const struct arg *arg, char *err_msg) {
 
   if (arg->val[0] != '\0' && endptr[0] == '\0') {
     if (rawval >= INT_MIN && rawval <= INT_MAX) return (int)rawval;
-    SET_ERR_STRING("Option %s: Value %ld out of range for signed int\n",
+    SET_ERR_STRING("int Option %s: Value %ld out of range for signed int\n",
                    arg->name, rawval);
     return 0;
   }
-  SET_ERR_STRING("Option %s: Invalid character '%c'\n", arg->name, *endptr);
+  SET_ERR_STRING("int Option %s: Invalid character '%c'\n", arg->name, *endptr);
   return 0;
 }
 
@@ -133,12 +134,12 @@ struct aom_rational arg_parse_rational_helper(const struct arg *arg,
     if (rawval >= INT_MIN && rawval <= INT_MAX) {
       rat.num = (int)rawval;
     } else {
-      SET_ERR_STRING("Option %s: Value %ld out of range for signed int\n",
+      SET_ERR_STRING("r Option %s: Value %ld out of range for signed int\n",
                      arg->name, rawval);
       return rat;
     }
   } else {
-    SET_ERR_STRING("Option %s: Expected / at '%c'\n", arg->name, *endptr);
+    SET_ERR_STRING("r Option %s: Expected / at '%c'\n", arg->name, *endptr);
     return rat;
   }
 
@@ -149,12 +150,12 @@ struct aom_rational arg_parse_rational_helper(const struct arg *arg,
     if (rawval >= INT_MIN && rawval <= INT_MAX) {
       rat.den = (int)rawval;
     } else {
-      SET_ERR_STRING("Option %s: Value %ld out of range for signed int\n",
+      SET_ERR_STRING("r Option %s: Value %ld out of range for signed int\n",
                      arg->name, rawval);
       return rat;
     }
   } else {
-    SET_ERR_STRING("Option %s: Invalid character '%c'\n", arg->name, *endptr);
+    SET_ERR_STRING("r Option %s: Invalid character '%c'\n", arg->name, *endptr);
     return rat;
   }
 
@@ -180,7 +181,7 @@ int arg_parse_enum_helper(const struct arg *arg, char *err_msg) {
   for (listptr = arg->def->enums; listptr->name; listptr++)
     if (!strcmp(arg->val, listptr->name)) return listptr->val;
 
-  SET_ERR_STRING("Option %s: Invalid value '%s'\n", arg->name, arg->val);
+  SET_ERR_STRING("e Option %s: Invalid value '%s'\n", arg->name, arg->val);
   return 0;
 }
 
@@ -202,17 +203,17 @@ int arg_parse_list_helper(const struct arg *arg, int *list, int n,
   while (ptr[0] != '\0') {
     long rawval = strtol(ptr, &endptr, 10);  // NOLINT
     if (rawval < INT_MIN || rawval > INT_MAX) {
-      SET_ERR_STRING("Option %s: Value %ld out of range for signed int\n",
+      SET_ERR_STRING("l Option %s: Value %ld out of range for signed int\n",
                      arg->name, rawval);
       return 0;
     } else if (i >= n) {
-      SET_ERR_STRING("Option %s: List has more than %d entries\n", arg->name,
+      SET_ERR_STRING("l Option %s: List has more than %d entries\n", arg->name,
                      n);
       return 0;
     } else if (*endptr == ',') {
       endptr++;
     } else if (*endptr != '\0') {
-      SET_ERR_STRING("Option %s: Bad list separator '%c'\n", arg->name,
+      SET_ERR_STRING("l Option %s: Bad list separator '%c'\n", arg->name,
                      *endptr);
       return 0;
     }

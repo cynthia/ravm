@@ -1472,8 +1472,7 @@ typedef struct FRAME_COUNTS {
 #else
   unsigned int coeff_lps_lf[PLANE_TYPES][BR_CDF_SIZE - 1][LF_LEVEL_CONTEXTS][2];
   unsigned int coeff_base_lf_multi[TOKEN_CDF_Q_CTXS][TX_SIZES][PLANE_TYPES]
-                                  [LF_SIG_COEF_CONTEXTS]
-                                  [LF_BASE_SYMBOLS];
+                                  [LF_SIG_COEF_CONTEXTS][LF_BASE_SYMBOLS];
 #if CONFIG_DQ && !CONFIG_LCCHROMA
   unsigned int coeff_base_lf_multi_tcq[TOKEN_CDF_Q_CTXS][TX_SIZES][PLANE_TYPES]
                                       [LF_SIG_COEF_CONTEXTS][LF_BASE_SYMBOLS];

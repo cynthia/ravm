@@ -240,8 +240,9 @@ typedef struct frame_contexts {
 #if CONFIG_DQ
   aom_cdf_prob coeff_base_cdf_tcq[TX_SIZES][PLANE_TYPES][SIG_COEF_CONTEXTS]
                                  [CDF_SIZE(4)];
-  aom_cdf_prob coeff_base_lf_cdf_tcq[TX_SIZES][PLANE_TYPES][LF_SIG_COEF_CONTEXTS]
-                                [CDF_SIZE(LF_BASE_SYMBOLS)];
+  aom_cdf_prob coeff_base_lf_cdf_tcq[TX_SIZES][PLANE_TYPES]
+                                    [LF_SIG_COEF_CONTEXTS]
+                                    [CDF_SIZE(LF_BASE_SYMBOLS)];
 #endif
   aom_cdf_prob coeff_base_lf_cdf[TX_SIZES][PLANE_TYPES][LF_SIG_COEF_CONTEXTS]
                                 [CDF_SIZE(LF_BASE_SYMBOLS)];

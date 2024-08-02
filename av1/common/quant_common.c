@@ -87,14 +87,14 @@ static const uint16_t ac_qlookup_QTX_full[QINDEX_RANGE_8_BITS] = {
 // addition, the minimum allowable quantizer is 4; smaller values will
 // underflow to 0 in the actual quantization routines.
 
+#if CONFIG_DQ
 bool tcq_quant(const int state) {
   // 8-states: A0: state 0/1/4/5, A1: state 2/3/6/7
   // 4-states: A0: state 0/1, A1: state 2/3
   return state & 2;
 }
 
-int tcq_parity(int absLevel, int limits)
-{
+int tcq_parity(int absLevel, int limits) {
 #if NEWHR
   (void)limits;
   int par = absLevel & 1;
@@ -109,73 +109,45 @@ int tcq_parity(int absLevel, int limits)
 int tcq_next_state(const int curState, const int absLevel, const int limits) {
   int nextState = 0;
 #if MORESTATES
-  switch (curState){
-  case 0:
-    nextState = !(tcq_parity(absLevel, limits)) ? 0 : 4;
-    break;
-  case 1:
-    nextState = !(tcq_parity(absLevel, limits)) ? 4 : 0;
-    break;
-  case 2:
-    nextState = !(tcq_parity(absLevel, limits)) ? 1 : 5;
-    break;
-  case 3:
-    nextState = !(tcq_parity(absLevel, limits)) ? 5 : 1;
-    break;
-  case 4:
-    nextState = !(tcq_parity(absLevel, limits)) ? 6 : 2;
-    break;
-  case 5:
-    nextState = !(tcq_parity(absLevel, limits)) ? 2 : 6;
-    break;
-  case 6:
-    nextState = !(tcq_parity(absLevel, limits)) ? 7 : 3;
-    break;
-  case 7:
-    nextState = !(tcq_parity(absLevel, limits)) ? 3 : 7;
-    break;
-  default:
-    nextState = !(tcq_parity(absLevel, limits)) ? 0 : 4;
-    break;
+  switch (curState) {
+    case 0: nextState = !(tcq_parity(absLevel, limits)) ? 0 : 4; break;
+    case 1: nextState = !(tcq_parity(absLevel, limits)) ? 4 : 0; break;
+    case 2: nextState = !(tcq_parity(absLevel, limits)) ? 1 : 5; break;
+    case 3: nextState = !(tcq_parity(absLevel, limits)) ? 5 : 1; break;
+    case 4: nextState = !(tcq_parity(absLevel, limits)) ? 6 : 2; break;
+    case 5: nextState = !(tcq_parity(absLevel, limits)) ? 2 : 6; break;
+    case 6: nextState = !(tcq_parity(absLevel, limits)) ? 7 : 3; break;
+    case 7: nextState = !(tcq_parity(absLevel, limits)) ? 3 : 7; break;
+    default: nextState = !(tcq_parity(absLevel, limits)) ? 0 : 4; break;
   }
 #else
-  switch (curState){
-  case 0:
-    nextState = !(tcq_parity(absLevel, limits)) ? 0 : 2;
-    break;
-  case 1:
-    nextState = !(tcq_parity(absLevel, limits)) ? 2 : 0;
-    break;
-  case 2:
-    nextState = !(tcq_parity(absLevel, limits)) ? 1 : 3;
-    break;
-  case 3:
-    nextState = !(tcq_parity(absLevel, limits)) ? 3 : 1;
-    break;
-  default:
-    nextState = !(tcq_parity(absLevel, limits)) ? 0 : 2;
-    break;
+  switch (curState) {
+    case 0: nextState = !(tcq_parity(absLevel, limits)) ? 0 : 2; break;
+    case 1: nextState = !(tcq_parity(absLevel, limits)) ? 2 : 0; break;
+    case 2: nextState = !(tcq_parity(absLevel, limits)) ? 1 : 3; break;
+    case 3: nextState = !(tcq_parity(absLevel, limits)) ? 3 : 1; break;
+    default: nextState = !(tcq_parity(absLevel, limits)) ? 0 : 2; break;
   }
 #endif
   return nextState;
 }
 
-
 #if DQENABLE
 #define DQMIN 0
 #define DQMAX 1024
-bool dq_enable(TX_SIZE tx_size, int plane)
-{
+bool dq_enable(TX_SIZE tx_size, int plane) {
   int width = get_txb_wide(tx_size);
   int height = get_txb_high(tx_size);
-  return ((width * height <= DQMAX) && (width * height >= DQMIN));// try other constraints?
+  return ((width * height <= DQMAX) &&
+          (width * height >= DQMIN));  // try other constraints?
 }
+#endif
 #endif
 
 int32_t av1_dc_quant_QTX(int qindex, int delta, int base_dc_delta_q,
                          aom_bit_depth_t bit_depth) {
 #if NEWQINDEX
-  qindex += 2;
+  if (qindex != 0) qindex += 2;
 #endif
   int q_clamped;
   if ((qindex == 0) && (delta + base_dc_delta_q <= 0))
@@ -238,7 +210,7 @@ int32_t av1_dc_quant_QTX(int qindex, int delta, int base_dc_delta_q,
 
 int32_t av1_ac_quant_QTX(int qindex, int delta, aom_bit_depth_t bit_depth) {
 #if NEWQINDEX
-    qindex += 2;
+  if (qindex != 0) qindex += 2;
 #endif
   int q_clamped;
   if ((qindex == 0) && (delta <= 0))

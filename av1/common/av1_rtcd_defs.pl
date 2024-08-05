@@ -320,15 +320,15 @@ if (aom_config("CONFIG_AV1_ENCODER") eq "yes") {
   # trellis quant
   if (aom_config("CONFIG_DQ") eq "yes") {
     add_proto qw/void av1_decide_states/, "const struct tcq_node_t *prev, const int64_t dist[2 * TOTALSTATES], const int32_t rate[2 * TOTALSTATES], const int32_t rate_zero[TOTALSTATES], const struct prequant_t *pq, int limits, int64_t rdmult, struct tcq_node_t *decision";
-    #specialize qw/av1_decide_states avx2/;
+    specialize qw/av1_decide_states avx2/;
     add_proto qw/void av1_pre_quant/, "tran_low_t tqc, struct prequant_t* pqData, const int32_t* quant_ptr, int dqv, int log_scale, int scan_pos";
-    #specialize qw/av1_pre_quant avx2/;
+    specialize qw/av1_pre_quant avx2/;
     add_proto qw/void av1_calc_diag_ctx/, "int scan_hi, int scan_lo, int bwl, const uint8_t *prev_levels, const int16_t* scan, uint8_t *ctx";
-    #specialize qw/av1_calc_diag_ctx avx2/;
+    specialize qw/av1_calc_diag_ctx avx2/;
     add_proto qw/void av1_get_rate_dist_def/, "const struct LV_MAP_COEFF_COST* txb_costs, const struct prequant_t *pq, const uint8_t coeff_ctx[2 * TOTALSTATES], int diag_ctx, int plane, int32_t rate_zero[TOTALSTATES], int32_t rate[2 * TOTALSTATES], int64_t dist[2 * TOTALSTATES]";
-    #specialize qw/av1_get_rate_dist_def avx2/;
+    specialize qw/av1_get_rate_dist_def avx2/;
     add_proto qw/void av1_update_states/, "struct tcq_node_t *decision, int scan_idx, struct tcq_ctx_t *tcq_ctx";
-    #specialize qw/av1_update_states avx2/;
+    specialize qw/av1_update_states avx2/;
   }
 
   # fdct functions

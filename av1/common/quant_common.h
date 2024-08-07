@@ -67,7 +67,6 @@ struct CommonQuantParams;
 struct macroblockd;
 
 #if CONFIG_DQ
-int tcq_parity(int absLevel, int limits);
 bool tcq_quant(const int state);
 int tcq_parity(int absLevel, int limits);
 int tcq_next_state(const int curState, const int absLevel, const int limits);

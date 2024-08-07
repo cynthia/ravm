@@ -421,15 +421,27 @@ static INLINE int get_coeff_cost_eob(int ci, tran_low_t abs_qc, int sign,
 }
 
 #if CONFIG_CONTEXT_DERIVATION && CONFIG_LCCHROMA && CONFIG_IMPROVEIDTX_CTXS
-static int get_coeff_cost_def(tran_low_t abs_qc, int coeff_ctx, int diag_ctx,
-                              const LV_MAP_COEFF_COST *txb_costs, int dq) {
+static INLINE int get_coeff_cost_def(tran_low_t abs_qc, int coeff_ctx,
+                                     int diag_ctx, int plane,
+                                     const LV_MAP_COEFF_COST *txb_costs, int dq,
+                                     int t_sign, int sign) {
   int base_ctx = diag_ctx + (coeff_ctx & 15);
   int mid_ctx = coeff_ctx >> 4;
-  int cost = txb_costs->base_cost[base_ctx][dq][AOMMIN(abs_qc, 3)];
+  const int(*base_cost_ptr)[DQ_CTXS][8] =
+      plane > 0 ? txb_costs->base_cost_uv : txb_costs->base_cost;
+  int cost = base_cost_ptr[base_ctx][dq][AOMMIN(abs_qc, 3)];
   if (abs_qc != 0) {
-    cost += av1_cost_literal(1);
-    if (abs_qc > NUM_BASE_LEVELS)
-      cost += get_br_cost(abs_qc, txb_costs->lps_cost[mid_ctx]);
+    if (plane == AOM_PLANE_V)
+      cost += txb_costs->v_ac_sign_cost[t_sign][sign];
+    else
+      cost += av1_cost_literal(1);
+    if (abs_qc > NUM_BASE_LEVELS) {
+      if (plane == 0) {
+        cost += get_br_cost(abs_qc, txb_costs->lps_cost[mid_ctx]);
+      } else {
+        cost += get_br_cost(abs_qc, txb_costs->lps_cost_uv[mid_ctx]);
+      }
+    }
   }
   return cost;
 }
@@ -995,38 +1007,38 @@ void trellis_first_pos(int scan_pos, int plane, TX_SIZE tx_size,
                  scan, scan_pos, scan_pos, bwl, sharpness);
 }
 
-void av1_get_rate_dist_def_c(const struct LV_MAP_COEFF_COST *txb_costs,
-                             const struct prequant_t *pq,
-                             const uint8_t coeff_ctx[2 * TOTALSTATES],
-                             int diag_ctx, int plane,
-                             int32_t rate_zero[TOTALSTATES],
-                             int32_t rate[2 * TOTALSTATES],
-                             int64_t dist[2 * TOTALSTATES]) {
+void av1_get_rate_dist_def_luma_c(const struct LV_MAP_COEFF_COST *txb_costs,
+                                  const struct prequant_t *pq,
+                                  const uint8_t coeff_ctx[TOTALSTATES + 4],
+                                  int diag_ctx, int32_t rate_zero[TOTALSTATES],
+                                  int32_t rate[2 * TOTALSTATES],
+                                  int64_t dist[2 * TOTALSTATES]) {
+  const int plane = 0;
+  const int t_sign = 0;
+  const int sign = 0;
   const tran_low_t *absLevel = pq->absLevel;
   const int64_t *deltaDist = pq->deltaDist;
   for (int i = 0; i < TOTALSTATES; i++) {
     int base_ctx = diag_ctx + (coeff_ctx[i] & 15);
     int dq = tcq_quant(i);
-    const int(*base_cost_ptr)[DQ_CTXS][8] =
-        plane > 0 ? txb_costs->base_cost_uv : txb_costs->base_cost;
-    rate_zero[i] = base_cost_ptr[base_ctx][dq][0];
+    rate_zero[i] = txb_costs->base_cost[base_ctx][dq][0];
   }
-  rate[0] =
-      get_coeff_cost_def(absLevel[0], coeff_ctx[0], diag_ctx, txb_costs, 0);
-  rate[1] =
-      get_coeff_cost_def(absLevel[2], coeff_ctx[0], diag_ctx, txb_costs, 0);
-  rate[2] =
-      get_coeff_cost_def(absLevel[0], coeff_ctx[1], diag_ctx, txb_costs, 0);
-  rate[3] =
-      get_coeff_cost_def(absLevel[2], coeff_ctx[1], diag_ctx, txb_costs, 0);
-  rate[4] =
-      get_coeff_cost_def(absLevel[1], coeff_ctx[2], diag_ctx, txb_costs, 1);
-  rate[5] =
-      get_coeff_cost_def(absLevel[3], coeff_ctx[2], diag_ctx, txb_costs, 1);
-  rate[6] =
-      get_coeff_cost_def(absLevel[1], coeff_ctx[3], diag_ctx, txb_costs, 1);
-  rate[7] =
-      get_coeff_cost_def(absLevel[3], coeff_ctx[3], diag_ctx, txb_costs, 1);
+  rate[0] = get_coeff_cost_def(absLevel[0], coeff_ctx[0], diag_ctx, plane,
+                               txb_costs, 0, t_sign, sign);
+  rate[1] = get_coeff_cost_def(absLevel[2], coeff_ctx[0], diag_ctx, plane,
+                               txb_costs, 0, t_sign, sign);
+  rate[2] = get_coeff_cost_def(absLevel[0], coeff_ctx[1], diag_ctx, plane,
+                               txb_costs, 0, t_sign, sign);
+  rate[3] = get_coeff_cost_def(absLevel[2], coeff_ctx[1], diag_ctx, plane,
+                               txb_costs, 0, t_sign, sign);
+  rate[4] = get_coeff_cost_def(absLevel[1], coeff_ctx[2], diag_ctx, plane,
+                               txb_costs, 1, t_sign, sign);
+  rate[5] = get_coeff_cost_def(absLevel[3], coeff_ctx[2], diag_ctx, plane,
+                               txb_costs, 1, t_sign, sign);
+  rate[6] = get_coeff_cost_def(absLevel[1], coeff_ctx[3], diag_ctx, plane,
+                               txb_costs, 1, t_sign, sign);
+  rate[7] = get_coeff_cost_def(absLevel[3], coeff_ctx[3], diag_ctx, plane,
+                               txb_costs, 1, t_sign, sign);
   dist[0] = deltaDist[0];
   dist[1] = deltaDist[2];
   dist[2] = deltaDist[0];
@@ -1036,22 +1048,22 @@ void av1_get_rate_dist_def_c(const struct LV_MAP_COEFF_COST *txb_costs,
   dist[6] = deltaDist[1];
   dist[7] = deltaDist[3];
 #if MORESTATES
-  rate[8] =
-      get_coeff_cost_def(absLevel[0], coeff_ctx[4], diag_ctx, txb_costs, 0);
-  rate[9] =
-      get_coeff_cost_def(absLevel[2], coeff_ctx[4], diag_ctx, txb_costs, 0);
-  rate[10] =
-      get_coeff_cost_def(absLevel[0], coeff_ctx[5], diag_ctx, txb_costs, 0);
-  rate[11] =
-      get_coeff_cost_def(absLevel[2], coeff_ctx[5], diag_ctx, txb_costs, 0);
-  rate[12] =
-      get_coeff_cost_def(absLevel[1], coeff_ctx[6], diag_ctx, txb_costs, 1);
-  rate[13] =
-      get_coeff_cost_def(absLevel[3], coeff_ctx[6], diag_ctx, txb_costs, 1);
-  rate[14] =
-      get_coeff_cost_def(absLevel[1], coeff_ctx[7], diag_ctx, txb_costs, 1);
-  rate[15] =
-      get_coeff_cost_def(absLevel[3], coeff_ctx[7], diag_ctx, txb_costs, 1);
+  rate[8] = get_coeff_cost_def(absLevel[0], coeff_ctx[4], diag_ctx, plane,
+                               txb_costs, 0, t_sign, sign);
+  rate[9] = get_coeff_cost_def(absLevel[2], coeff_ctx[4], diag_ctx, plane,
+                               txb_costs, 0, t_sign, sign);
+  rate[10] = get_coeff_cost_def(absLevel[0], coeff_ctx[5], diag_ctx, plane,
+                                txb_costs, 0, t_sign, sign);
+  rate[11] = get_coeff_cost_def(absLevel[2], coeff_ctx[5], diag_ctx, plane,
+                                txb_costs, 0, t_sign, sign);
+  rate[12] = get_coeff_cost_def(absLevel[1], coeff_ctx[6], diag_ctx, plane,
+                                txb_costs, 1, t_sign, sign);
+  rate[13] = get_coeff_cost_def(absLevel[3], coeff_ctx[6], diag_ctx, plane,
+                                txb_costs, 1, t_sign, sign);
+  rate[14] = get_coeff_cost_def(absLevel[1], coeff_ctx[7], diag_ctx, plane,
+                                txb_costs, 1, t_sign, sign);
+  rate[15] = get_coeff_cost_def(absLevel[3], coeff_ctx[7], diag_ctx, plane,
+                                txb_costs, 1, t_sign, sign);
   dist[8] = deltaDist[0];
   dist[9] = deltaDist[2];
   dist[10] = deltaDist[0];
@@ -1060,6 +1072,247 @@ void av1_get_rate_dist_def_c(const struct LV_MAP_COEFF_COST *txb_costs,
   dist[13] = deltaDist[3];
   dist[14] = deltaDist[1];
   dist[15] = deltaDist[3];
+#endif
+}
+
+void av1_get_rate_dist_def_chroma_c(const struct LV_MAP_COEFF_COST *txb_costs,
+                                    const struct prequant_t *pq,
+                                    const uint8_t coeff_ctx[TOTALSTATES + 4],
+                                    int diag_ctx, int plane, int t_sign,
+                                    int sign, int32_t rate_zero[TOTALSTATES],
+                                    int32_t rate[2 * TOTALSTATES],
+                                    int64_t dist[2 * TOTALSTATES]) {
+  const tran_low_t *absLevel = pq->absLevel;
+  const int64_t *deltaDist = pq->deltaDist;
+  for (int i = 0; i < TOTALSTATES; i++) {
+    int base_ctx = diag_ctx + (coeff_ctx[i] & 15);
+    int dq = tcq_quant(i);
+    rate_zero[i] = txb_costs->base_cost_uv[base_ctx][dq][0];
+  }
+  rate[0] = get_coeff_cost_def(absLevel[0], coeff_ctx[0], diag_ctx, plane,
+                               txb_costs, 0, t_sign, sign);
+  rate[1] = get_coeff_cost_def(absLevel[2], coeff_ctx[0], diag_ctx, plane,
+                               txb_costs, 0, t_sign, sign);
+  rate[2] = get_coeff_cost_def(absLevel[0], coeff_ctx[1], diag_ctx, plane,
+                               txb_costs, 0, t_sign, sign);
+  rate[3] = get_coeff_cost_def(absLevel[2], coeff_ctx[1], diag_ctx, plane,
+                               txb_costs, 0, t_sign, sign);
+  rate[4] = get_coeff_cost_def(absLevel[1], coeff_ctx[2], diag_ctx, plane,
+                               txb_costs, 1, t_sign, sign);
+  rate[5] = get_coeff_cost_def(absLevel[3], coeff_ctx[2], diag_ctx, plane,
+                               txb_costs, 1, t_sign, sign);
+  rate[6] = get_coeff_cost_def(absLevel[1], coeff_ctx[3], diag_ctx, plane,
+                               txb_costs, 1, t_sign, sign);
+  rate[7] = get_coeff_cost_def(absLevel[3], coeff_ctx[3], diag_ctx, plane,
+                               txb_costs, 1, t_sign, sign);
+  dist[0] = deltaDist[0];
+  dist[1] = deltaDist[2];
+  dist[2] = deltaDist[0];
+  dist[3] = deltaDist[2];
+  dist[4] = deltaDist[1];
+  dist[5] = deltaDist[3];
+  dist[6] = deltaDist[1];
+  dist[7] = deltaDist[3];
+#if MORESTATES
+  rate[8] = get_coeff_cost_def(absLevel[0], coeff_ctx[4], diag_ctx, plane,
+                               txb_costs, 0, t_sign, sign);
+  rate[9] = get_coeff_cost_def(absLevel[2], coeff_ctx[4], diag_ctx, plane,
+                               txb_costs, 0, t_sign, sign);
+  rate[10] = get_coeff_cost_def(absLevel[0], coeff_ctx[5], diag_ctx, plane,
+                                txb_costs, 0, t_sign, sign);
+  rate[11] = get_coeff_cost_def(absLevel[2], coeff_ctx[5], diag_ctx, plane,
+                                txb_costs, 0, t_sign, sign);
+  rate[12] = get_coeff_cost_def(absLevel[1], coeff_ctx[6], diag_ctx, plane,
+                                txb_costs, 1, t_sign, sign);
+  rate[13] = get_coeff_cost_def(absLevel[3], coeff_ctx[6], diag_ctx, plane,
+                                txb_costs, 1, t_sign, sign);
+  rate[14] = get_coeff_cost_def(absLevel[1], coeff_ctx[7], diag_ctx, plane,
+                                txb_costs, 1, t_sign, sign);
+  rate[15] = get_coeff_cost_def(absLevel[3], coeff_ctx[7], diag_ctx, plane,
+                                txb_costs, 1, t_sign, sign);
+  dist[8] = deltaDist[0];
+  dist[9] = deltaDist[2];
+  dist[10] = deltaDist[0];
+  dist[11] = deltaDist[2];
+  dist[12] = deltaDist[1];
+  dist[13] = deltaDist[3];
+  dist[14] = deltaDist[1];
+  dist[15] = deltaDist[3];
+#endif
+#if 0
+  static int n = 0;
+  int s_rate_zero[TOTALSTATES];
+  int s_rate[2 * TOTALSTATES];
+  int64_t s_dist[2 * TOTALSTATES];
+  av1_get_rate_dist_def_chroma_avx2(txb_costs, pq, coeff_ctx, diag_ctx, plane, t_sign, sign,
+                                    s_rate_zero, s_rate, s_dist);
+  int ok = 1;
+  for (int i = 0; i < TOTALSTATES; i++) {
+    int chk = s_rate_zero[i] == rate_zero[i];
+    if (!chk) {
+      printf("CHK i %d rate_zero %d %d\n", i, s_rate_zero[i], rate_zero[i]);
+    }
+    ok &= chk;
+  }
+  for (int i = 0; i < 2*TOTALSTATES; i++) {
+    int chk = s_rate[i] == rate[i];
+    if (!chk) {
+      printf("CHK i %d rate %d %d\n", i, s_rate[i], rate[i]);
+    }
+    ok &= chk;
+  }
+  for (int i = 0; i < 2*TOTALSTATES; i++) {
+    int chk = s_dist[i] == dist[i];
+    if (!chk) {
+      printf("CHK i %d dist %ld %ld\n", i, s_dist[i], dist[i]);
+    }
+    ok &= chk;
+  }
+  n++;
+  if (!ok) {
+    printf("plane %d t_sign %d sign %d\n", plane, t_sign, sign);
+    exit(1);
+  }
+#endif
+}
+
+void av1_get_rate_dist_lf_c(const struct LV_MAP_COEFF_COST *txb_costs,
+                            const struct prequant_t *pq,
+                            const uint8_t coeff_ctx[TOTALSTATES + 4],
+                            int diag_ctx, int dc_sign_ctx, int32_t *tmp_sign,
+                            int bwl, TX_CLASS tx_class, int plane, int blk_pos,
+                            int coeff_sign, int32_t rate_zero[TOTALSTATES],
+                            int32_t rate[2 * TOTALSTATES],
+                            int64_t dist[2 * TOTALSTATES]) {
+  const tran_low_t *absLevel = pq->absLevel;
+  const int64_t *deltaDist = pq->deltaDist;
+  uint8_t base_ctx[TOTALSTATES];
+  uint8_t mid_ctx[TOTALSTATES];
+
+  for (int i = 0; i < TOTALSTATES; i++) {
+    base_ctx[i] = (coeff_ctx[i] & 15) + diag_ctx;
+    mid_ctx[i] = coeff_ctx[i] >> 4;
+  }
+
+  // calculate RDcost
+  for (int i = 0; i < TOTALSTATES; i++) {
+    int dq = tcq_quant(i);
+    const int(*base_lf_cost_ptr)[DQ_CTXS][LF_BASE_SYMBOLS * 2] =
+        plane > 0 ? txb_costs->base_lf_cost_uv : txb_costs->base_lf_cost;
+    rate_zero[i] = base_lf_cost_ptr[base_ctx[i]][dq][0];
+    if (0)
+      printf(
+          "save_rate_zero[%d] = base_lf_cost_ptr[%d][%d][%d] = %04x %04x "
+          "coeff_ctx %02X diag_ctx %d\n",
+          i, base_ctx[i], dq, 0, base_lf_cost_ptr[base_ctx[i]][dq][0],
+          rate_zero[i], coeff_ctx[i], diag_ctx);
+  }
+
+  rate[0] = get_coeff_cost(blk_pos, absLevel[0], coeff_sign, base_ctx[0],
+                           mid_ctx[0], dc_sign_ctx, txb_costs, bwl, tx_class,
+                           tmp_sign, plane, 1, 0);
+  rate[1] = get_coeff_cost(blk_pos, absLevel[2], coeff_sign, base_ctx[0],
+                           mid_ctx[0], dc_sign_ctx, txb_costs, bwl, tx_class,
+                           tmp_sign, plane, 1, 0);
+  rate[2] = get_coeff_cost(blk_pos, absLevel[0], coeff_sign, base_ctx[1],
+                           mid_ctx[1], dc_sign_ctx, txb_costs, bwl, tx_class,
+                           tmp_sign, plane, 1, 0);
+  rate[3] = get_coeff_cost(blk_pos, absLevel[2], coeff_sign, base_ctx[1],
+                           mid_ctx[1], dc_sign_ctx, txb_costs, bwl, tx_class,
+                           tmp_sign, plane, 1, 0);
+  rate[4] = get_coeff_cost(blk_pos, absLevel[1], coeff_sign, base_ctx[2],
+                           mid_ctx[2], dc_sign_ctx, txb_costs, bwl, tx_class,
+                           tmp_sign, plane, 1, 1);
+  rate[5] = get_coeff_cost(blk_pos, absLevel[3], coeff_sign, base_ctx[2],
+                           mid_ctx[2], dc_sign_ctx, txb_costs, bwl, tx_class,
+                           tmp_sign, plane, 1, 1);
+  rate[6] = get_coeff_cost(blk_pos, absLevel[1], coeff_sign, base_ctx[3],
+                           mid_ctx[3], dc_sign_ctx, txb_costs, bwl, tx_class,
+                           tmp_sign, plane, 1, 1);
+  rate[7] = get_coeff_cost(blk_pos, absLevel[3], coeff_sign, base_ctx[3],
+                           mid_ctx[3], dc_sign_ctx, txb_costs, bwl, tx_class,
+                           tmp_sign, plane, 1, 1);
+#if MORESTATES
+  rate[8] = get_coeff_cost(blk_pos, absLevel[0], coeff_sign, base_ctx[4],
+                           mid_ctx[4], dc_sign_ctx, txb_costs, bwl, tx_class,
+                           tmp_sign, plane, 1, 0);
+  rate[9] = get_coeff_cost(blk_pos, absLevel[2], coeff_sign, base_ctx[4],
+                           mid_ctx[4], dc_sign_ctx, txb_costs, bwl, tx_class,
+                           tmp_sign, plane, 1, 0);
+  rate[10] = get_coeff_cost(blk_pos, absLevel[0], coeff_sign, base_ctx[5],
+                            mid_ctx[5], dc_sign_ctx, txb_costs, bwl, tx_class,
+                            tmp_sign, plane, 1, 0);
+  rate[11] = get_coeff_cost(blk_pos, absLevel[2], coeff_sign, base_ctx[5],
+                            mid_ctx[5], dc_sign_ctx, txb_costs, bwl, tx_class,
+                            tmp_sign, plane, 1, 0);
+  rate[12] = get_coeff_cost(blk_pos, absLevel[1], coeff_sign, base_ctx[6],
+                            mid_ctx[6], dc_sign_ctx, txb_costs, bwl, tx_class,
+                            tmp_sign, plane, 1, 1);
+  rate[13] = get_coeff_cost(blk_pos, absLevel[3], coeff_sign, base_ctx[6],
+                            mid_ctx[6], dc_sign_ctx, txb_costs, bwl, tx_class,
+                            tmp_sign, plane, 1, 1);
+  rate[14] = get_coeff_cost(blk_pos, absLevel[1], coeff_sign, base_ctx[7],
+                            mid_ctx[7], dc_sign_ctx, txb_costs, bwl, tx_class,
+                            tmp_sign, plane, 1, 1);
+  rate[15] = get_coeff_cost(blk_pos, absLevel[3], coeff_sign, base_ctx[7],
+                            mid_ctx[7], dc_sign_ctx, txb_costs, bwl, tx_class,
+                            tmp_sign, plane, 1, 1);
+#endif
+  dist[0] = deltaDist[0];
+  dist[1] = deltaDist[2];
+  dist[2] = deltaDist[0];
+  dist[3] = deltaDist[2];
+  dist[4] = deltaDist[1];
+  dist[5] = deltaDist[3];
+  dist[6] = deltaDist[1];
+  dist[7] = deltaDist[3];
+#if MORESTATES
+  dist[8] = deltaDist[0];
+  dist[9] = deltaDist[2];
+  dist[10] = deltaDist[0];
+  dist[11] = deltaDist[2];
+  dist[12] = deltaDist[1];
+  dist[13] = deltaDist[3];
+  dist[14] = deltaDist[1];
+  dist[15] = deltaDist[3];
+#endif
+#if 0
+  static int n = 0;
+  int t_sign = tmp_sign[blk_pos];
+  int sign = coeff_sign;
+  int s_rate_zero[TOTALSTATES];
+  int s_rate[2 * TOTALSTATES];
+  int64_t s_dist[2 * TOTALSTATES];
+  av1_get_rate_dist_lf_avx2(txb_costs, pq, coeff_ctx, diag_ctx, dc_sign_ctx,
+                            tmp_sign, bwl, tx_class, plane, blk_pos, coeff_sign,
+                            s_rate_zero, s_rate, s_dist);
+  int ok = 1;
+  for (int i = 0; i < TOTALSTATES; i++) {
+    int chk = s_rate_zero[i] == rate_zero[i];
+    if (!chk) {
+      printf("CHK i %d rate_zero %d %d\n", i, s_rate_zero[i], rate_zero[i]);
+    }
+    ok &= chk;
+  }
+  for (int i = 0; i < 2*TOTALSTATES; i++) {
+    int chk = s_rate[i] == rate[i];
+    if (!chk || n == 0) {
+      printf("CHK i %d rate %d %d\n", i, s_rate[i], rate[i]);
+    }
+    ok &= chk;
+  }
+  for (int i = 0; i < 2*TOTALSTATES; i++) {
+    int chk = s_dist[i] == dist[i];
+    if (!chk) {
+      printf("CHK i %d dist %ld %ld\n", i, s_dist[i], dist[i]);
+    }
+    ok &= chk;
+  }
+  n++;
+  if (!ok) {
+    printf("plane %d t_sign %d sign %d\n", plane, t_sign, sign);
+    exit(1);
+  }
 #endif
 }
 
@@ -1114,6 +1367,7 @@ static void update_levels_diagonal(uint8_t *levels[TOTALSTATES],
   }
 }
 
+// Handle trellis default region for Luma, TX_CLASS_2D blocks.
 void trellis_loop_diagonal(
     int scan_hi, int scan_lo, int plane, TX_SIZE tx_size, TX_TYPE tx_type,
     int32_t *tmp_sign, int sharpness, tcq_levels_t *tcq_lev,
@@ -1128,12 +1382,7 @@ void trellis_loop_diagonal(
   const int shift = av1_get_tx_scale(tx_size);
   const TX_CLASS tx_class = tx_type_to_class[get_primary_tx_type(tx_type)];
   const int pos0 = scan[scan_hi];
-  const int row0 = pos0 >> bwl;
-  const int col0 = pos0 - (row0 << bwl);
-  const int diag_ctx = (plane != 0 || row0 + col0 < 6) ? 0
-                       : row0 + col0 < 8               ? 5
-                                                       : 10;
-
+  const int diag_ctx = get_nz_map_ctx_from_stats(0, pos0, bwl, TX_CLASS_2D, 0);
   assert(plane == 0);
   assert(tx_class == TX_CLASS_2D);
 
@@ -1164,13 +1413,13 @@ void trellis_loop_diagonal(
     int64_t dist[2 * TOTALSTATES];
 
     // calculate rate distortion
-    uint8_t coeff_ctx[2 * TOTALSTATES];  // extra alloc for simd (loadu_si64)
+    uint8_t coeff_ctx[TOTALSTATES + 4];  // extra +4 alloc to allow SIMD load.
     for (int i = 0; i < TOTALSTATES; i++) {
       coeff_ctx[i] = tcq_ctx[i].ctx[scan_pos - scan_lo];
     }
 
-    av1_get_rate_dist_def(txb_costs, &pqData, coeff_ctx, diag_ctx, plane,
-                          rate_zero, rate, dist);
+    av1_get_rate_dist_def_luma(txb_costs, &pqData, coeff_ctx, diag_ctx,
+                               rate_zero, rate, dist);
 
     av1_decide_states(prev_decision, dist, rate, rate_zero, &pqData, limits,
                       rdmult, decision);
@@ -1223,6 +1472,7 @@ void trellis_loop_diagonal(
                          scan_hi, scan_lo, tcq_ctx);
 }
 
+// Handle trellis Low-freq (LF) region for Luma, TX_CLASS_2D blocks.
 void trellis_loop_lf(int first_scan_pos, int scan_hi, int scan_lo, int plane,
                      TX_SIZE tx_size, TX_TYPE tx_type, int32_t *tmp_sign,
                      int sharpness, tcq_levels_t *tcq_lev,
@@ -1237,11 +1487,14 @@ void trellis_loop_lf(int first_scan_pos, int scan_hi, int scan_lo, int plane,
   const int height = get_txb_high(tx_size);
   const int shift = av1_get_tx_scale(tx_size);
   const TX_CLASS tx_class = tx_type_to_class[get_primary_tx_type(tx_type)];
+  assert(plane == 0);
+  assert(tx_class == TX_CLASS_2D);
 
   for (int scan_pos = scan_hi; scan_pos >= scan_lo; scan_pos--) {
     tcq_levels_swap(tcq_lev);
 
     int blk_pos = scan[scan_pos];
+
     tcq_node_t *decision = trellis[scan_pos];
     tcq_node_t *prd = trellis[scan_pos + 1];
 
@@ -1254,113 +1507,32 @@ void trellis_loop_lf(int first_scan_pos, int scan_hi, int scan_lo, int plane,
     init_tcq_decision(decision);
     const int coeff_sign = tcoeff[blk_pos] < 0;
     const int limits = 1;  // Always in LF region.
-    int rate_zero[TOTALSTATES];
-    int rate[2 * TOTALSTATES];
-    int64_t dist[2 * TOTALSTATES];
 
-    // calculate rate distortion
-    uint8_t coeff_ctx[TOTALSTATES];
-    uint8_t mid_ctx[TOTALSTATES];
+    // calculate contexts
+    int diag_ctx = get_nz_map_ctx_from_stats_lf(0, blk_pos, bwl, tx_class);
+    uint8_t coeff_ctx[TOTALSTATES + 4];
     for (int i = 0; i < TOTALSTATES; i++) {
       uint8_t *prev_lev = tcq_levels_prev(tcq_lev, i);
       coeff_ctx[i] = get_lower_levels_lf_ctx(prev_lev, blk_pos, bwl, tx_class);
       int br_ctx = plane
                        ? get_br_lf_ctx_chroma(prev_lev, blk_pos, bwl, tx_class)
                        : get_br_lf_ctx(prev_lev, blk_pos, bwl, tx_class);
-      mid_ctx[i] = br_ctx;
+      coeff_ctx[i] -= diag_ctx;
+      coeff_ctx[i] += br_ctx << 4;
     }
 
-    // calculate RDcost
-    for (int i = 0; i < TOTALSTATES; i++) {
-      int dq = tcq_quant(i);
-#if CONFIG_LCCHROMA
-      const int(*base_lf_cost_ptr)[DQ_CTXS][LF_BASE_SYMBOLS * 2] =
-          plane > 0 ? txb_costs->base_lf_cost_uv : txb_costs->base_lf_cost;
-      rate_zero[i] = base_lf_cost_ptr[coeff_ctx[i]][dq][0];
-#else
-      rate_zero[i] = txb_costs->base_lf_cost[coeff_ctx[i]][0];
-#endif
-    }
+    // calculate rate distortion
+    int rate_zero[TOTALSTATES];
+    int rate[2 * TOTALSTATES];
+    int64_t dist[2 * TOTALSTATES];
+    av1_get_rate_dist_lf(txb_costs, &pqData, coeff_ctx, diag_ctx,
+                         txb_ctx->dc_sign_ctx, tmp_sign, bwl, tx_class, plane,
+                         blk_pos, coeff_sign, rate_zero, rate, dist);
 
-    int dc_sign_ctx = txb_ctx->dc_sign_ctx;
-    rate[0] = get_coeff_cost(blk_pos, pqData.absLevel[0], coeff_sign,
-                             coeff_ctx[0], mid_ctx[0], dc_sign_ctx, txb_costs,
-                             bwl, tx_class, tmp_sign, plane, 1, 0);
-    rate[1] = get_coeff_cost(blk_pos, pqData.absLevel[2], coeff_sign,
-                             coeff_ctx[0], mid_ctx[0], dc_sign_ctx, txb_costs,
-                             bwl, tx_class, tmp_sign, plane, 1, 0);
-    rate[2] = get_coeff_cost(blk_pos, pqData.absLevel[0], coeff_sign,
-                             coeff_ctx[1], mid_ctx[1], dc_sign_ctx, txb_costs,
-                             bwl, tx_class, tmp_sign, plane, 1, 0);
-    rate[3] = get_coeff_cost(blk_pos, pqData.absLevel[2], coeff_sign,
-                             coeff_ctx[1], mid_ctx[1], dc_sign_ctx, txb_costs,
-                             bwl, tx_class, tmp_sign, plane, 1, 0);
-    rate[4] = get_coeff_cost(blk_pos, pqData.absLevel[1], coeff_sign,
-                             coeff_ctx[2], mid_ctx[2], dc_sign_ctx, txb_costs,
-                             bwl, tx_class, tmp_sign, plane, 1, 1);
-    rate[5] = get_coeff_cost(blk_pos, pqData.absLevel[3], coeff_sign,
-                             coeff_ctx[2], mid_ctx[2], dc_sign_ctx, txb_costs,
-                             bwl, tx_class, tmp_sign, plane, 1, 1);
-    rate[6] = get_coeff_cost(blk_pos, pqData.absLevel[1], coeff_sign,
-                             coeff_ctx[3], mid_ctx[3], dc_sign_ctx, txb_costs,
-                             bwl, tx_class, tmp_sign, plane, 1, 1);
-    rate[7] = get_coeff_cost(blk_pos, pqData.absLevel[3], coeff_sign,
-                             coeff_ctx[3], mid_ctx[3], dc_sign_ctx, txb_costs,
-                             bwl, tx_class, tmp_sign, plane, 1, 1);
-#if MORESTATES
-    rate[8] = get_coeff_cost(blk_pos, pqData.absLevel[0], coeff_sign,
-                             coeff_ctx[4], mid_ctx[4], dc_sign_ctx, txb_costs,
-                             bwl, tx_class, tmp_sign, plane, 1, 0);
-    rate[9] = get_coeff_cost(blk_pos, pqData.absLevel[2], coeff_sign,
-                             coeff_ctx[4], mid_ctx[4], dc_sign_ctx, txb_costs,
-                             bwl, tx_class, tmp_sign, plane, 1, 0);
-    rate[10] = get_coeff_cost(blk_pos, pqData.absLevel[0], coeff_sign,
-                              coeff_ctx[5], mid_ctx[5], dc_sign_ctx, txb_costs,
-                              bwl, tx_class, tmp_sign, plane, 1, 0);
-    rate[11] = get_coeff_cost(blk_pos, pqData.absLevel[2], coeff_sign,
-                              coeff_ctx[5], mid_ctx[5], dc_sign_ctx, txb_costs,
-                              bwl, tx_class, tmp_sign, plane, 1, 0);
-    rate[12] = get_coeff_cost(blk_pos, pqData.absLevel[1], coeff_sign,
-                              coeff_ctx[6], mid_ctx[6], dc_sign_ctx, txb_costs,
-                              bwl, tx_class, tmp_sign, plane, 1, 1);
-    rate[13] = get_coeff_cost(blk_pos, pqData.absLevel[3], coeff_sign,
-                              coeff_ctx[6], mid_ctx[6], dc_sign_ctx, txb_costs,
-                              bwl, tx_class, tmp_sign, plane, 1, 1);
-    rate[14] = get_coeff_cost(blk_pos, pqData.absLevel[1], coeff_sign,
-                              coeff_ctx[7], mid_ctx[7], dc_sign_ctx, txb_costs,
-                              bwl, tx_class, tmp_sign, plane, 1, 1);
-    rate[15] = get_coeff_cost(blk_pos, pqData.absLevel[3], coeff_sign,
-                              coeff_ctx[7], mid_ctx[7], dc_sign_ctx, txb_costs,
-                              bwl, tx_class, tmp_sign, plane, 1, 1);
-#endif
-    dist[0] = pqData.deltaDist[0];
-    dist[1] = pqData.deltaDist[2];
-    dist[2] = pqData.deltaDist[0];
-    dist[3] = pqData.deltaDist[2];
-    dist[4] = pqData.deltaDist[1];
-    dist[5] = pqData.deltaDist[3];
-    dist[6] = pqData.deltaDist[1];
-    dist[7] = pqData.deltaDist[3];
-#if MORESTATES
-    dist[8] = pqData.deltaDist[0];
-    dist[9] = pqData.deltaDist[2];
-    dist[10] = pqData.deltaDist[0];
-    dist[11] = pqData.deltaDist[2];
-    dist[12] = pqData.deltaDist[1];
-    dist[13] = pqData.deltaDist[3];
-    dist[14] = pqData.deltaDist[1];
-    dist[15] = pqData.deltaDist[3];
-#endif
-
-    // todo: Q0 can skip the sig_flag or skip some another flag. This is not
-    // included in the calculation of RDcost now.
     av1_decide_states(prd, dist, rate, rate_zero, &pqData, limits, rdmult,
                       decision);
 
-    // assume current state is 0, current coeff is new eob.
-    // input: scan_pos,pqData[0],pqData[2], decison[0] and decision[2]
-    //  update eob if better use current position as eob
-
+    // update eob if better
     if (sharpness == 0) {
       int new_eob_rate = block_eob_rate[scan_pos];
       int new_eob_ctx = get_lower_levels_ctx_eob(bwl, height, scan_pos);
@@ -1435,7 +1607,12 @@ void trellis_loop(int first_scan_pos, int scan_hi, int scan_lo, int plane,
     }
 
     int blk_pos = scan[scan_pos];
+    int row = blk_pos >> bwl;
+    int col = blk_pos - (row << bwl);
+    int limits = get_lf_limits(row, col, tx_class, plane);
+
     tcq_node_t *decision = trellis[scan_pos];
+    tcq_node_t *prd = trellis[scan_pos + 1];
 
     prequant_t pqData;
     int tempdqv = get_dqv(dequant, scan[scan_pos], iqmatrix);
@@ -1446,23 +1623,30 @@ void trellis_loop(int first_scan_pos, int scan_hi, int scan_lo, int plane,
     init_tcq_decision(decision);
     const int coeff_sign = tcoeff[blk_pos] < 0;
 
-    const int row = blk_pos >> bwl;
-    const int col = blk_pos - (row << bwl);
-    int limits = get_lf_limits(row, col, tx_class, plane);
-
-    // calculate rate distortion
-    uint8_t coeff_ctx[TOTALSTATES];
+    // calculate contexts
+    int diag_ctx =
+        (limits && plane == 0)
+            ? get_nz_map_ctx_from_stats_lf(0, blk_pos, bwl, tx_class)
+        : plane == 0 ? get_nz_map_ctx_from_stats(0, blk_pos, bwl, tx_class, 0)
+        : limits
+            ? get_nz_map_ctx_from_stats_lf_chroma(0, tx_class, plane)
+            : get_nz_map_ctx_from_stats_chroma(0, blk_pos, tx_class, plane);
+    uint8_t coeff_ctx[TOTALSTATES + 4];
     if (limits) {
       for (int i = 0; i < TOTALSTATES; i++) {
-        coeff_ctx[i] = plane
+        int base_ctx = plane
                            ? get_lower_levels_lf_ctx_chroma(
                                  prev_levels[i], blk_pos, bwl, tx_class, plane)
                            : get_lower_levels_lf_ctx(prev_levels[i], blk_pos,
                                                      bwl, tx_class);
+        int br_ctx =
+            plane ? get_br_lf_ctx_chroma(prev_levels[i], blk_pos, bwl, tx_class)
+                  : get_br_lf_ctx(prev_levels[i], blk_pos, bwl, tx_class);
+        coeff_ctx[i] = base_ctx - diag_ctx + (br_ctx << 4);
       }
     } else {
       for (int i = 0; i < TOTALSTATES; i++) {
-        coeff_ctx[i] =
+        int base_ctx =
             plane ? get_lower_levels_ctx_chroma(prev_levels[i], blk_pos, bwl,
                                                 tx_class, plane)
                   : get_lower_levels_ctx(prev_levels[i], blk_pos, bwl, tx_class
@@ -1471,212 +1655,63 @@ void trellis_loop(int first_scan_pos, int scan_hi, int scan_lo, int plane,
                                          plane
 #endif
                     );
-      }
-    }
-    uint8_t mid_ctx[TOTALSTATES];
-    if (limits) {
-      for (int i = 0; i < TOTALSTATES; i++) {
-        int br_ctx =
-            plane ? get_br_lf_ctx_chroma(prev_levels[i], blk_pos, bwl, tx_class)
-                  : get_br_lf_ctx(prev_levels[i], blk_pos, bwl, tx_class);
-        mid_ctx[i] = br_ctx;
-      }
-    } else {
-      for (int i = 0; i < TOTALSTATES; i++) {
         int br_ctx =
             plane ? get_br_ctx_chroma(prev_levels[i], blk_pos, bwl, tx_class)
                   : get_br_ctx(prev_levels[i], blk_pos, bwl, tx_class);
-        mid_ctx[i] = br_ctx;
+        coeff_ctx[i] = base_ctx - diag_ctx + (br_ctx << 4);
       }
     }
 
-    // calculate RDcost
-    int rate_zero[TOTALSTATES];
-    if (limits) {
-      for (int i = 0; i < TOTALSTATES; i++) {
-        int dq = tcq_quant(i);
-#if CONFIG_LCCHROMA
-        const int(*base_lf_cost_ptr)[DQ_CTXS][LF_BASE_SYMBOLS * 2] =
-            plane > 0 ? txb_costs->base_lf_cost_uv : txb_costs->base_lf_cost;
-        rate_zero[i] = base_lf_cost_ptr[coeff_ctx[i]][dq][0];
-#else
-        rate_zero[i] = txb_costs->base_lf_cost[coeff_ctx[i]][0];
-#endif
-      }
-    } else {
-      for (int i = 0; i < TOTALSTATES; i++) {
-        int dq = tcq_quant(i);
-#if CONFIG_LCCHROMA
-        const int(*base_cost_ptr)[DQ_CTXS][8] =
-            plane > 0 ? txb_costs->base_cost_uv : txb_costs->base_cost;
-        rate_zero[i] = base_cost_ptr[coeff_ctx[i]][dq][0];
-#else
-        rate_zero[i] = txb_costs->base_cost[coeff_ctx[i]][0];
-#endif
-      }
-    }
-
-    tcq_node_t *prd = trellis[scan_pos + 1];
-    int rate[2 * TOTALSTATES];
-    int dc_sign_ctx = txb_ctx->dc_sign_ctx;
-    if (limits) {
-      rate[0] = get_coeff_cost(blk_pos, pqData.absLevel[0], coeff_sign,
-                               coeff_ctx[0], mid_ctx[0], dc_sign_ctx, txb_costs,
-                               bwl, tx_class, tmp_sign, plane, 1, 0);
-      rate[1] = get_coeff_cost(blk_pos, pqData.absLevel[2], coeff_sign,
-                               coeff_ctx[0], mid_ctx[0], dc_sign_ctx, txb_costs,
-                               bwl, tx_class, tmp_sign, plane, 1, 0);
-      rate[2] = get_coeff_cost(blk_pos, pqData.absLevel[0], coeff_sign,
-                               coeff_ctx[1], mid_ctx[1], dc_sign_ctx, txb_costs,
-                               bwl, tx_class, tmp_sign, plane, 1, 0);
-      rate[3] = get_coeff_cost(blk_pos, pqData.absLevel[2], coeff_sign,
-                               coeff_ctx[1], mid_ctx[1], dc_sign_ctx, txb_costs,
-                               bwl, tx_class, tmp_sign, plane, 1, 0);
-      rate[4] = get_coeff_cost(blk_pos, pqData.absLevel[1], coeff_sign,
-                               coeff_ctx[2], mid_ctx[2], dc_sign_ctx, txb_costs,
-                               bwl, tx_class, tmp_sign, plane, 1, 1);
-      rate[5] = get_coeff_cost(blk_pos, pqData.absLevel[3], coeff_sign,
-                               coeff_ctx[2], mid_ctx[2], dc_sign_ctx, txb_costs,
-                               bwl, tx_class, tmp_sign, plane, 1, 1);
-      rate[6] = get_coeff_cost(blk_pos, pqData.absLevel[1], coeff_sign,
-                               coeff_ctx[3], mid_ctx[3], dc_sign_ctx, txb_costs,
-                               bwl, tx_class, tmp_sign, plane, 1, 1);
-      rate[7] = get_coeff_cost(blk_pos, pqData.absLevel[3], coeff_sign,
-                               coeff_ctx[3], mid_ctx[3], dc_sign_ctx, txb_costs,
-                               bwl, tx_class, tmp_sign, plane, 1, 1);
-#if MORESTATES
-      rate[8] = get_coeff_cost(blk_pos, pqData.absLevel[0], coeff_sign,
-                               coeff_ctx[4], mid_ctx[4], dc_sign_ctx, txb_costs,
-                               bwl, tx_class, tmp_sign, plane, 1, 0);
-      rate[9] = get_coeff_cost(blk_pos, pqData.absLevel[2], coeff_sign,
-                               coeff_ctx[4], mid_ctx[4], dc_sign_ctx, txb_costs,
-                               bwl, tx_class, tmp_sign, plane, 1, 0);
-      rate[10] = get_coeff_cost(
-          blk_pos, pqData.absLevel[0], coeff_sign, coeff_ctx[5], mid_ctx[5],
-          dc_sign_ctx, txb_costs, bwl, tx_class, tmp_sign, plane, 1, 0);
-      rate[11] = get_coeff_cost(
-          blk_pos, pqData.absLevel[2], coeff_sign, coeff_ctx[5], mid_ctx[5],
-          dc_sign_ctx, txb_costs, bwl, tx_class, tmp_sign, plane, 1, 0);
-      rate[12] = get_coeff_cost(
-          blk_pos, pqData.absLevel[1], coeff_sign, coeff_ctx[6], mid_ctx[6],
-          dc_sign_ctx, txb_costs, bwl, tx_class, tmp_sign, plane, 1, 1);
-      rate[13] = get_coeff_cost(
-          blk_pos, pqData.absLevel[3], coeff_sign, coeff_ctx[6], mid_ctx[6],
-          dc_sign_ctx, txb_costs, bwl, tx_class, tmp_sign, plane, 1, 1);
-      rate[14] = get_coeff_cost(
-          blk_pos, pqData.absLevel[1], coeff_sign, coeff_ctx[7], mid_ctx[7],
-          dc_sign_ctx, txb_costs, bwl, tx_class, tmp_sign, plane, 1, 1);
-      rate[15] = get_coeff_cost(
-          blk_pos, pqData.absLevel[3], coeff_sign, coeff_ctx[7], mid_ctx[7],
-          dc_sign_ctx, txb_costs, bwl, tx_class, tmp_sign, plane, 1, 1);
-#endif
-    } else {
-      rate[0] = get_coeff_cost(blk_pos, pqData.absLevel[0], coeff_sign,
-                               coeff_ctx[0], mid_ctx[0], dc_sign_ctx, txb_costs,
-                               bwl, tx_class, tmp_sign, plane, 0, 0);
-      rate[1] = get_coeff_cost(blk_pos, pqData.absLevel[2], coeff_sign,
-                               coeff_ctx[0], mid_ctx[0], dc_sign_ctx, txb_costs,
-                               bwl, tx_class, tmp_sign, plane, 0, 0);
-      rate[2] = get_coeff_cost(blk_pos, pqData.absLevel[0], coeff_sign,
-                               coeff_ctx[1], mid_ctx[1], dc_sign_ctx, txb_costs,
-                               bwl, tx_class, tmp_sign, plane, 0, 0);
-      rate[3] = get_coeff_cost(blk_pos, pqData.absLevel[2], coeff_sign,
-                               coeff_ctx[1], mid_ctx[1], dc_sign_ctx, txb_costs,
-                               bwl, tx_class, tmp_sign, plane, 0, 0);
-      rate[4] = get_coeff_cost(blk_pos, pqData.absLevel[1], coeff_sign,
-                               coeff_ctx[2], mid_ctx[2], dc_sign_ctx, txb_costs,
-                               bwl, tx_class, tmp_sign, plane, 0, 1);
-      rate[5] = get_coeff_cost(blk_pos, pqData.absLevel[3], coeff_sign,
-                               coeff_ctx[2], mid_ctx[2], dc_sign_ctx, txb_costs,
-                               bwl, tx_class, tmp_sign, plane, 0, 1);
-      rate[6] = get_coeff_cost(blk_pos, pqData.absLevel[1], coeff_sign,
-                               coeff_ctx[3], mid_ctx[3], dc_sign_ctx, txb_costs,
-                               bwl, tx_class, tmp_sign, plane, 0, 1);
-      rate[7] = get_coeff_cost(blk_pos, pqData.absLevel[3], coeff_sign,
-                               coeff_ctx[3], mid_ctx[3], dc_sign_ctx, txb_costs,
-                               bwl, tx_class, tmp_sign, plane, 0, 1);
-#if MORESTATES
-      rate[8] = get_coeff_cost(blk_pos, pqData.absLevel[0], coeff_sign,
-                               coeff_ctx[4], mid_ctx[4], dc_sign_ctx, txb_costs,
-                               bwl, tx_class, tmp_sign, plane, 0, 0);
-      rate[9] = get_coeff_cost(blk_pos, pqData.absLevel[2], coeff_sign,
-                               coeff_ctx[4], mid_ctx[4], dc_sign_ctx, txb_costs,
-                               bwl, tx_class, tmp_sign, plane, 0, 0);
-      rate[10] = get_coeff_cost(
-          blk_pos, pqData.absLevel[0], coeff_sign, coeff_ctx[5], mid_ctx[5],
-          dc_sign_ctx, txb_costs, bwl, tx_class, tmp_sign, plane, 0, 0);
-      rate[11] = get_coeff_cost(
-          blk_pos, pqData.absLevel[2], coeff_sign, coeff_ctx[5], mid_ctx[5],
-          dc_sign_ctx, txb_costs, bwl, tx_class, tmp_sign, plane, 0, 0);
-      rate[12] = get_coeff_cost(
-          blk_pos, pqData.absLevel[1], coeff_sign, coeff_ctx[6], mid_ctx[6],
-          dc_sign_ctx, txb_costs, bwl, tx_class, tmp_sign, plane, 0, 1);
-      rate[13] = get_coeff_cost(
-          blk_pos, pqData.absLevel[3], coeff_sign, coeff_ctx[6], mid_ctx[6],
-          dc_sign_ctx, txb_costs, bwl, tx_class, tmp_sign, plane, 0, 1);
-      rate[14] = get_coeff_cost(
-          blk_pos, pqData.absLevel[1], coeff_sign, coeff_ctx[7], mid_ctx[7],
-          dc_sign_ctx, txb_costs, bwl, tx_class, tmp_sign, plane, 0, 1);
-      rate[15] = get_coeff_cost(
-          blk_pos, pqData.absLevel[3], coeff_sign, coeff_ctx[7], mid_ctx[7],
-          dc_sign_ctx, txb_costs, bwl, tx_class, tmp_sign, plane, 0, 1);
-#endif
-    }
+    // calculate rate distortion
+    int32_t rate_zero[TOTALSTATES];
+    int32_t rate[2 * TOTALSTATES];
     int64_t dist[2 * TOTALSTATES];
-    {
-      dist[0] = pqData.deltaDist[0];
-      dist[1] = pqData.deltaDist[2];
-      dist[2] = pqData.deltaDist[0];
-      dist[3] = pqData.deltaDist[2];
-      dist[4] = pqData.deltaDist[1];
-      dist[5] = pqData.deltaDist[3];
-      dist[6] = pqData.deltaDist[1];
-      dist[7] = pqData.deltaDist[3];
-#if MORESTATES
-      dist[8] = pqData.deltaDist[0];
-      dist[9] = pqData.deltaDist[2];
-      dist[10] = pqData.deltaDist[0];
-      dist[11] = pqData.deltaDist[2];
-      dist[12] = pqData.deltaDist[1];
-      dist[13] = pqData.deltaDist[3];
-      dist[14] = pqData.deltaDist[1];
-      dist[15] = pqData.deltaDist[3];
-#endif
-      av1_decide_states(prd, dist, rate, rate_zero, &pqData, limits, rdmult,
-                        decision);
+    if (limits) {
+      av1_get_rate_dist_lf(txb_costs, &pqData, coeff_ctx, diag_ctx,
+                           txb_ctx->dc_sign_ctx, tmp_sign, bwl, tx_class, plane,
+                           blk_pos, coeff_sign, rate_zero, rate, dist);
+    } else if (plane == 0) {
+      av1_get_rate_dist_def_luma(txb_costs, &pqData, coeff_ctx, diag_ctx,
+                                 rate_zero, rate, dist);
+    } else {
+      av1_get_rate_dist_def_chroma(txb_costs, &pqData, coeff_ctx, diag_ctx,
+                                   plane, tmp_sign[blk_pos], coeff_sign,
+                                   rate_zero, rate, dist);
+    }
 
-      if (sharpness == 0) {
-        int new_eob_rate = block_eob_rate[scan_pos];
-        int new_eob_ctx = get_lower_levels_ctx_eob(bwl, height, scan_pos);
-        int rate_Q0_a =
-            get_coeff_cost_eob(blk_pos, pqData.absLevel[0],
-                               (qcoeff[blk_pos] < 0), new_eob_ctx,
-                               txb_ctx->dc_sign_ctx, txb_costs, bwl, tx_class
+    av1_decide_states(prd, dist, rate, rate_zero, &pqData, limits, rdmult,
+                      decision);
+
+    if (sharpness == 0) {
+      int new_eob_rate = block_eob_rate[scan_pos];
+      int new_eob_ctx = get_lower_levels_ctx_eob(bwl, height, scan_pos);
+      int rate_Q0_a =
+          get_coeff_cost_eob(blk_pos, pqData.absLevel[0], (qcoeff[blk_pos] < 0),
+                             new_eob_ctx, txb_ctx->dc_sign_ctx, txb_costs, bwl,
+                             tx_class
 #if CONFIG_CONTEXT_DERIVATION
-                               ,
-                               tmp_sign
+                             ,
+                             tmp_sign
 #endif  // CONFIG_CONTEXT_DERIVATION
-                               ,
-                               plane) +
-            new_eob_rate;
-        int rate_Q0_b =
-            get_coeff_cost_eob(blk_pos, pqData.absLevel[2],
-                               (qcoeff[blk_pos] < 0), new_eob_ctx,
-                               txb_ctx->dc_sign_ctx, txb_costs, bwl, tx_class
+                             ,
+                             plane) +
+          new_eob_rate;
+      int rate_Q0_b =
+          get_coeff_cost_eob(blk_pos, pqData.absLevel[2], (qcoeff[blk_pos] < 0),
+                             new_eob_ctx, txb_ctx->dc_sign_ctx, txb_costs, bwl,
+                             tx_class
 #if CONFIG_CONTEXT_DERIVATION
-                               ,
-                               tmp_sign
+                             ,
+                             tmp_sign
 #endif  // CONFIG_CONTEXT_DERIVATION
-                               ,
-                               plane) +
-            new_eob_rate;
-        const int state0 = next_st[0][0];
-        const int state1 = next_st[0][1];
-        decide(0, pqData.deltaDist[0], pqData.deltaDist[2], rdmult, rate_Q0_a,
-               rate_Q0_b, INT32_MAX >> 1, pqData.absLevel[0],
-               pqData.absLevel[2], limits, 0, -1, &decision[state0],
-               &decision[state1]);
-      }
+                             ,
+                             plane) +
+          new_eob_rate;
+      const int state0 = next_st[0][0];
+      const int state1 = next_st[0][1];
+      decide(0, pqData.deltaDist[0], pqData.deltaDist[2], rdmult, rate_Q0_a,
+             rate_Q0_b, INT32_MAX >> 1, pqData.absLevel[0], pqData.absLevel[2],
+             limits, 0, -1, &decision[state0], &decision[state1]);
     }
 
     // copy corresponding context from previous level buffer

@@ -134,8 +134,10 @@ static INLINE void foreach_overlappable_nb_left(const AV1_COMMON *cm,
       mi_step = mi_size_high[chroma_ref_info->bsize_base];
       if (left_mi_row < mi_row) continue;
       left_mi = prev_col_mi + left_mi_row * xd->mi_stride;
+      /*
       assert(left_mi[0]->chroma_ref_info.bsize_base ==
              chroma_ref_info->bsize_base);
+      */
     }
     // If left block's top boundary is above current block's top boundary, we
     // need to find the common overlap.

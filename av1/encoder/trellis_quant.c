@@ -1454,18 +1454,23 @@ void trellis_loop(int first_scan_pos, int scan_hi, int scan_lo, int plane,
     uint8_t coeff_ctx[TOTALSTATES];
     if (limits) {
       for (int i = 0; i < TOTALSTATES; i++) {
-        coeff_ctx[i] =
-            get_lower_levels_lf_ctx(prev_levels[i], blk_pos, bwl, tx_class);
+        coeff_ctx[i] = plane
+                           ? get_lower_levels_lf_ctx_chroma(
+                                 prev_levels[i], blk_pos, bwl, tx_class, plane)
+                           : get_lower_levels_lf_ctx(prev_levels[i], blk_pos,
+                                                     bwl, tx_class);
       }
     } else {
       for (int i = 0; i < TOTALSTATES; i++) {
         coeff_ctx[i] =
-            get_lower_levels_ctx(prev_levels[i], blk_pos, bwl, tx_class
+            plane ? get_lower_levels_ctx_chroma(prev_levels[i], blk_pos, bwl,
+                                                tx_class, plane)
+                  : get_lower_levels_ctx(prev_levels[i], blk_pos, bwl, tx_class
 #if CONFIG_CHROMA_TX_COEFF_CODING
-                                 ,
-                                 plane
-#endif  // CONFIG_CHROMA_TX_COEFF_CODING
-            );
+                                         ,
+                                         plane
+#endif
+                    );
       }
     }
     uint8_t mid_ctx[TOTALSTATES];

@@ -235,6 +235,10 @@ typedef struct LV_MAP_COEFF_COST {
   uint16_t base_lf_cost_uv_low[DQ_CTXS][LF_BASE_SYMBOLS][LF_SIG_COEF_CONTEXTS];
   uint16_t base_lf_cost_low_tbl[9][LF_SIG_COEF_CONTEXTS][DQ_CTXS][2];
   uint16_t base_lf_cost_uv_low_tbl[9][LF_SIG_COEF_CONTEXTS][DQ_CTXS][2];
+  uint16_t base_eob_cost_tbl[5][SIG_COEF_CONTEXTS_EOB][2];
+  uint16_t base_eob_cost_uv_tbl[5][SIG_COEF_CONTEXTS_EOB][2];
+  uint16_t base_lf_eob_cost_tbl[9][SIG_COEF_CONTEXTS_EOB][2];
+  uint16_t base_lf_eob_cost_uv_tbl[9][SIG_COEF_CONTEXTS_EOB][2];
 #endif
 #if CONFIG_DQ && !CONFIG_LCCHROMA
   //! Cost for encoding the base level of a low-frequency coefficient

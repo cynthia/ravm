@@ -39,6 +39,7 @@ struct tcq_node_t;
 struct tcq_ctx_t;
 struct tcq_lf_ctx_t;
 struct prequant_t;
+struct tcq_rate_dist_t;
 struct LV_MAP_COEFF_COST;
 
 enum { NONE, RELU, SOFTSIGN, SIGMOID } UENUM1BYTE(ACTIVATION);
@@ -326,13 +327,13 @@ if (aom_config("CONFIG_AV1_ENCODER") eq "yes") {
     specialize qw/av1_pre_quant avx2/;
     add_proto qw/void av1_calc_diag_ctx/, "int scan_hi, int scan_lo, int bwl, const uint8_t *prev_levels, const int16_t* scan, uint8_t *ctx";
     specialize qw/av1_calc_diag_ctx avx2/;
-    add_proto qw/void av1_get_rate_dist_def_luma/, "const struct LV_MAP_COEFF_COST* txb_costs, const struct prequant_t *pq, const uint8_t coeff_ctx[TOTALSTATES + 4], int diag_ctx, int32_t rate_zero[TOTALSTATES], int32_t rate[2 * TOTALSTATES], int64_t dist[2 * TOTALSTATES]";
+    add_proto qw/void av1_get_rate_dist_def_luma/, "const struct LV_MAP_COEFF_COST* txb_costs, const struct prequant_t *pq, const uint8_t coeff_ctx[TOTALSTATES + 4], int blk_pos, int bwl, TX_CLASS tx_class, int diag_ctx, int eob_rate, struct tcq_rate_dist_t *rd";
     specialize qw/av1_get_rate_dist_def_luma avx2/;
-    add_proto qw/void av1_get_rate_dist_def_chroma/, "const struct LV_MAP_COEFF_COST* txb_costs, const struct prequant_t *pq, const uint8_t coeff_ctx[TOTALSTATES + 4], int diag_ctx, int plane, int t_sign, int sign, int32_t rate_zero[TOTALSTATES], int32_t rate[2 * TOTALSTATES], int64_t dist[2 * TOTALSTATES]";
+    add_proto qw/void av1_get_rate_dist_def_chroma/, "const struct LV_MAP_COEFF_COST* txb_costs, const struct prequant_t *pq, const uint8_t coeff_ctx[TOTALSTATES + 4], int blk_pos, int bwl, TX_CLASS tx_class, int diag_ctx, int eob_rate, int plane, int t_sign, int sign, struct tcq_rate_dist_t *rd";
     specialize qw/av1_get_rate_dist_def_chroma avx2/;
-    add_proto qw/void av1_get_rate_dist_lf_luma/, "const struct LV_MAP_COEFF_COST *txb_costs, const struct prequant_t *pq, const uint8_t coeff_ctx[TOTALSTATES + 4], int diag_ctx, int dc_sign_ctx, int32_t *tmp_sign, int bwl, TX_CLASS tx_class, int blk_pos, int coeff_sign, int32_t rate_zero[TOTALSTATES], int32_t rate[2 * TOTALSTATES], int64_t dist[2 * TOTALSTATES]";
+    add_proto qw/void av1_get_rate_dist_lf_luma/, "const struct LV_MAP_COEFF_COST *txb_costs, const struct prequant_t *pq, const uint8_t coeff_ctx[TOTALSTATES + 4], int blk_pos, int diag_ctx, int eob_rate, int dc_sign_ctx, int32_t *tmp_sign, int bwl, TX_CLASS tx_class, int coeff_sign, struct tcq_rate_dist_t *rd";
     specialize qw/av1_get_rate_dist_lf_luma avx2/;
-    add_proto qw/void av1_get_rate_dist_lf_chroma/, "const struct LV_MAP_COEFF_COST *txb_costs, const struct prequant_t *pq, const uint8_t coeff_ctx[TOTALSTATES + 4], int diag_ctx, int dc_sign_ctx, int32_t *tmp_sign, int bwl, TX_CLASS tx_class, int plane, int blk_pos, int coeff_sign, int32_t rate_zero[TOTALSTATES], int32_t rate[2 * TOTALSTATES], int64_t dist[2 * TOTALSTATES]";
+    add_proto qw/void av1_get_rate_dist_lf_chroma/, "const struct LV_MAP_COEFF_COST *txb_costs, const struct prequant_t *pq, const uint8_t coeff_ctx[TOTALSTATES + 4], int blk_pos, int diag_ctx, int eob_rate, int dc_sign_ctx, int32_t *tmp_sign, int bwl, TX_CLASS tx_class, int plane, int coeff_sign, struct tcq_rate_dist_t *rd";
     specialize qw/av1_get_rate_dist_lf_chroma avx2/;
     add_proto qw/void av1_update_states/, "struct tcq_node_t *decision, int scan_idx, struct tcq_ctx_t *tcq_ctx";
     specialize qw/av1_update_states avx2/;

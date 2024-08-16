@@ -1238,11 +1238,11 @@ void av1_fill_coeff_costs(CoeffCosts *coeff_costs, FRAME_CONTEXT *fc,
         { 6, 5, 5, 6 },  // qIdx = 9
       };
       for (int idx = 0; idx < 5; idx++) {
+        int a0 = AOMMIN(trel_abslev[idx][0], 3);
+        int a1 = AOMMIN(trel_abslev[idx][1], 3);
+        int a2 = AOMMIN(trel_abslev[idx][2], 3);
+        int a3 = AOMMIN(trel_abslev[idx][3], 3);
         for (int ctx = 0; ctx < SIG_COEF_CONTEXTS; ++ctx) {
-          int a0 = AOMMIN(trel_abslev[idx][0], 3);
-          int a1 = AOMMIN(trel_abslev[idx][1], 3);
-          int a2 = AOMMIN(trel_abslev[idx][2], 3);
-          int a3 = AOMMIN(trel_abslev[idx][3], 3);
           // DQ0, absLev 0 / 2
           pcost->base_cost_low_tbl[idx][ctx][0][0] =
               pcost->base_cost[ctx][0][a0] + av1_cost_literal(1);
@@ -1254,13 +1254,14 @@ void av1_fill_coeff_costs(CoeffCosts *coeff_costs, FRAME_CONTEXT *fc,
           pcost->base_cost_low_tbl[idx][ctx][1][1] =
               pcost->base_cost[ctx][1][a3] + av1_cost_literal(1);
         }
-      }
-      for (int idx = 0; idx < 5; idx++) {
+        for (int ctx = 0; ctx < SIG_COEF_CONTEXTS_EOB; ++ctx) {
+          // EOB coeff, absLev 0 / 2
+          pcost->base_eob_cost_tbl[idx][ctx][0] =
+              pcost->base_eob_cost[ctx][a0 - 1] + av1_cost_literal(1);
+          pcost->base_eob_cost_tbl[idx][ctx][1] =
+              pcost->base_eob_cost[ctx][a2 - 1] + av1_cost_literal(1);
+        }
         for (int ctx = 0; ctx < SIG_COEF_CONTEXTS_UV; ++ctx) {
-          int a0 = AOMMIN(trel_abslev[idx][0], 3);
-          int a1 = AOMMIN(trel_abslev[idx][1], 3);
-          int a2 = AOMMIN(trel_abslev[idx][2], 3);
-          int a3 = AOMMIN(trel_abslev[idx][3], 3);
           // DQ0, uv, absLev 0 / 2
           pcost->base_cost_uv_low_tbl[idx][ctx][0][0] =
               pcost->base_cost_uv[ctx][0][a0] + av1_cost_literal(1);
@@ -1272,14 +1273,21 @@ void av1_fill_coeff_costs(CoeffCosts *coeff_costs, FRAME_CONTEXT *fc,
           pcost->base_cost_uv_low_tbl[idx][ctx][1][1] =
               pcost->base_cost_uv[ctx][1][a3] + av1_cost_literal(1);
         }
+        for (int ctx = 0; ctx < SIG_COEF_CONTEXTS_EOB; ++ctx) {
+          // UV EOB coeff, absLev 0 / 2
+          pcost->base_eob_cost_uv_tbl[idx][ctx][0] =
+              pcost->base_eob_cost_uv[ctx][a0 - 1] + av1_cost_literal(1);
+          pcost->base_eob_cost_uv_tbl[idx][ctx][1] =
+              pcost->base_eob_cost_uv[ctx][a2 - 1] + av1_cost_literal(1);
+        }
       }
       for (int idx = 0; idx < 9; idx++) {
+        int max = LF_BASE_SYMBOLS - 1;
+        int a0 = AOMMIN(trel_abslev[idx][0], max);
+        int a1 = AOMMIN(trel_abslev[idx][1], max);
+        int a2 = AOMMIN(trel_abslev[idx][2], max);
+        int a3 = AOMMIN(trel_abslev[idx][3], max);
         for (int ctx = 0; ctx < LF_SIG_COEF_CONTEXTS; ++ctx) {
-          int max = LF_BASE_SYMBOLS - 1;
-          int a0 = AOMMIN(trel_abslev[idx][0], max);
-          int a1 = AOMMIN(trel_abslev[idx][1], max);
-          int a2 = AOMMIN(trel_abslev[idx][2], max);
-          int a3 = AOMMIN(trel_abslev[idx][3], max);
           // DQ0, absLev 0 / 2
           pcost->base_lf_cost_low_tbl[idx][ctx][0][0] =
               pcost->base_lf_cost[ctx][0][a0] + av1_cost_literal(1);
@@ -1291,14 +1299,14 @@ void av1_fill_coeff_costs(CoeffCosts *coeff_costs, FRAME_CONTEXT *fc,
           pcost->base_lf_cost_low_tbl[idx][ctx][1][1] =
               pcost->base_lf_cost[ctx][1][a3] + av1_cost_literal(1);
         }
-      }
-      for (int idx = 0; idx < 9; idx++) {
+        for (int ctx = 0; ctx < SIG_COEF_CONTEXTS_EOB; ++ctx) {
+          // EOB coeff, absLev 0 / 2
+          pcost->base_lf_eob_cost_tbl[idx][ctx][0] =
+              pcost->base_lf_eob_cost[ctx][a0 - 1] + av1_cost_literal(1);
+          pcost->base_lf_eob_cost_tbl[idx][ctx][1] =
+              pcost->base_lf_eob_cost[ctx][a2 - 1] + av1_cost_literal(1);
+        }
         for (int ctx = 0; ctx < LF_SIG_COEF_CONTEXTS_UV; ++ctx) {
-          int max = LF_BASE_SYMBOLS - 1;
-          int a0 = AOMMIN(trel_abslev[idx][0], max);
-          int a1 = AOMMIN(trel_abslev[idx][1], max);
-          int a2 = AOMMIN(trel_abslev[idx][2], max);
-          int a3 = AOMMIN(trel_abslev[idx][3], max);
           // DQ0, absLev 0 / 2
           pcost->base_lf_cost_uv_low_tbl[idx][ctx][0][0] =
               pcost->base_lf_cost_uv[ctx][0][a0] + av1_cost_literal(1);
@@ -1309,6 +1317,13 @@ void av1_fill_coeff_costs(CoeffCosts *coeff_costs, FRAME_CONTEXT *fc,
               pcost->base_lf_cost_uv[ctx][1][a1] + av1_cost_literal(1);
           pcost->base_lf_cost_uv_low_tbl[idx][ctx][1][1] =
               pcost->base_lf_cost_uv[ctx][1][a3] + av1_cost_literal(1);
+        }
+        for (int ctx = 0; ctx < SIG_COEF_CONTEXTS_EOB; ++ctx) {
+          // UV EOB coeff, absLev 0 / 2
+          pcost->base_lf_eob_cost_uv_tbl[idx][ctx][0] =
+              pcost->base_lf_eob_cost_uv[ctx][a0 - 1] + av1_cost_literal(1);
+          pcost->base_lf_eob_cost_uv_tbl[idx][ctx][1] =
+              pcost->base_lf_eob_cost_uv[ctx][a2 - 1] + av1_cost_literal(1);
         }
       }
 #else

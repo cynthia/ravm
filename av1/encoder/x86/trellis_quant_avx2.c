@@ -22,11 +22,10 @@
 #include "aom_dsp/x86/synonyms_avx2.h"
 
 void av1_decide_states_avx2(const struct tcq_node_t *prev,
-                            const int64_t dist[2 * TOTALSTATES],
-                            const int32_t rate[2 * TOTALSTATES],
-                            const int32_t rate_zero[TOTALSTATES],
+                            const struct tcq_rate_t *rd,
                             const struct prequant_t *pq, int limits,
-                            int64_t rdmult, struct tcq_node_t *decision) {
+                            int try_eob, int64_t rdmult,
+                            struct tcq_node_t *decision) {
   (void)limits;
   static const int32_t kShuffle[8] = { 0, 2, 1, 3, 5, 7, 4, 6 };
   static const int32_t kPrevId[TOTALSTATES / 4][8] = {
@@ -52,16 +51,16 @@ void av1_decide_states_avx2(const struct tcq_node_t *prev,
   __m256i abslev2211 = _mm256_unpackhi_epi32(c_zero, abslev00223311);
 
   for (int i = 0; i < TOTALSTATES / 4; i++) {
-    // Load distortion, rate, and state info.
-    __m256i dist0 = _mm256_lddqu_si256((__m256i *)&dist[8 * i]);
-    __m256i dist1 = _mm256_lddqu_si256((__m256i *)&dist[8 * i + 4]);
-    dist0 = _mm256_slli_epi64(dist0, RDDIV_BITS);
-    dist1 = _mm256_slli_epi64(dist1, RDDIV_BITS);
-    __m256i rates = _mm256_lddqu_si256((__m256i *)&rate[8 * i]);
+    // Load distortion.
+    __m256i dist = _mm256_lddqu_si256((__m256i *)&pq->deltaDist[0]);
+    dist = _mm256_slli_epi64(dist, RDDIV_BITS);
+    __m256i dist0033 = _mm256_permute4x64_epi64(dist, 0xF0);
+    __m256i dist2211 = _mm256_permute4x64_epi64(dist, 0x5A);
 
     // Calc rate-distortion costs for each pair of even/odd quant.
     // Separate candidates into even and odd quant decisions
     // Even indexes: { 0, 2, 5, 7 }. Odd: { 1, 3, 4, 6 }.
+    __m256i rates = _mm256_lddqu_si256((__m256i *)&rd->rate[8 * i]);
     __m256i permute_mask = _mm256_lddqu_si256((__m256i *)kShuffle);
     __m256i rate02135746 = _mm256_permutevar8x32_epi32(rates, permute_mask);
     __m256i rate0257 = _mm256_unpacklo_epi32(rate02135746, c_zero);
@@ -72,16 +71,12 @@ void av1_decide_states_avx2(const struct tcq_node_t *prev,
     rdcost1346 = _mm256_add_epi64(rdcost1346, c_round);
     rdcost0257 = _mm256_srli_epi64(rdcost0257, AV1_PROB_COST_SHIFT);
     rdcost1346 = _mm256_srli_epi64(rdcost1346, AV1_PROB_COST_SHIFT);
-    __m256i dist0527 = _mm256_blend_epi32(dist0, dist1, 0xCC);
-    __m256i dist4163 = _mm256_blend_epi32(dist0, dist1, 0x33);
-    __m256i dist0257 = _mm256_permute4x64_epi64(dist0527, 0xD8);
-    __m256i dist1346 = _mm256_permute4x64_epi64(dist4163, 0x8D);
-    rdcost0257 = _mm256_add_epi64(rdcost0257, dist0257);
-    rdcost1346 = _mm256_add_epi64(rdcost1346, dist1346);
+    rdcost0257 = _mm256_add_epi64(rdcost0257, dist0033);
+    rdcost1346 = _mm256_add_epi64(rdcost1346, dist2211);
 
     // Calc rd-cost for zero quant.
-    __m256i ratezero =
-        _mm256_castsi128_si256(_mm_lddqu_si128((__m128i *)&rate_zero[4 * i]));
+    __m256i ratezero = _mm256_castsi128_si256(
+        _mm_lddqu_si128((__m128i *)&rd->rate_zero[4 * i]));
     ratezero = _mm256_permute4x64_epi64(ratezero, 0x50);
     ratezero = _mm256_unpacklo_epi32(ratezero, c_zero);
     __m256i rdcostzero = _mm256_mul_epu32(c_rdmult, ratezero);
@@ -120,6 +115,26 @@ void av1_decide_states_avx2(const struct tcq_node_t *prev,
     __m256i rdcost_best = _mm256_blendv_epi8(rdcost0257, rdcost3164, use_odd);
     __m256i rate_best = _mm256_blendv_epi8(rate0257, rate3164, use_odd);
     __m256i abslev_best = _mm256_blendv_epi8(abslev_even, abslev2211, use_odd);
+
+    // Compare rd costs (best vs new eob).
+    __m256i rate_eob = _mm256_castsi128_si256(_mm_loadu_si64(rd->rate_eob));
+    rate_eob = _mm256_unpacklo_epi32(rate_eob, c_zero);
+    __m256i rdcost_eob = _mm256_mul_epu32(c_rdmult, rate_eob);
+    rdcost_eob = _mm256_add_epi64(rdcost_eob, c_round);
+    rdcost_eob = _mm256_srli_epi64(rdcost_eob, AV1_PROB_COST_SHIFT);
+    __m256i dist_eob = _mm256_unpacklo_epi64(dist0033, dist2211);
+    rdcost_eob = _mm256_add_epi64(rdcost_eob, dist_eob);
+    __m128i mask_eob0 = _mm_set1_epi64x((int64_t)-try_eob);
+    __m256i mask_eob = _mm256_inserti128_si256(c_zero, mask_eob0, 0);
+    __m256i use_eob = _mm256_cmpgt_epi64(rdcost_best, rdcost_eob);
+    use_eob = _mm256_and_si256(use_eob, mask_eob);
+    __m256i use_eob_1 = _mm256_slli_epi64(use_eob, 56);
+    prev_id = _mm256_or_si256(prev_id, use_eob_1);
+    rdcost_best = _mm256_blendv_epi8(rdcost_best, rdcost_eob, use_eob);
+    rate_best = _mm256_blendv_epi8(rate_best, rate_eob, use_eob);
+    __m256i abslev_eob = _mm256_unpacklo_epi64(abslev0033, abslev2211);
+    abslev_best = _mm256_blendv_epi8(abslev_best, abslev_eob, use_eob);
+    try_eob = 0;
 
     // Pack and store state info.
     __m256i info_best = _mm256_or_si256(rate_best, abslev_best);
@@ -344,73 +359,11 @@ static AOM_FORCE_INLINE int get_br_lf_cost(tran_low_t level,
   return coeff_lps[base_range] + get_golomb_cost_lf(level);
 }
 
-static INLINE int get_coeff_cost_eob(int ci, tran_low_t abs_qc, int sign,
-                                     int coeff_ctx, int dc_sign_ctx,
-                                     const LV_MAP_COEFF_COST *txb_costs,
-                                     int bwl, TX_CLASS tx_class,
-                                     int32_t t_sign, int plane) {
-  int cost = 0;
-  const int row = ci >> bwl;
-  const int col = ci - (row << bwl);
-  int limits = get_lf_limits(row, col, tx_class, plane);
-  const int(*base_lf_eob_cost_ptr)[LF_BASE_SYMBOLS - 1] =
-      plane > 0 ? txb_costs->base_lf_eob_cost_uv : txb_costs->base_lf_eob_cost;
-  const int(*base_eob_cost_ptr)[3] =
-      plane > 0 ? txb_costs->base_eob_cost_uv : txb_costs->base_eob_cost;
-
-  cost += limits ? base_lf_eob_cost_ptr[coeff_ctx]
-                                       [AOMMIN(abs_qc, LF_BASE_SYMBOLS - 1) - 1]
-                 : base_eob_cost_ptr[coeff_ctx][AOMMIN(abs_qc, 3) - 1];
-  if (abs_qc != 0) {
-    const int dc_ph_group = 0;  // PH disabled
-    const bool dc_2dtx = (ci == 0);
-    const bool dc_hor = (col == 0) && tx_class == TX_CLASS_HORIZ;
-    const bool dc_ver = (row == 0) && tx_class == TX_CLASS_VERT;
-    if (dc_2dtx || dc_hor || dc_ver) {
-      if (plane == AOM_PLANE_V)
-        cost += txb_costs->v_dc_sign_cost[t_sign][dc_sign_ctx][sign];
-      else
-        cost += txb_costs->dc_sign_cost[dc_ph_group][dc_sign_ctx][sign];
-    } else {
-      if (plane == AOM_PLANE_V)
-        cost += txb_costs->v_ac_sign_cost[t_sign][sign];
-      else
-        cost += av1_cost_literal(1);
-    }
-    if (plane > 0) {
-      if (limits) {
-        if (abs_qc > LF_NUM_BASE_LEVELS) {
-          int br_ctx = get_br_ctx_lf_eob_chroma(ci, tx_class);
-          cost += get_br_lf_cost(abs_qc, txb_costs->lps_lf_cost_uv[br_ctx]);
-        }
-      } else {
-        if (abs_qc > NUM_BASE_LEVELS) {
-          int br_ctx = 0; /* get_br_ctx_eob_chroma */
-          cost += get_br_cost(abs_qc, txb_costs->lps_cost_uv[br_ctx]);
-        }
-      }
-    } else {
-      if (limits) {
-        if (abs_qc > LF_NUM_BASE_LEVELS) {
-          int br_ctx = get_br_ctx_lf_eob(ci, tx_class);
-          cost += get_br_lf_cost(abs_qc, txb_costs->lps_lf_cost[br_ctx]);
-        }
-      } else {
-        if (abs_qc > NUM_BASE_LEVELS) {
-          int br_ctx = 0; /* get_br_ctx_eob */
-          cost += get_br_cost(abs_qc, txb_costs->lps_cost[br_ctx]);
-        }
-      }
-    }
-  }
-  return cost;
-}
-
-static INLINE int get_mid_cost_eob(int ci, int limits, int is_dc, tran_low_t abs_qc, int sign,
-                                   int dc_sign_ctx,
+static INLINE int get_mid_cost_eob(int ci, int limits, int is_dc,
+                                   tran_low_t abs_qc, int sign, int dc_sign_ctx,
                                    const LV_MAP_COEFF_COST *txb_costs,
-                                   TX_CLASS tx_class,
-                                   int32_t t_sign, int plane) {
+                                   TX_CLASS tx_class, int32_t t_sign,
+                                   int plane) {
   int cost = 0;
   const int dc_ph_group = 0;  // PH disabled
 
@@ -424,8 +377,7 @@ static INLINE int get_mid_cost_eob(int ci, int limits, int is_dc, tran_low_t abs
       }
     } else {
       if (plane == AOM_PLANE_V) {
-        cost += txb_costs->v_ac_sign_cost[t_sign][sign]
-                - av1_cost_literal(1);
+        cost += txb_costs->v_ac_sign_cost[t_sign][sign] - av1_cost_literal(1);
       }
     }
     if (plane > 0) {
@@ -441,8 +393,7 @@ static INLINE int get_mid_cost_eob(int ci, int limits, int is_dc, tran_low_t abs
     }
   } else {
     if (plane == AOM_PLANE_V) {
-      cost += txb_costs->v_ac_sign_cost[t_sign][sign] -
-              av1_cost_literal(1);
+      cost += txb_costs->v_ac_sign_cost[t_sign][sign] - av1_cost_literal(1);
     }
     if (plane > 0) {
       if (abs_qc > NUM_BASE_LEVELS) {
@@ -510,26 +461,16 @@ static int get_mid_cost_lf(tran_low_t abs_qc, int coeff_ctx,
 void av1_get_rate_dist_def_luma_avx2(const struct LV_MAP_COEFF_COST *txb_costs,
                                      const struct prequant_t *pq,
                                      const uint8_t coeff_ctx[TOTALSTATES + 4],
-                                     int blk_pos, int bwl, TX_CLASS tx_class, int diag_ctx, int eob_rate,
-                                     struct tcq_rate_dist_t *rd) {
+                                     int blk_pos, int bwl, TX_CLASS tx_class,
+                                     int diag_ctx, int eob_rate,
+                                     struct tcq_rate_t *rd) {
+  (void)bwl;
   const int32_t(*cost_low)[4][SIG_COEF_CONTEXTS] = txb_costs->base_cost_low;
   const uint16_t(*cost_low_tbl)[SIG_COEF_CONTEXTS][DQ_CTXS][2] =
       txb_costs->base_cost_low_tbl;
   const uint16_t(*cost_eob_tbl)[SIG_COEF_CONTEXTS_EOB][2] =
       txb_costs->base_eob_cost_tbl;
   const tran_low_t *absLevel = pq->absLevel;
-  const int64_t *deltaDist = pq->deltaDist;
-
-  // Copy distortion stats.
-  __m256i delta_dist = _mm256_lddqu_si256((__m256i *)deltaDist);
-  __m256i dist02 = _mm256_permute4x64_epi64(delta_dist, 0x88);
-  __m256i dist13 = _mm256_permute4x64_epi64(delta_dist, 0xDD);
-  _mm256_storeu_si256((__m256i *)&rd->dist[0], dist02);
-  _mm256_storeu_si256((__m256i *)&rd->dist[4], dist13);
-#if MORESTATES
-  _mm256_storeu_si256((__m256i *)&rd->dist[8], dist02);
-  _mm256_storeu_si256((__m256i *)&rd->dist[12], dist13);
-#endif
 
   // Calc zero coeff costs.
   __m256i zero = _mm256_setzero_si256();
@@ -595,8 +536,10 @@ void av1_get_rate_dist_def_luma_avx2(const struct LV_MAP_COEFF_COST *txb_costs,
       rd->rate[2 * i] += mid_cost0;
       rd->rate[2 * i + 1] += mid_cost1;
     }
-    int eob_mid_cost0 = get_mid_cost_eob(blk_pos, 0, 0, absLevel[0], 0, 0, txb_costs, tx_class, 0, 0);
-    int eob_mid_cost1 = get_mid_cost_eob(blk_pos, 0, 0, absLevel[2], 0, 0, txb_costs, tx_class, 0, 0);
+    int eob_mid_cost0 = get_mid_cost_eob(blk_pos, 0, 0, absLevel[0], 0, 0,
+                                         txb_costs, tx_class, 0, 0);
+    int eob_mid_cost1 = get_mid_cost_eob(blk_pos, 0, 0, absLevel[2], 0, 0,
+                                         txb_costs, tx_class, 0, 0);
     rd->rate_eob[0] += eob_mid_cost0;
     rd->rate_eob[1] += eob_mid_cost1;
   }
@@ -719,9 +662,10 @@ void av1_update_lf_ctx_avx2(const struct tcq_node_t *decision,
 void av1_get_rate_dist_lf_luma_avx2(const struct LV_MAP_COEFF_COST *txb_costs,
                                     const struct prequant_t *pq,
                                     const uint8_t coeff_ctx[TOTALSTATES + 4],
-                                    int blk_pos, int diag_ctx, int eob_rate, int dc_sign_ctx, int32_t *tmp_sign,
-                                    int bwl, TX_CLASS tx_class,
-                                    int coeff_sign, struct tcq_rate_dist_t *rd) {
+                                    int blk_pos, int diag_ctx, int eob_rate,
+                                    int dc_sign_ctx, int32_t *tmp_sign, int bwl,
+                                    TX_CLASS tx_class, int coeff_sign,
+                                    struct tcq_rate_t *rd) {
 #define Z -1
   static const int8_t kShuf[2][32] = {
     { 0, 2, 4, 6, 8, 10, 12, 14, 1, 3, 5, 7, 9, 11, 13, 15,
@@ -736,19 +680,7 @@ void av1_get_rate_dist_lf_luma_avx2(const struct LV_MAP_COEFF_COST *txb_costs,
   const uint16_t(*cost_eob_tbl)[SIG_COEF_CONTEXTS_EOB][2] =
       txb_costs->base_lf_eob_cost_tbl;
   const tran_low_t *absLevel = pq->absLevel;
-  const int64_t *deltaDist = pq->deltaDist;
   const int plane = 0;
-
-  // Copy distortion stats.
-  __m256i delta_dist = _mm256_lddqu_si256((__m256i *)deltaDist);
-  __m256i dist02 = _mm256_permute4x64_epi64(delta_dist, 0x88);
-  __m256i dist13 = _mm256_permute4x64_epi64(delta_dist, 0xDD);
-  _mm256_storeu_si256((__m256i *)&rd->dist[0], dist02);
-  _mm256_storeu_si256((__m256i *)&rd->dist[4], dist13);
-#if MORESTATES
-  _mm256_storeu_si256((__m256i *)&rd->dist[8], dist02);
-  _mm256_storeu_si256((__m256i *)&rd->dist[12], dist13);
-#endif
 
   // Calc zero coeff costs.
   __m256i cost_zero_dq0 =
@@ -825,8 +757,12 @@ void av1_get_rate_dist_lf_luma_avx2(const struct LV_MAP_COEFF_COST *txb_costs,
       rd->rate[2 * i + 1] += mid_cost1;
     }
     int t_sign = tmp_sign[blk_pos];
-    int eob_mid_cost0 = get_mid_cost_eob(blk_pos, 1, 1, absLevel[0], coeff_sign, dc_sign_ctx, txb_costs, tx_class, t_sign, 0);
-    int eob_mid_cost1 = get_mid_cost_eob(blk_pos, 1, 1, absLevel[2], coeff_sign, dc_sign_ctx, txb_costs, tx_class, t_sign, 0);
+    int eob_mid_cost0 =
+        get_mid_cost_eob(blk_pos, 1, 1, absLevel[0], coeff_sign, dc_sign_ctx,
+                         txb_costs, tx_class, t_sign, 0);
+    int eob_mid_cost1 =
+        get_mid_cost_eob(blk_pos, 1, 1, absLevel[2], coeff_sign, dc_sign_ctx,
+                         txb_costs, tx_class, t_sign, 0);
     rd->rate_eob[0] += eob_mid_cost0;
     rd->rate_eob[1] += eob_mid_cost1;
   } else if (idx > 4) {
@@ -841,8 +777,12 @@ void av1_get_rate_dist_lf_luma_avx2(const struct LV_MAP_COEFF_COST *txb_costs,
       rd->rate[2 * i + 1] += mid_cost1;
     }
     int t_sign = tmp_sign[blk_pos];
-    int eob_mid_cost0 = get_mid_cost_eob(blk_pos, 1, 0, absLevel[0], coeff_sign, dc_sign_ctx, txb_costs, tx_class, t_sign, 0);
-    int eob_mid_cost1 = get_mid_cost_eob(blk_pos, 1, 0, absLevel[2], coeff_sign, dc_sign_ctx, txb_costs, tx_class, t_sign, 0);
+    int eob_mid_cost0 =
+        get_mid_cost_eob(blk_pos, 1, 0, absLevel[0], coeff_sign, dc_sign_ctx,
+                         txb_costs, tx_class, t_sign, 0);
+    int eob_mid_cost1 =
+        get_mid_cost_eob(blk_pos, 1, 0, absLevel[2], coeff_sign, dc_sign_ctx,
+                         txb_costs, tx_class, t_sign, 0);
     rd->rate_eob[0] += eob_mid_cost0;
     rd->rate_eob[1] += eob_mid_cost1;
   }
@@ -851,9 +791,11 @@ void av1_get_rate_dist_lf_luma_avx2(const struct LV_MAP_COEFF_COST *txb_costs,
 void av1_get_rate_dist_lf_chroma_avx2(const struct LV_MAP_COEFF_COST *txb_costs,
                                       const struct prequant_t *pq,
                                       const uint8_t coeff_ctx[TOTALSTATES + 4],
-                                      int blk_pos, int diag_ctx, int eob_rate, int dc_sign_ctx, int32_t *tmp_sign,
+                                      int blk_pos, int diag_ctx, int eob_rate,
+                                      int dc_sign_ctx, int32_t *tmp_sign,
                                       int bwl, TX_CLASS tx_class, int plane,
-                                      int coeff_sign, struct tcq_rate_dist_t *rd) {
+                                      int coeff_sign, struct tcq_rate_t *rd) {
+  (void)bwl;
 #define Z -1
   static const int8_t kShuf[2][32] = {
     { 0, 2, 4, 6, 8, 10, 12, 14, 1, 3, 5, 7, 9, 11, 13, 15,
@@ -869,18 +811,6 @@ void av1_get_rate_dist_lf_chroma_avx2(const struct LV_MAP_COEFF_COST *txb_costs,
   const uint16_t(*cost_eob_tbl)[SIG_COEF_CONTEXTS_EOB][2] =
       txb_costs->base_lf_eob_cost_uv_tbl;
   const tran_low_t *absLevel = pq->absLevel;
-  const int64_t *deltaDist = pq->deltaDist;
-
-  // Copy distortion stats.
-  __m256i delta_dist = _mm256_lddqu_si256((__m256i *)deltaDist);
-  __m256i dist02 = _mm256_permute4x64_epi64(delta_dist, 0x88);
-  __m256i dist13 = _mm256_permute4x64_epi64(delta_dist, 0xDD);
-  _mm256_storeu_si256((__m256i *)&rd->dist[0], dist02);
-  _mm256_storeu_si256((__m256i *)&rd->dist[4], dist13);
-#if MORESTATES
-  _mm256_storeu_si256((__m256i *)&rd->dist[8], dist02);
-  _mm256_storeu_si256((__m256i *)&rd->dist[12], dist13);
-#endif
 
   // Calc zero coeff costs.
   __m256i cost_zero_dq0 =
@@ -962,8 +892,12 @@ void av1_get_rate_dist_lf_chroma_avx2(const struct LV_MAP_COEFF_COST *txb_costs,
       rd->rate[2 * i + 1] += mid_cost1;
     }
     int t_sign = tmp_sign[blk_pos];
-    int eob_mid_cost0 = get_mid_cost_eob(blk_pos, 1, 1, absLevel[0], coeff_sign, dc_sign_ctx, txb_costs, tx_class, t_sign, plane);
-    int eob_mid_cost1 = get_mid_cost_eob(blk_pos, 1, 1, absLevel[2], coeff_sign, dc_sign_ctx, txb_costs, tx_class, t_sign, plane);
+    int eob_mid_cost0 =
+        get_mid_cost_eob(blk_pos, 1, 1, absLevel[0], coeff_sign, dc_sign_ctx,
+                         txb_costs, tx_class, t_sign, plane);
+    int eob_mid_cost1 =
+        get_mid_cost_eob(blk_pos, 1, 1, absLevel[2], coeff_sign, dc_sign_ctx,
+                         txb_costs, tx_class, t_sign, plane);
     rd->rate_eob[0] += eob_mid_cost0;
     rd->rate_eob[1] += eob_mid_cost1;
   } else if (idx > 4) {
@@ -978,36 +912,29 @@ void av1_get_rate_dist_lf_chroma_avx2(const struct LV_MAP_COEFF_COST *txb_costs,
       rd->rate[2 * i + 1] += mid_cost1;
     }
     int t_sign = tmp_sign[blk_pos];
-    int eob_mid_cost0 = get_mid_cost_eob(blk_pos, 1, 0, absLevel[0], coeff_sign, dc_sign_ctx, txb_costs, tx_class, t_sign, plane);
-    int eob_mid_cost1 = get_mid_cost_eob(blk_pos, 1, 0, absLevel[2], coeff_sign, dc_sign_ctx, txb_costs, tx_class, t_sign, plane);
+    int eob_mid_cost0 =
+        get_mid_cost_eob(blk_pos, 1, 0, absLevel[0], coeff_sign, dc_sign_ctx,
+                         txb_costs, tx_class, t_sign, plane);
+    int eob_mid_cost1 =
+        get_mid_cost_eob(blk_pos, 1, 0, absLevel[2], coeff_sign, dc_sign_ctx,
+                         txb_costs, tx_class, t_sign, plane);
     rd->rate_eob[0] += eob_mid_cost0;
     rd->rate_eob[1] += eob_mid_cost1;
   }
 }
 
-void av1_get_rate_dist_def_chroma_avx2(const struct LV_MAP_COEFF_COST *txb_costs,
-                                       const struct prequant_t *pq,
-                                       const uint8_t coeff_ctx[TOTALSTATES + 4],
-                                       int blk_pos, int bwl, TX_CLASS tx_class, int diag_ctx, int eob_rate, int plane, int t_sign,
-                                       int sign, struct tcq_rate_dist_t *rd) {
+void av1_get_rate_dist_def_chroma_avx2(
+    const struct LV_MAP_COEFF_COST *txb_costs, const struct prequant_t *pq,
+    const uint8_t coeff_ctx[TOTALSTATES + 4], int blk_pos, int bwl,
+    TX_CLASS tx_class, int diag_ctx, int eob_rate, int plane, int t_sign,
+    int sign, struct tcq_rate_t *rd) {
+  (void)bwl;
   const int32_t(*cost_low)[4][SIG_COEF_CONTEXTS] = txb_costs->base_cost_uv_low;
   const uint16_t(*cost_low_tbl)[SIG_COEF_CONTEXTS][DQ_CTXS][2] =
       txb_costs->base_cost_uv_low_tbl;
   const uint16_t(*cost_eob_tbl)[SIG_COEF_CONTEXTS_EOB][2] =
       txb_costs->base_eob_cost_uv_tbl;
   const tran_low_t *absLevel = pq->absLevel;
-  const int64_t *deltaDist = pq->deltaDist;
-
-  // Copy distortion stats.
-  __m256i delta_dist = _mm256_lddqu_si256((__m256i *)deltaDist);
-  __m256i dist02 = _mm256_permute4x64_epi64(delta_dist, 0x88);
-  __m256i dist13 = _mm256_permute4x64_epi64(delta_dist, 0xDD);
-  _mm256_storeu_si256((__m256i *)&rd->dist[0], dist02);
-  _mm256_storeu_si256((__m256i *)&rd->dist[4], dist13);
-#if MORESTATES
-  _mm256_storeu_si256((__m256i *)&rd->dist[8], dist02);
-  _mm256_storeu_si256((__m256i *)&rd->dist[12], dist13);
-#endif
 
   // Calc zero coeff costs.
   __m256i zero = _mm256_setzero_si256();
@@ -1072,8 +999,10 @@ void av1_get_rate_dist_def_chroma_avx2(const struct LV_MAP_COEFF_COST *txb_costs
       rd->rate[2 * i] += mid_cost0;
       rd->rate[2 * i + 1] += mid_cost1;
     }
-    int eob_mid_cost0 = get_mid_cost_eob(blk_pos, 0, 0, absLevel[0], sign, 0, txb_costs, tx_class, t_sign, plane);
-    int eob_mid_cost1 = get_mid_cost_eob(blk_pos, 0, 0, absLevel[2], sign, 0, txb_costs, tx_class, t_sign, plane);
+    int eob_mid_cost0 = get_mid_cost_eob(blk_pos, 0, 0, absLevel[0], sign, 0,
+                                         txb_costs, tx_class, t_sign, plane);
+    int eob_mid_cost1 = get_mid_cost_eob(blk_pos, 0, 0, absLevel[2], sign, 0,
+                                         txb_costs, tx_class, t_sign, plane);
     rd->rate_eob[0] += eob_mid_cost0;
     rd->rate_eob[1] += eob_mid_cost1;
   }

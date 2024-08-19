@@ -51,12 +51,11 @@ typedef struct prequant_t {
   int16_t qIdx;
 } prequant_t;
 
-typedef struct tcq_rate_dist_t {
+typedef struct tcq_rate_t {
   int32_t rate[2 * TOTALSTATES];
   int32_t rate_zero[TOTALSTATES];
   int32_t rate_eob[2];
-  int64_t dist[2 * TOTALSTATES];
-} tcq_rate_dist_t;
+} tcq_rate_t;
 
 void av1_calc_block_eob_rate(MACROBLOCK *x, int plane, TX_SIZE tx_size, int eob,
                              uint16_t *block_eob_rate);

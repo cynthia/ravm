@@ -343,6 +343,8 @@ if (aom_config("CONFIG_AV1_ENCODER") eq "yes") {
     specialize qw/av1_calc_lf_ctx avx2/;
     add_proto qw/void av1_update_lf_ctx/, "const struct tcq_node_t *decision, struct tcq_lf_ctx_t *lf_ctx";
     specialize qw/av1_update_lf_ctx avx2/;
+    add_proto qw/void av1_calc_block_eob_rate/, "struct macroblock *x, int plane, TX_SIZE tx_size, int eob, uint16_t *block_eob_rate";
+    specialize qw/av1_calc_block_eob_rate avx2/;
   }
 
   # fdct functions

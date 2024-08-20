@@ -1573,11 +1573,11 @@ void trellis_loop(int first_scan_pos, int scan_hi, int scan_lo, int plane,
   }
 }
 
-// Pre-calculate eob bits (rate) for each EOB candidate position from 1 (DC
-// only) to the initial eob location. Store rate in array block_eob_rate[],
+// Pre-calculate eob bits (rate) for each EOB candidate position from 1
+// to the initial eob location. Store rate in array block_eob_rate[],
 // starting with index.
-void av1_calc_block_eob_rate(MACROBLOCK *x, int plane, TX_SIZE tx_size, int eob,
-                             uint16_t *block_eob_rate) {
+void av1_calc_block_eob_rate_c(struct macroblock *x, int plane, TX_SIZE tx_size, int eob,
+                               uint16_t *block_eob_rate) {
   const MACROBLOCKD *xd = &x->e_mbd;
   const MB_MODE_INFO *mbmi = xd->mi[0];
   const int is_inter = is_inter_block(mbmi, xd->tree_type);

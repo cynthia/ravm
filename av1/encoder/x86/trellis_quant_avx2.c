@@ -1048,3 +1048,94 @@ void av1_init_lf_ctx_avx2(const uint8_t *lev, int scan_hi, int bwl,
     _mm_storeu_si128((__m128i *)lf_ctx->last, last);
   }
 }
+
+// Pre-calculate eob bits (rate) for each EOB candidate position from 1
+// to the initial eob location. Store rate in array block_eob_rate[],
+// starting with index.
+void av1_calc_block_eob_rate_avx2(struct macroblock *x, int plane, TX_SIZE tx_size, int eob,
+                                  uint16_t *block_eob_rate) {
+  const MACROBLOCKD *xd = &x->e_mbd;
+  const MB_MODE_INFO *mbmi = xd->mi[0];
+  const int is_inter = is_inter_block(mbmi, xd->tree_type);
+  const PLANE_TYPE plane_type = get_plane_type(plane);
+  const TX_SIZE txs_ctx = get_txsize_entropy_ctx(tx_size);
+  const CoeffCosts *coeff_costs = &x->coeff_costs;
+  const LV_MAP_COEFF_COST *txb_costs =
+      &coeff_costs->coeff_costs[txs_ctx][plane_type];
+  const int eob_multi_size = txsize_log2_minus4[tx_size];
+  const LV_MAP_EOB_COST *txb_eob_costs =
+      &coeff_costs->eob_costs[eob_multi_size][plane_type];
+
+#if CONFIG_EOB_POS_LUMA
+  const int *tbl_eob_cost = txb_eob_costs->eob_cost[is_inter];
+#else
+  const int *tbl_eob_cost = txb_eob_costs->eob_cost;
+#endif
+  const int (*tbl_eob_extra)[2] = txb_costs->eob_extra_cost;
+
+  static const int8_t kShuf[4][32] = {
+    {
+      -1, -1, -1, -1, 0, 1, 4, 5, 8, 9, 8, 9, 12, 13, 12, 13,
+      0, 1, 0, 1, 0, 1, 0, 1, 4, 5, 4, 5, 4, 5, 4, 5
+    },
+    {
+      0, 1, 4, 5, 8, 9, 8, 9, 12, 13, 12, 13, 12, 13, 12, 13,
+      0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1
+    },
+    {
+      8, 9, 8, 9, 8, 9, 8, 9, 8, 9, 8, 9, 8, 9, 8, 9,
+      12, 13, 12, 13, 12, 13, 12, 13, 12, 13, 12, 13, 12, 13, 12, 13
+    },
+  };
+#define BC1 (1 << AV1_PROB_COST_SHIFT)
+#define BC2 (2 * BC1)
+  static const uint16_t kBitCost[16] = {
+    0, 0, 0, 0, BC1, BC1, BC1, BC1,
+    BC2, BC2, BC2, BC2, BC2, BC2, BC2, BC2
+  };
+
+  // Write first 16 costs, block_eob_rate[0:15]
+  // Convert 32-bit eob_pt costs { 0 1 2 3 4 5 6 7 } + eob_extra_cost
+  // to expanded 16-bit costs { 0 1 2 2 3 3 3 3 4 4 4 4 4 4 4 4 }.
+  __m256i eob_cost0_7 = _mm256_lddqu_si256((__m256i *)tbl_eob_cost);
+  __m256i eob_extra0_7 = _mm256_lddqu_si256((__m256i *)tbl_eob_extra);
+  __m256i shuf0 = _mm256_lddqu_si256((__m256i *)kShuf[0]);
+  __m256i shuf1 = _mm256_lddqu_si256((__m256i *)kShuf[1]);
+  __m256i eob_extra = _mm256_shuffle_epi8(eob_extra0_7, shuf0);
+  __m256i eob_rate0_15 = _mm256_shuffle_epi8(eob_cost0_7, shuf1);
+  eob_rate0_15 = _mm256_add_epi16(eob_rate0_15, eob_extra);
+  __m256i bit_cost = _mm256_lddqu_si256((__m256i *)kBitCost);
+  eob_rate0_15 = _mm256_add_epi16(eob_rate0_15, bit_cost);
+  _mm256_storeu_si256((__m256i *)&block_eob_rate[0], eob_rate0_15);
+
+  // Write second 16 costs, block_eob_rate[16:31]
+  __m256i eob_cost4_7 = _mm256_permute4x64_epi64(eob_cost0_7, 0xEE);
+  __m256i eob_extra4_7 = _mm256_permute4x64_epi64(eob_extra0_7, 0xEE);
+  __m256i shuf2 = _mm256_lddqu_si256((__m256i *)kShuf[2]);
+  __m256i shuf3 = _mm256_set1_epi16(0x0504);
+  __m256i eob_extra16_31 = _mm256_shuffle_epi8(eob_extra4_7, shuf2);
+  __m256i eob_rate16_31 = _mm256_shuffle_epi8(eob_cost4_7, shuf3);
+  eob_rate16_31 = _mm256_add_epi16(eob_rate16_31, eob_extra16_31);
+  __m256i bit_cost16_31 = _mm256_set1_epi16(3 * BC1);
+  eob_rate16_31 = _mm256_add_epi16(eob_rate16_31, bit_cost16_31);
+  _mm256_storeu_si256((__m256i *)&block_eob_rate[16], eob_rate16_31);
+
+  // Write costs beyond position 32, block_eob_rate[32+]
+  int scan_pos = 32;
+  int n_offset_bits = 4;
+  while (scan_pos < eob) {
+    int eob_pt_rate = tbl_eob_cost[2 + n_offset_bits];
+    for (int bit = 0; bit < 2; bit++) {
+      int eob_ctx = n_offset_bits;
+      int extra_bit_rate = tbl_eob_extra[eob_ctx][bit];
+      int eob_rate =
+          eob_pt_rate + extra_bit_rate + av1_cost_literal(n_offset_bits);
+      for (int i = 0; i < (1 << n_offset_bits); i += 16) {
+        __m256i rate = _mm256_set1_epi16(eob_rate);
+        _mm256_storeu_si256((__m256i *)&block_eob_rate[scan_pos], rate);
+        scan_pos += 16;
+      }
+    }
+    n_offset_bits++;
+  }
+}

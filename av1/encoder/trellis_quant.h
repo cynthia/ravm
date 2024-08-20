@@ -57,8 +57,11 @@ typedef struct tcq_rate_t {
   int32_t rate_eob[2];
 } tcq_rate_t;
 
-void av1_calc_block_eob_rate(MACROBLOCK *x, int plane, TX_SIZE tx_size, int eob,
-                             uint16_t *block_eob_rate);
+typedef struct tcq_coeff_ctx_t {
+  uint16_t base[TOTALSTATES];
+  uint16_t mid[TOTALSTATES];
+  uint16_t eob;
+} tcq_coeff_ctx_t;
 
 int av1_dep_quant(const struct AV1_COMP *cpi, MACROBLOCK *x, int plane,
                   int block, TX_SIZE tx_size, TX_TYPE tx_type,

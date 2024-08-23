@@ -58,9 +58,9 @@ typedef struct tcq_rate_t {
 } tcq_rate_t;
 
 typedef struct tcq_coeff_ctx_t {
-  uint16_t base[TOTALSTATES];
-  uint16_t mid[TOTALSTATES];
-  uint16_t eob;
+  uint8_t coef[TOTALSTATES];
+  uint8_t coef_eob;
+  uint8_t pad[3];
 } tcq_coeff_ctx_t;
 
 int av1_dep_quant(const struct AV1_COMP *cpi, MACROBLOCK *x, int plane,

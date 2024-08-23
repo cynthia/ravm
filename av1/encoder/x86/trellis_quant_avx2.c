@@ -197,22 +197,20 @@ void av1_pre_quant_avx2(tran_low_t tqc, struct prequant_t *pqData,
   _mm256_storeu_si256((__m256i *)pqData->deltaDist, dist);
 }
 
-void av1_update_states_avx2(struct tcq_node_t *decision, int scan_idx,
-                            struct tcq_ctx_t *tcq_ctx) {
-  tcq_ctx_t save[TOTALSTATES];
-  memcpy(save, tcq_ctx, TOTALSTATES * sizeof(save[0]));
+void av1_update_states_avx2(tcq_node_t *decision, int scan_idx,
+                            const struct tcq_ctx_t *cur_ctx,
+                            struct tcq_ctx_t *nxt_ctx) {
   for (int i = 0; i < TOTALSTATES; i++) {
     int prevId = decision[i].prevId;
     int absLevel = decision[i].absLevel;
-    if (prevId >= 0 && prevId != i) {
-      memcpy(&tcq_ctx[i], &save[prevId], sizeof(tcq_ctx_t));
-    } else if (prevId == -1) {
+    if (prevId >= 0) {
+      memcpy(&nxt_ctx[i], &cur_ctx[prevId], sizeof(tcq_ctx_t));
+    } else {
       // New EOB; reset contexts
-      memset(tcq_ctx[i].lev, 0, sizeof(tcq_ctx[i].lev));
-      memset(tcq_ctx[i].ctx, 0, sizeof(tcq_ctx[i].ctx));
-      tcq_ctx[i].orig_id = -1;
+      memset(&nxt_ctx[i], 0, sizeof(tcq_ctx_t));
+      nxt_ctx[i].orig_id = -1;
     }
-    tcq_ctx[i].lev[scan_idx] = AOMMIN(absLevel, INT8_MAX);
+    nxt_ctx[i].lev[scan_idx] = AOMMIN(absLevel, INT8_MAX);
   }
 }
 

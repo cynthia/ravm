@@ -336,8 +336,8 @@ if (aom_config("CONFIG_AV1_ENCODER") eq "yes") {
     specialize qw/av1_get_rate_dist_lf_luma avx2/;
     add_proto qw/void av1_get_rate_dist_lf_chroma/, "const struct LV_MAP_COEFF_COST *txb_costs, const struct prequant_t *pq, const struct tcq_coeff_ctx_t *coeff_ctx, int blk_pos, int diag_ctx, int eob_rate, int dc_sign_ctx, int32_t *tmp_sign, int bwl, TX_CLASS tx_class, int plane, int coeff_sign, struct tcq_rate_t *rd";
     specialize qw/av1_get_rate_dist_lf_chroma avx2/;
-    add_proto qw/void av1_update_states/, "struct tcq_node_t *decision, int scan_idx, struct tcq_ctx_t *tcq_ctx";
-    specialize qw/av1_update_states avx2/;
+    add_proto qw/void av1_update_states/, "struct tcq_node_t *decision, int scan_idx, const struct tcq_ctx_t *cur_ctx, struct tcq_ctx_t *nxt_ctx";
+    #specialize qw/av1_update_states avx2/;
     add_proto qw/void av1_init_lf_ctx/, "const uint8_t *lev, int scan_hi, int bwl, struct tcq_lf_ctx_t *lf_ctx";
     specialize qw/av1_init_lf_ctx avx2/;
     add_proto qw/void av1_calc_lf_ctx/, "const struct tcq_lf_ctx_t *lf_ctx, int scan_pos, struct tcq_coeff_ctx_t *coeff_ctx";

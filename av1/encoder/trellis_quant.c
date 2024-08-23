@@ -1,4 +1,3 @@
-#define TESTC 1
 /*
  * Copyright (c) 2024, Alliance for Open Media. All rights reserved
  *
@@ -1200,39 +1199,38 @@ void av1_calc_diag_ctx_c(int scan_hi, int scan_lo, int bwl,
 }
 
 void av1_update_states_c(tcq_node_t *decision, int scan_idx,
-                         struct tcq_ctx_t *tcq_ctx) {
-  tcq_ctx_t save[TOTALSTATES];
-  memcpy(save, tcq_ctx, TOTALSTATES * sizeof(save[0]));
+                         const struct tcq_ctx_t *cur_ctx,
+                         struct tcq_ctx_t *nxt_ctx) {
   for (int i = 0; i < TOTALSTATES; i++) {
     int prevId = decision[i].prevId;
     int absLevel = decision[i].absLevel;
-    if (prevId >= 0 && prevId != i) {
-      memcpy(&tcq_ctx[i], &save[prevId], sizeof(tcq_ctx_t));
-    } else if (prevId == -1) {
+    if (prevId >= 0) {
+      memcpy(&nxt_ctx[i], &cur_ctx[prevId], sizeof(tcq_ctx_t));
+    } else {
       // New EOB; reset contexts
-      memset(tcq_ctx[i].lev, 0, sizeof(tcq_ctx[i].lev));
-      memset(tcq_ctx[i].ctx, 0, sizeof(tcq_ctx[i].ctx));
-      tcq_ctx[i].orig_id = -1;
+      memset(&nxt_ctx[i], 0, sizeof(tcq_ctx_t));
+      nxt_ctx[i].orig_id = -1;
     }
-    tcq_ctx[i].lev[scan_idx] = AOMMIN(absLevel, INT8_MAX);
+    nxt_ctx[i].lev[scan_idx] = AOMMIN(absLevel, INT8_MAX);
   }
 }
 
-static void update_levels_diagonal(uint8_t *levels[TOTALSTATES],
-                                   uint8_t *prev_levels[TOTALSTATES],
+static void update_levels_diagonal(tcq_levels_t *tcq_lev,
                                    const int16_t *scan, int bufsize, int bwl,
                                    int scan_hi, int scan_lo,
-                                   tcq_ctx_t *tcq_ctx) {
+                                   const tcq_ctx_t *tcq_ctx) {
   for (int i = 0; i < TOTALSTATES; i++) {
     int orig_id = tcq_ctx[i].orig_id;
+    uint8_t *cur_lev  = tcq_levels_cur(tcq_lev, i);
+    uint8_t *prev_lev = tcq_levels_prev(tcq_lev, orig_id);
     if (orig_id >= 0) {
-      memcpy(levels[i], prev_levels[orig_id], bufsize);
+      memcpy(cur_lev, prev_lev, bufsize);
     } else {
-      memset(levels[i], 0, bufsize);
+      memset(cur_lev, 0, bufsize);
     }
     for (int sc = scan_lo; sc <= scan_hi; sc++) {
       int lev = tcq_ctx[i].lev[sc - scan_lo];
-      levels[i][get_padded_idx(scan[sc], bwl)] = lev;
+      cur_lev[get_padded_idx(scan[sc], bwl)] = lev;
     }
   }
 }
@@ -1263,10 +1261,15 @@ void trellis_loop_diagonal(
   // Precompute base and mid ctx values, as they are independent across
   // the diagonal pass.
   tcq_levels_swap(tcq_lev);
+
+  int i_ctx = scan_hi & 1;
+  tcq_ctx_t *cur_ctx = &tcq_ctx[i_ctx ? TOTALSTATES : 0];
+  tcq_ctx_t *nxt_ctx = &tcq_ctx[i_ctx ? 0 : TOTALSTATES];
+
   for (int i = 0; i < TOTALSTATES; i++) {
     uint8_t *prev_levels = tcq_levels_prev(tcq_lev, i);
-    av1_calc_diag_ctx(scan_hi, scan_lo, bwl, prev_levels, scan, tcq_ctx[i].ctx);
-    tcq_ctx[i].orig_id = i;
+    av1_calc_diag_ctx(scan_hi, scan_lo, bwl, prev_levels, scan, cur_ctx[i].ctx);
+    cur_ctx[i].orig_id = i;
   }
 
   for (int scan_pos = scan_hi; scan_pos >= scan_lo; scan_pos--) {
@@ -1284,23 +1287,13 @@ void trellis_loop_diagonal(
     const int limits = 0;
 
     // calculate rate distortion
-#if TESTC
     tcq_coeff_ctx_t coeff_ctx;
     for (int i = 0; i < TOTALSTATES; i++) {
-      coeff_ctx.coef[i] = tcq_ctx[i].ctx[scan_pos - scan_lo];
+      coeff_ctx.coef[i] = cur_ctx[i].ctx[scan_pos - scan_lo];
     }
     int eob_ctx = get_lower_levels_ctx_eob(bwl, height, scan_pos);
     coeff_ctx.coef_eob = eob_ctx;
     int eob_rate = block_eob_rate[scan_pos];
-#else
-    uint8_t coeff_ctx[TOTALSTATES + 4];  // extra +4 alloc to allow SIMD load.
-    for (int i = 0; i < TOTALSTATES; i++) {
-      coeff_ctx[i] = tcq_ctx[i].ctx[scan_pos - scan_lo];
-    }
-    int eob_ctx = get_lower_levels_ctx_eob(bwl, height, scan_pos);
-    int eob_rate = block_eob_rate[scan_pos];
-    coeff_ctx[TOTALSTATES] = eob_ctx;
-#endif
 
     tcq_rate_t rd;
     av1_get_rate_dist_def_luma(txb_costs, &pqData, &coeff_ctx, blk_pos, bwl,
@@ -1310,17 +1303,16 @@ void trellis_loop_diagonal(
     av1_decide_states(prev_decision, &rd, &pqData, limits, try_eob, rdmult,
                       decision);
 
-    av1_update_states(decision, scan_pos - scan_lo, tcq_ctx);
+    av1_update_states(decision, scan_pos - scan_lo, cur_ctx, nxt_ctx);
+
+    // Swap cur/nxt context.
+    tcq_ctx_t *tmp = cur_ctx;
+    cur_ctx = nxt_ctx;
+    nxt_ctx = tmp;
   }
 
-  uint8_t *levels[TOTALSTATES];
-  uint8_t *prev_levels[TOTALSTATES];
-  for (int i = 0; i < TOTALSTATES; i++) {
-    prev_levels[i] = tcq_levels_prev(tcq_lev, i);
-    levels[i] = tcq_levels_cur(tcq_lev, i);
-  }
-  update_levels_diagonal(levels, prev_levels, scan, tcq_lev->bufsize, bwl,
-                         scan_hi, scan_lo, tcq_ctx);
+  update_levels_diagonal(tcq_lev, scan, tcq_lev->bufsize, bwl,
+                         scan_hi, scan_lo, cur_ctx);
 }
 
 void av1_init_lf_ctx_c(const uint8_t *lev, int scan_hi, int bwl,
@@ -1707,7 +1699,9 @@ int av1_dep_quant(const struct AV1_COMP *cpi, MACROBLOCK *x, int plane,
   // populate trellis
   assert(si < MAX_TRELLIS);
   tcq_node_t trellis[MAX_TRELLIS][TOTALSTATES];
-  tcq_ctx_t tcq_ctx[TOTALSTATES];
+
+  // Ping-pong buffers for diagonal contexts.
+  tcq_ctx_t tcq_ctx[2 * TOTALSTATES];
 
   // Precalc block eob rate.
   uint16_t block_eob_rate[MAX_TRELLIS];

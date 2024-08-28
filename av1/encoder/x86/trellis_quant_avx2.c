@@ -463,7 +463,7 @@ void av1_get_rate_dist_def_luma_avx2(const struct LV_MAP_COEFF_COST *txb_costs,
                                      int diag_ctx, int eob_rate,
                                      struct tcq_rate_t *rd) {
   (void)bwl;
-  const int32_t(*cost_low)[4][SIG_COEF_CONTEXTS] = txb_costs->base_cost_low;
+  const int32_t(*cost_zero)[SIG_COEF_CONTEXTS] = txb_costs->base_cost_zero;
   const uint16_t(*cost_low_tbl)[SIG_COEF_CONTEXTS][DQ_CTXS][2] =
       txb_costs->base_cost_low_tbl;
   const uint16_t(*cost_eob_tbl)[SIG_COEF_CONTEXTS_EOB][2] =
@@ -473,9 +473,9 @@ void av1_get_rate_dist_def_luma_avx2(const struct LV_MAP_COEFF_COST *txb_costs,
   // Calc zero coeff costs.
   __m256i zero = _mm256_setzero_si256();
   __m256i cost_zero_dq0 =
-      _mm256_lddqu_si256((__m256i *)&cost_low[0][0][diag_ctx]);
+      _mm256_lddqu_si256((__m256i *)&cost_zero[0][diag_ctx]);
   __m256i cost_zero_dq1 =
-      _mm256_lddqu_si256((__m256i *)&cost_low[1][0][diag_ctx]);
+      _mm256_lddqu_si256((__m256i *)&cost_zero[1][diag_ctx]);
 
   __m256i coef_ctx = _mm256_castsi128_si256(_mm_loadu_si64(&coeff_ctx->coef));
   __m256i ctx16 = _mm256_unpacklo_epi8(coef_ctx, zero);
@@ -675,8 +675,8 @@ void av1_get_rate_dist_lf_luma_avx2(const struct LV_MAP_COEFF_COST *txb_costs,
     { 0, 8,  Z, Z, 1, 9,  Z, Z, 2, 10, Z, Z, 3, 11, Z, Z,
       4, 12, Z, Z, 5, 13, Z, Z, 6, 14, Z, Z, 7, 15, Z, Z }
   };
-  const uint16_t(*cost_low)[LF_BASE_SYMBOLS][LF_SIG_COEF_CONTEXTS] =
-      txb_costs->base_lf_cost_low;
+  const uint16_t(*cost_zero)[LF_SIG_COEF_CONTEXTS] =
+      txb_costs->base_lf_cost_zero;
   const uint16_t(*cost_low_tbl)[LF_SIG_COEF_CONTEXTS][DQ_CTXS][2] =
       txb_costs->base_lf_cost_low_tbl;
   const uint16_t(*cost_eob_tbl)[SIG_COEF_CONTEXTS_EOB][2] =
@@ -686,9 +686,9 @@ void av1_get_rate_dist_lf_luma_avx2(const struct LV_MAP_COEFF_COST *txb_costs,
 
   // Calc zero coeff costs.
   __m256i cost_zero_dq0 =
-      _mm256_lddqu_si256((__m256i *)&cost_low[0][0][diag_ctx]);
+      _mm256_lddqu_si256((__m256i *)&cost_zero[0][diag_ctx]);
   __m256i cost_zero_dq1 =
-      _mm256_lddqu_si256((__m256i *)&cost_low[1][0][diag_ctx]);
+      _mm256_lddqu_si256((__m256i *)&cost_zero[1][diag_ctx]);
   __m256i shuf = _mm256_lddqu_si256((__m256i *)kShuf[0]);
   cost_zero_dq0 = _mm256_shuffle_epi8(cost_zero_dq0, shuf);
   cost_zero_dq1 = _mm256_shuffle_epi8(cost_zero_dq1, shuf);
@@ -807,8 +807,8 @@ void av1_get_rate_dist_lf_chroma_avx2(const struct LV_MAP_COEFF_COST *txb_costs,
     { 0, 8,  Z, Z, 1, 9,  Z, Z, 2, 10, Z, Z, 3, 11, Z, Z,
       4, 12, Z, Z, 5, 13, Z, Z, 6, 14, Z, Z, 7, 15, Z, Z }
   };
-  const uint16_t(*cost_low)[LF_BASE_SYMBOLS][LF_SIG_COEF_CONTEXTS] =
-      plane ? txb_costs->base_lf_cost_uv_low : txb_costs->base_lf_cost_low;
+  const uint16_t(*cost_zero)[LF_SIG_COEF_CONTEXTS] =
+      plane ? txb_costs->base_lf_cost_uv_zero : txb_costs->base_lf_cost_zero;
   const uint16_t(*cost_low_tbl)[LF_SIG_COEF_CONTEXTS][DQ_CTXS][2] =
       plane ? txb_costs->base_lf_cost_uv_low_tbl
             : txb_costs->base_lf_cost_low_tbl;
@@ -818,9 +818,9 @@ void av1_get_rate_dist_lf_chroma_avx2(const struct LV_MAP_COEFF_COST *txb_costs,
 
   // Calc zero coeff costs.
   __m256i cost_zero_dq0 =
-      _mm256_lddqu_si256((__m256i *)&cost_low[0][0][diag_ctx]);
+      _mm256_lddqu_si256((__m256i *)&cost_zero[0][diag_ctx]);
   __m256i cost_zero_dq1 =
-      _mm256_lddqu_si256((__m256i *)&cost_low[1][0][diag_ctx]);
+      _mm256_lddqu_si256((__m256i *)&cost_zero[1][diag_ctx]);
   __m256i shuf = _mm256_lddqu_si256((__m256i *)kShuf[0]);
   cost_zero_dq0 = _mm256_shuffle_epi8(cost_zero_dq0, shuf);
   cost_zero_dq1 = _mm256_shuffle_epi8(cost_zero_dq1, shuf);
@@ -935,7 +935,7 @@ void av1_get_rate_dist_def_chroma_avx2(
     TX_CLASS tx_class, int diag_ctx, int eob_rate, int plane, int t_sign,
     int sign, struct tcq_rate_t *rd) {
   (void)bwl;
-  const int32_t(*cost_low)[4][SIG_COEF_CONTEXTS] = txb_costs->base_cost_uv_low;
+  const int32_t(*cost_zero)[SIG_COEF_CONTEXTS] = txb_costs->base_cost_uv_zero;
   const uint16_t(*cost_low_tbl)[SIG_COEF_CONTEXTS][DQ_CTXS][2] =
       txb_costs->base_cost_uv_low_tbl;
   const uint16_t(*cost_eob_tbl)[SIG_COEF_CONTEXTS_EOB][2] =
@@ -945,9 +945,9 @@ void av1_get_rate_dist_def_chroma_avx2(
   // Calc zero coeff costs.
   __m256i zero = _mm256_setzero_si256();
   __m256i cost_zero_dq0 =
-      _mm256_lddqu_si256((__m256i *)&cost_low[0][0][diag_ctx]);
+      _mm256_lddqu_si256((__m256i *)&cost_zero[0][diag_ctx]);
   __m256i cost_zero_dq1 =
-      _mm256_lddqu_si256((__m256i *)&cost_low[1][0][diag_ctx]);
+      _mm256_lddqu_si256((__m256i *)&cost_zero[1][diag_ctx]);
   __m256i ctx = _mm256_castsi128_si256(_mm_loadu_si64(&coeff_ctx->coef));
   __m256i ctx16 = _mm256_unpacklo_epi8(ctx, zero);
   __m256i ctx16sh = _mm256_shuffle_epi32(ctx16, 0xD8);

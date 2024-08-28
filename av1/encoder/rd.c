@@ -1200,29 +1200,23 @@ void av1_fill_coeff_costs(CoeffCosts *coeff_costs, FRAME_CONTEXT *fc,
                                    fc->coeff_base_uv_cdf[ctx][dq], NULL);
         }
       }
-      // Rearrange costs into base_cost_low[] array for quicker access.
+      // Rearrange costs into base_cost_zero[] array for quicker access.
       for (int dq = 0; dq < DQ_CTXS; dq++) {
-        for (int lev = 0; lev < 4; lev++) {
-          for (int ctx = 0; ctx < SIG_COEF_CONTEXTS; ++ctx) {
-            pcost->base_cost_low[dq][lev][ctx] = pcost->base_cost[ctx][dq][lev];
-          }
-          for (int ctx = 0; ctx < SIG_COEF_CONTEXTS_UV; ++ctx) {
-            pcost->base_cost_uv_low[dq][lev][ctx] =
-                pcost->base_cost_uv[ctx][dq][lev];
-          }
+        for (int ctx = 0; ctx < SIG_COEF_CONTEXTS; ++ctx) {
+          pcost->base_cost_zero[dq][ctx] = pcost->base_cost[ctx][dq][0];
+        }
+        for (int ctx = 0; ctx < SIG_COEF_CONTEXTS_UV; ++ctx) {
+          pcost->base_cost_uv_zero[dq][ctx] = pcost->base_cost_uv[ctx][dq][0];
         }
       }
-      // Rearrange costs into base_lf_cost_low[] array for quicker access.
+      // Rearrange costs into base_lf_cost_zero[] array for quicker access.
       for (int dq = 0; dq < DQ_CTXS; dq++) {
-        for (int lev = 0; lev < LF_BASE_SYMBOLS; lev++) {
-          for (int ctx = 0; ctx < LF_SIG_COEF_CONTEXTS; ++ctx) {
-            pcost->base_lf_cost_low[dq][lev][ctx] =
-                pcost->base_lf_cost[ctx][dq][lev];
-          }
-          for (int ctx = 0; ctx < LF_SIG_COEF_CONTEXTS_UV; ++ctx) {
-            pcost->base_lf_cost_uv_low[dq][lev][ctx] =
-                pcost->base_lf_cost_uv[ctx][dq][lev];
-          }
+        for (int ctx = 0; ctx < LF_SIG_COEF_CONTEXTS; ++ctx) {
+          pcost->base_lf_cost_zero[dq][ctx] = pcost->base_lf_cost[ctx][dq][0];
+        }
+        for (int ctx = 0; ctx < LF_SIG_COEF_CONTEXTS_UV; ++ctx) {
+          pcost->base_lf_cost_uv_zero[dq][ctx] =
+              pcost->base_lf_cost_uv[ctx][dq][0];
         }
       }
       // Precompute some base_costs for trellis, interleaved for quick access.

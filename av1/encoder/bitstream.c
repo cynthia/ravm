@@ -5560,7 +5560,9 @@ static AOM_INLINE void write_sequence_header_beyond_av1(
   if (enable_tcq) {
     aom_wb_write_literal(wb, enable_tcq - 1, 2);
   }
-  if (enable_tcq == 0) {
+  if (enable_tcq == TCQ_DISABLE || enable_tcq >= TCQ_4ST_FR) {
+    // Signal whether parity hiding is used if TCQ is
+    // disabled, or enabled/disabled at frame level.
     aom_wb_write_bit(wb, seq_params->enable_parity_hiding);
   }
 #else
@@ -6276,7 +6278,11 @@ static AOM_INLINE void write_uncompressed_header_obu(
 #endif
   }
 
-  if (features->coded_lossless || !cm->seq_params.enable_parity_hiding) {
+  if (features->coded_lossless || !cm->seq_params.enable_parity_hiding
+#if CONFIG_DQ
+      || features->tcq_mode
+#endif
+  ) {
     assert(features->allow_parity_hiding == false);
   } else {
     aom_wb_write_bit(wb, features->allow_parity_hiding);

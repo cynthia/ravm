@@ -1081,8 +1081,8 @@ typedef struct aom_codec_enc_cfg {
    * 0 = disable, use scalar quantization.
    * 1 = use 4-state trellis
    * 2 = use 8-state trellis (TBD)
-   * 3 = use 4-state trellis (frame adaptive)
-   * 4 = use 8-state trellis (TBD frame adaptive)
+   * 3 = use 4-state trellis (frame adaptive (key/altref))
+   * 4 = use 8-state trellis (TBD frame adaptive (key/altref))
    */
   unsigned int enable_tcq;
 #endif

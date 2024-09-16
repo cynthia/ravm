@@ -377,9 +377,6 @@ void av1_init_seq_coding_tools(SequenceHeader *seq, AV1_COMMON *cm,
     seq->force_screen_content_tools = 2;
     seq->force_integer_mv = 2;
   }
-#if CONFIG_DQ
-  seq->enable_tcq = tool_cfg->enable_tcq;
-#endif
   seq->order_hint_info.order_hint_bits_minus_1 =
       seq->order_hint_info.enable_order_hint
           ? DEFAULT_EXPLICIT_ORDER_HINT_BITS - 1
@@ -519,7 +516,16 @@ void av1_init_seq_coding_tools(SequenceHeader *seq, AV1_COMMON *cm,
   }
 
   seq->enable_refmvbank = tool_cfg->enable_refmvbank;
+#if CONFIG_DQ
+  seq->enable_tcq = tool_cfg->enable_tcq;
+  if (seq->enable_tcq == TCQ_DISABLE || seq->enable_tcq >= TCQ_4ST_FR) {
+    seq->enable_parity_hiding = tool_cfg->enable_parity_hiding;
+  } else {
+    seq->enable_parity_hiding = 0;
+  }
+#else
   seq->enable_parity_hiding = tool_cfg->enable_parity_hiding;
+#endif
 #if CONFIG_IMPROVED_GLOBAL_MOTION
   // TODO(rachelbarker): Check if cpi->sf.gm_sf.gm_search_type is set by this
   // point, and set to 0 if cpi->sf.gm_sf.gm_search_type == GM_DISABLE_SEARCH
@@ -4115,7 +4121,7 @@ static int encode_frame_to_data_rate(AV1_COMP *cpi, size_t *size,
 
 #if CONFIG_DQ
   if (cm->seq_params.enable_tcq >= TCQ_4ST_FR) {
-    int use_tcq = frame_is_intra_only(cm);
+    int use_tcq = frame_is_intra_only(cm) || current_frame->pyramid_level <= 1;
     features->tcq_mode = use_tcq ? cm->seq_params.enable_tcq - 2 : 0;
   } else {
     features->tcq_mode = cm->seq_params.enable_tcq;

@@ -6911,7 +6911,8 @@ void av1_read_sequence_header_beyond_av1(struct aom_read_bit_buffer *rb,
 #else
     seq_params->enable_tcq = 1;
 #endif
-  if (seq_params->enable_tcq == 0) {
+  if (seq_params->enable_tcq == TCQ_DISABLE ||
+      seq_params->enable_tcq >= TCQ_4ST_FR) {
     seq_params->enable_parity_hiding = aom_rb_read_bit(rb);
   } else {
     seq_params->enable_parity_hiding = 0;
@@ -8393,7 +8394,11 @@ YV12_BUFFER_CONFIG *tip_frame_buf = &cm->tip_ref.tip_frame->buf;
   }
 #endif
 
-  if (features->coded_lossless || !cm->seq_params.enable_parity_hiding)
+  if (features->coded_lossless || !cm->seq_params.enable_parity_hiding
+#if CONFIG_DQ
+      || features->tcq_mode
+#endif
+  )
     features->allow_parity_hiding = false;
   else
     features->allow_parity_hiding = aom_rb_read_bit(rb);

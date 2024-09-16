@@ -754,11 +754,7 @@ static void init_config(cfg_options_t *config) {
   config->enable_reduced_reference_set = 0;
   config->reduced_tx_type_set = 0;
   config->enable_refmvbank = 1;
-#if CONFIG_DQ
-  config->enable_parity_hiding = 0;
-#else
   config->enable_parity_hiding = 1;
-#endif
 #if CONFIG_MRSSE
   config->enable_mrsse = 0;
 #endif  // CONFIG_MRSSE

@@ -52,16 +52,37 @@ typedef struct prequant_t {
 } prequant_t;
 
 typedef struct tcq_rate_t {
-  int32_t rate[2 * TOTALSTATES];
-  int32_t rate_zero[TOTALSTATES];
+  int32_t rate[2 * TCQ_MAX_STATES];
+  int32_t rate_zero[TCQ_MAX_STATES];
   int32_t rate_eob[2];
 } tcq_rate_t;
 
 typedef struct tcq_coeff_ctx_t {
-  uint8_t coef[TOTALSTATES];
+  uint8_t coef[TCQ_MAX_STATES];
   uint8_t coef_eob;
   uint8_t pad[3];
 } tcq_coeff_ctx_t;
+
+typedef struct tcq_param_t {
+  int n_states;
+  int n_states_log2;
+  int plane;
+  TX_SIZE tx_size;
+  TX_CLASS tx_class;
+  int sharpness;
+  int64_t rdmult;
+  int log_scale;
+  const int16_t *scan;
+  const int32_t *tmp_sign;
+  const tran_low_t *qcoeff;
+  const tran_low_t *tcoeff;
+  const int32_t *quant;
+  const int32_t *dequant;
+  const qm_val_t *iqmatrix;
+  const uint16_t *block_eob_rate;
+  const TXB_CTX *txb_ctx;
+  const LV_MAP_COEFF_COST *txb_costs;
+} tcq_param_t;
 
 static AOM_FORCE_INLINE int get_low_range(int abs_qc, int lf) {
   int base_levels = lf ? 6 : 4;

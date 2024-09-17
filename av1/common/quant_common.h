@@ -27,20 +27,14 @@ extern "C" {
 #define TCQ_HDR_FLAG 1  // Enable through header flag(s)
 #define DQENABLE 0      // Determine whether to use DQ by dq_enable()
 #define NEWQINDEX 1     // QP shift
-#define MORESTATES 0    // 1: 8-state; 0: 4-state
 #define NEWHR 1         // 1:parity is determined by (base + LR)
 #else
 #define TCQ_HDR_FLAG 0
-#define DQENABLE 0    // Determine whether to use DQ by dq_enable()
-#define NEWQINDEX 0   // QP shift
-#define MORESTATES 0  // 1: 8-state; 0: 4-state
+#define DQENABLE 0   // Determine whether to use DQ by dq_enable()
+#define NEWQINDEX 0  // QP shift
 #define NEWHR 0
 #endif
-#if MORESTATES
-#define TOTALSTATES 8
-#else
-#define TOTALSTATES 4
-#endif
+#define TCQ_MAX_STATES 8
 
 #define PHTHRESH 4
 #define MINQ 0

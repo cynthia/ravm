@@ -3705,14 +3705,25 @@ static INLINE void transpose_kernel(const int16_t *kernel, __m256i *out) {
 void fwd_stxfm_avx2(tran_low_t *src, tran_low_t *dst,
                     const PREDICTION_MODE mode, const uint8_t stx_idx,
                     const int size) {
+#if CONFIG_IST_REDUCE_METHOD4
+  const int16_t *kernel = (size == 0) ? ist_4x4_kernel[mode][stx_idx][0]
+                                      : ist_8x8_kernel[mode][stx_idx][0];
+  const int dimension = (size == 0) ? 16 : 64;
+  const int ist_height = (size == 0) ? IST_4x4_HEIGHT : (size == 1) ? IST_8x8_HEIGHT_RED : IST_8x8_HEIGHT ;
+#else
   const int16_t *kernel = (size == 4) ? ist_4x4_kernel[mode][stx_idx][0]
                                       : ist_8x8_kernel[mode][stx_idx][0];
+#endif
   int *out = dst;
   assert(stx_idx < 4);
   int shift = 7;
   int offset = 1 << (shift - 1);
   int *srcPtr = src;
+#if CONFIG_IST_REDUCE_METHOD4
+  if (size == 0) {
+#else
   if (size == 4) {
+#endif
     assert(IST_4x4_WIDTH == 16);
     const __m256i offset_vec = _mm256_set1_epi32(offset);
     __m256i kernel_t[16];
@@ -3743,7 +3754,11 @@ void fwd_stxfm_avx2(tran_low_t *src, tran_low_t *dst,
     const __m256i src_6 = _mm256_loadu_si256((__m256i *)(srcPtr + 48));
     // s56 s57 s58 s59 s60 s61 s62 s63
     const __m256i src_7 = _mm256_loadu_si256((__m256i *)(srcPtr + 56));
+#if CONFIG_IST_REDUCE_METHOD4
+    for (int j = 0; j < ist_height; j++) {
+#else
     for (int j = 0; j < IST_8x8_HEIGHT; j++) {
+#endif
       const int16_t *kernel_tmp = kernel;
       // k0 k1 k2 k3 k4 k5 k6 k7
       const __m256i ker_0 =
@@ -3795,7 +3810,11 @@ void fwd_stxfm_avx2(tran_low_t *src, tran_low_t *dst,
           _mm_add_epi32(sum_32x2, _mm_srli_si128(sum_32x2, 4));
       int coef = _mm_cvtsi128_si32(sum_32x1);
       *out++ = (coef + offset) >> shift;
+#if CONFIG_IST_REDUCE_METHOD4
+      kernel += dimension;
+#else
       kernel += (size * size);
+#endif
     }
   }
 }

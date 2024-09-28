@@ -452,10 +452,24 @@ static void init_txfm_param(const MACROBLOCKD *xd, int plane, TX_SIZE tx_size,
   txfm_param->tx_size = tx_size;
   // EOB needs to adjusted after inverse IST
   if (txfm_param->sec_tx_type) {
+#if CONFIG_IST_REDUCE_METHOD4
+    const int st_size_class = (width == 8 && height == 8) ? 1 : (width >= 8 && height >= 8) ? 2 : 0;
+    txfm_param->eob = eob;
+    if (st_size_class == 0) {
+      txfm_param->eob = IST_4x4_HEIGHT;
+    }
+    else if (st_size_class == 1) {
+      txfm_param->eob = IST_8x8_HEIGHT_RED;
+    }
+    else {
+      txfm_param->eob = IST_8x8_HEIGHT;
+    }
+#else
     // txfm_param->eob = av1_get_max_eob(tx_size);
     const int sb_size =
         (tx_size_wide[tx_size] >= 8 && tx_size_high[tx_size] >= 8) ? 8 : 4;
     txfm_param->eob = (sb_size == 4) ? IST_4x4_WIDTH : IST_8x8_WIDTH;
+#endif
   } else {
     txfm_param->eob = eob;
   }

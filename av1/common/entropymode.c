@@ -7584,6 +7584,12 @@ static const aom_cdf_prob
       { AOM_CDF7(4, 8, 12, 16, 20, 24), 0 },
     };
 #endif  // CONFIG_IST_ANY_SET
+#if CONFIG_IST_INTER_MULTISET
+static const aom_cdf_prob default_inter_stx_set_cdf[CDF_SIZE(2)] = {
+  AOM_CDF2(16384),
+  75,
+};
+#endif
 #endif  // CONFIG_IST_SET_FLAG
 #else
 #if CONFIG_IST_ANY_SET
@@ -8087,6 +8093,9 @@ static void init_mode_probs(FRAME_CONTEXT *fc,
 #else
   av1_copy(fc->stx_set_cdf, default_stx_set_cdf);
 #endif  // CONFIG_INTRA_TX_IST_PARSE
+#if CONFIG_IST_INTER_MULTISET
+  av1_copy(fc->inter_stx_set_cdf, default_inter_stx_set_cdf);
+#endif
 #endif  // CONFIG_IST_SET_FLAG
   av1_copy(fc->pb_mv_precision_cdf, default_pb_mv_precision_cdf);
   av1_copy(fc->pb_mv_mpp_flag_cdf, default_pb_mv_most_probable_precision_cdf);

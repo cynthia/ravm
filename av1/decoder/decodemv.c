@@ -1440,9 +1440,16 @@ static void read_secondary_tx_set(MACROBLOCKD *xd, FRAME_CONTEXT *ec_ctx,
                                    IST_DIR_SIZE, ACCT_INFO("stx_set_flag"));
 #endif  // CONFIG_INTRA_TX_IST_PARSE
     assert(stx_set_flag < IST_DIR_SIZE);
-  }
 #if !CONFIG_IST_REDUCE_METHOD1
-  if (get_primary_tx_type(*tx_type) == ADST_ADST) stx_set_flag += IST_DIR_SIZE;
+    if (get_primary_tx_type(*tx_type) == ADST_ADST)
+      stx_set_flag += IST_DIR_SIZE;
+#endif
+  }
+#if CONFIG_IST_INTER_MULTISET
+  else {
+    stx_set_flag = aom_read_symbol(r, ec_ctx->inter_stx_set_cdf, 2,
+                                   ACCT_INFO("inter_stx_set_flag"));
+  }
 #endif
   set_secondary_tx_set(tx_type, stx_set_flag);
 }

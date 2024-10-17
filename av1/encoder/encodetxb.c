@@ -1798,6 +1798,13 @@ int get_cctx_type_cost(const AV1_COMMON *cm, const MACROBLOCK *x,
 static int get_sec_tx_set_cost(const MACROBLOCK *x, const MB_MODE_INFO *mbmi,
                                TX_TYPE tx_type) {
   uint8_t stx_set_flag = get_secondary_tx_set(tx_type);
+#if CONFIG_IST_INTER_MULTISET
+  MACROBLOCKD *xd = &x->e_mbd;
+  if (is_inter_block(mbmi, xd->tree_type)) {
+    assert(stx_set_flag < IST_DIR_SIZE);
+    return x->mode_costs.inter_stx_set_flag_cost[stx_set_flag];
+  } else {
+#endif
 #if !CONFIG_IST_REDUCE_METHOD1
   if (get_primary_tx_type(tx_type) == ADST_ADST) stx_set_flag -= IST_DIR_SIZE;
 #endif
@@ -1811,6 +1818,9 @@ static int get_sec_tx_set_cost(const MACROBLOCK *x, const MB_MODE_INFO *mbmi,
   assert(stx_set_ctx < IST_DIR_SIZE);
   return x->mode_costs.stx_set_flag_cost[stx_set_ctx][stx_set_flag];
 #endif  // CONFIG_INTRA_TX_IST_PARSE
+#if CONFIG_IST_INTER_MULTISET
+  }
+#endif
 }
 
 // TODO(angiebird): use this function whenever it's possible
@@ -1880,6 +1890,10 @@ static int get_tx_type_cost(const MACROBLOCK *x, const MACROBLOCKD *xd,
           tx_type_cost +=
               x->mode_costs.stx_flag_cost[is_inter][square_tx_size]
                                          [get_secondary_tx_type(tx_type)];
+#if CONFIG_IST_INTER_MULTISET
+          if (get_secondary_tx_type(tx_type) > 0)
+            tx_type_cost += get_sec_tx_set_cost(x, mbmi, tx_type);
+#endif
         }
         return tx_type_cost;
       }
@@ -1969,8 +1983,13 @@ static int get_tx_type_cost(const MACROBLOCK *x, const MACROBLOCKD *xd,
           x->mode_costs.stx_flag_cost[is_inter][square_tx_size]
                                      [get_secondary_tx_type(tx_type)];
 #if CONFIG_IST_SET_FLAG
+#if CONFIG_IST_INTER_MULTISET
+      if (get_secondary_tx_type(tx_type) > 0)
+        tx_type_cost += get_sec_tx_set_cost(x, mbmi, tx_type);
+#else
       if (get_secondary_tx_type(tx_type) > 0 && !is_inter)
         tx_type_cost += get_sec_tx_set_cost(x, mbmi, tx_type);
+#endif
 #endif  // CONFIG_IST_SET_FLAG
       return tx_type_cost;
     }
@@ -5382,6 +5401,11 @@ static void update_tx_type_count(const AV1_COMP *cpi, const AV1_COMMON *cm,
             block_signals_sec_tx_type(xd, tx_size, tx_type, eob)) {
           update_cdf(fc->stx_cdf[is_inter][txsize_sqr_map[tx_size]],
                      (int8_t)get_secondary_tx_type(tx_type), STX_TYPES);
+#if CONFIG_IST_INTER_MULTISET
+          if (get_secondary_tx_type(tx_type) > 0)
+            update_cdf(fc->inter_stx_set_cdf,
+                       (int8_t)get_secondary_tx_set(tx_type), 2);
+#endif
         }
 #endif  // CONFIG_TX_TYPE_FLEX_IMPROVE
       } else {
@@ -5495,8 +5519,18 @@ else if (cm->quant_params.base_qindex > 0 &&
     update_cdf(fc->stx_cdf[is_inter][txsize_sqr_map[tx_size]],
                (int8_t)get_secondary_tx_type(tx_type), STX_TYPES);
 #if CONFIG_IST_SET_FLAG
+#if CONFIG_IST_INTER_MULTISET
+    if (get_secondary_tx_type(tx_type) > 0) {
+      if (is_inter)
+        update_cdf(fc->inter_stx_set_cdf, (int8_t)get_secondary_tx_set(tx_type),
+                   2);
+      else
+        update_sec_tx_set_cdf(fc, mbmi, tx_type);
+    }
+#else
     if (get_secondary_tx_type(tx_type) > 0 && !is_inter)
       update_sec_tx_set_cdf(fc, mbmi, tx_type);
+#endif
 #endif  // CONFIG_IST_SET_FLAG
   }
 }

@@ -156,6 +156,9 @@ set_aom_config_var(CONFIG_IST_NON_ZERO_DEPTH_INTER 1
 set_aom_config_var(CONFIG_IST_NON_ZERO_DEPTH_DCT_ONLY 0
                    "Debug for IST mode non-zero depth.")
 
+#IST multiset for inter
+set_aom_config_var(CONFIG_IST_INTER_MULTISET 1
+                   "Enable multiset IST for inter TU.")
 
 # AV2 experiment flags.
 set_aom_config_var(CONFIG_IMPROVEIDTX 1

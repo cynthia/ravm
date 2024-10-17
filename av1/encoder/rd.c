@@ -551,6 +551,10 @@ void av1_fill_mode_rates(AV1_COMMON *const cm, const MACROBLOCKD *xd,
                              fc->stx_set_cdf[i], NULL);
   }
 #endif  // CONFIG_INTRA_TX_IST_PARSE
+#if CONFIG_IST_INTER_MULTISET
+  av1_cost_tokens_from_cdf(mode_costs->inter_stx_set_flag_cost,
+                           fc->inter_stx_set_cdf, NULL);
+#endif
 #endif  // CONFIG_IST_SET_FLAG
 
   for (i = 0; i < EXT_TX_SIZES; ++i) {

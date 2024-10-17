@@ -777,7 +777,9 @@ void av1_inv_stxfm(tran_low_t *coeff, TxfmParam *txfm_param) {
       transpose = 1;
 #if CONFIG_IST_SET_FLAG
     mode_t = txfm_param->sec_tx_set;
+#if !CONFIG_IST_INTER_MULTISET
     assert(mode_t < IST_SET_SIZE);
+#endif
 // If in debug mode, verify whether txfm_param->sec_tx_set == intra pred dir
 // based tx set id
 #if !CONFIG_IST_ANY_SET && !defined(NDEBUG)
@@ -801,6 +803,9 @@ void av1_inv_stxfm(tran_low_t *coeff, TxfmParam *txfm_param) {
       scan_order_out = (sb_size == 4) ? stx_scan_orders_4x4[log2width - 2]
                                       : stx_scan_orders_8x8[log2width - 2];
     }
+#if CONFIG_IST_INTER_MULTISET
+    mode_t = (txfm_param->is_inter ? (mode_t == 0 ? 0 : IST_SET_SIZE) : mode_t);
+#endif
 #if CONFIG_IST_REDUCE_METHOD4
     const int st_size_class = (width == 8 && height == 8) ? 1 : (width >= 8 && height >= 8) ? 2 : 0;
     inv_stxfm(buf0, buf1, mode_t, stx_type - 1, st_size_class);

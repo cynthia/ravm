@@ -554,6 +554,9 @@ typedef struct frame_contexts {
 #else
   aom_cdf_prob stx_set_cdf[IST_DIR_SIZE][CDF_SIZE(IST_DIR_SIZE)];
 #endif  // CONFIG_INTRA_TX_IST_PARSE
+#if CONFIG_IST_INTER_MULTISET
+  aom_cdf_prob inter_stx_set_cdf[CDF_SIZE(2)];
+#endif
 #endif  // CONFIG_IST_SET_FLAG
   aom_cdf_prob pb_mv_mpp_flag_cdf[NUM_MV_PREC_MPP_CONTEXT][CDF_SIZE(2)];
 

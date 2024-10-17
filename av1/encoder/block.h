@@ -931,6 +931,9 @@ typedef struct {
 #else
   int stx_set_flag_cost[IST_DIR_SIZE][IST_DIR_SIZE];
 #endif  // CONFIG_INTRA_TX_IST_PARSE
+#if CONFIG_IST_INTER_MULTISET
+  int inter_stx_set_flag_cost[2];
+#endif
 #endif  // CONFIG_IST_SET_FLAG
 
   //! Rate rate associated with each alpha codeword

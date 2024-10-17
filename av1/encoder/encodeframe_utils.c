@@ -1804,6 +1804,9 @@ void av1_avg_cdf_symbols(FRAME_CONTEXT *ctx_left, FRAME_CONTEXT *ctx_tr,
 #else
   AVERAGE_CDF(ctx_left->stx_set_cdf, ctx_tr->stx_set_cdf, IST_DIR_SIZE);
 #endif  // CONFIG_INTRA_TX_IST_PARSE
+#if CONFIG_IST_INTER_MULTISET
+  AVERAGE_CDF(ctx_left->inter_stx_set_cdf, ctx_tr->inter_stx_set_cdf, 2);
+#endif
 #endif  // CONFIG_IST_SET_FLAG
 
   for (int p = 0; p < NUM_MV_PREC_MPP_CONTEXT; ++p) {

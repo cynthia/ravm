@@ -1621,9 +1621,20 @@ void av1_write_cctx_type(const AV1_COMMON *const cm, const MACROBLOCKD *xd,
 
 // This function writes a 'secondary tx set' onto the bitstream
 static void write_sec_tx_set(FRAME_CONTEXT *ec_ctx, aom_writer *w,
-                             MB_MODE_INFO *mbmi, TX_TYPE tx_type) {
+                             MB_MODE_INFO *mbmi, TX_TYPE tx_type
+#if CONFIG_IST_INTER_MULTISET
+                             ,
+                             int is_inter
+#endif
+) {
   TX_TYPE stx_set_flag = get_secondary_tx_set(tx_type);
   assert(stx_set_flag <= IST_SET_SIZE - 1);
+#if CONFIG_IST_INTER_MULTISET
+  if (is_inter) {
+    assert(stx_set_flag < IST_DIR_SIZE);
+    aom_write_symbol(w, stx_set_flag, ec_ctx->inter_stx_set_cdf, 2);
+  } else {
+#endif
 #if !CONFIG_IST_REDUCE_METHOD1
   if (get_primary_tx_type(tx_type) == ADST_ADST) stx_set_flag -= IST_DIR_SIZE;
 #endif
@@ -1638,6 +1649,9 @@ static void write_sec_tx_set(FRAME_CONTEXT *ec_ctx, aom_writer *w,
   aom_write_symbol(w, stx_set_flag, ec_ctx->stx_set_cdf[stx_set_ctx],
                    IST_DIR_SIZE);
 #endif  // CONFIG_INTRA_TX_IST_PARSE
+#if CONFIG_IST_INTER_MULTISET
+  }
+#endif
 }
 
 void av1_write_sec_tx_type(const AV1_COMMON *const cm, const MACROBLOCKD *xd,
@@ -1659,7 +1673,11 @@ void av1_write_sec_tx_type(const AV1_COMMON *const cm, const MACROBLOCKD *xd,
       aom_write_symbol(w, stx_flag, ec_ctx->stx_cdf[is_inter][square_tx_size],
                        STX_TYPES);
 #if CONFIG_IST_SET_FLAG
+#if CONFIG_IST_INTER_MULTISET
+      if (stx_flag > 0) write_sec_tx_set(ec_ctx, w, mbmi, tx_type, is_inter);
+#else
       if (stx_flag > 0 && !is_inter) write_sec_tx_set(ec_ctx, w, mbmi, tx_type);
+#endif
 #endif  // CONFIG_IST_SET_FLAG
     }
   } else if (!xd->lossless[mbmi->segment_id]) {
@@ -1671,7 +1689,11 @@ void av1_write_sec_tx_type(const AV1_COMMON *const cm, const MACROBLOCKD *xd,
       aom_write_symbol(w, stx_flag, ec_ctx->stx_cdf[is_inter][square_tx_size],
                        STX_TYPES);
 #if CONFIG_IST_SET_FLAG
+#if CONFIG_IST_INTER_MULTISET
+      if (stx_flag > 0) write_sec_tx_set(ec_ctx, w, mbmi, tx_type, is_inter);
+#else
       if (stx_flag > 0 && !is_inter) write_sec_tx_set(ec_ctx, w, mbmi, tx_type);
+#endif
 #endif  // CONFIG_IST_SET_FLAG
     }
   }

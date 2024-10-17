@@ -469,6 +469,9 @@ void av1_reset_cdf_symbol_counters(FRAME_CONTEXT *fc) {
 #else
   RESET_CDF_COUNTER(fc->stx_set_cdf, IST_DIR_SIZE);
 #endif  // CONFIG_INTRA_TX_IST_PARSE
+#if CONFIG_IST_INTER_MULTISET
+  RESET_CDF_COUNTER(fc->inter_stx_set_cdf, 2);
+#endif
 #endif  // CONFIG_IST_SET_FLAG
   for (int p = 0; p < NUM_MV_PREC_MPP_CONTEXT; ++p) {
     RESET_CDF_COUNTER(fc->pb_mv_mpp_flag_cdf[p], 2);

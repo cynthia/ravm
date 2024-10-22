@@ -1155,7 +1155,7 @@ void av1_write_coeffs_txb(const AV1_COMMON *const cm, MACROBLOCK *const x,
 
   // select quantizer when DQ is on, 0 for Q0 and 1 for Q1
 #if CONFIG_DQ
-  int state = tcq_init_state(tcq_mode);
+  int state = tcq_init_state(tcq_mode, plane, tx_class);
 #endif
   for (int c = eob - 1; c > 0; --c) {
     const int pos = scan[c];
@@ -6156,7 +6156,7 @@ void av1_update_and_record_txb_context(int plane, int block, int blk_row,
           get_primary_tx_type(tx_type) < IDTX;
 #endif  // CONFIG_IMPROVEIDTX
 #if CONFIG_DQ
-    int state = tcq_init_state(cm->features.tcq_mode);
+    int state = tcq_init_state(cm->features.tcq_mode, plane, tx_class);
 #endif
 
     for (int c = eob - 1; c > 0; --c) {

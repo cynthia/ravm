@@ -25,10 +25,12 @@ extern "C" {
 
 #if CONFIG_DQ
 #define TCQ_HDR_FLAG 1  // Enable through header flag(s)
-#define DQENABLE 0      // Determine whether to use DQ by dq_enable()
+#define DQENABLE 0      // Determine whether to enable based on tx_size
 #define NEWQINDEX 1     // QP shift
 #define QINDEX_INCR 2   // tunable QP index increment
 #define NEWHR 1         // 1:parity is determined by (base + LR)
+#define TCQ_DIS_CHR 1   // 1:disable TCQ for chroma blocks
+#define TCQ_DIS_1D 0    // [WIP] 1:disable TCQ for 1D scan blocks
 #else
 #define TCQ_HDR_FLAG 0
 #define DQENABLE 0   // Determine whether to use DQ by dq_enable()
@@ -82,8 +84,15 @@ static INLINE bool tcq_quant(const int state) {
 
 #define DQMIN 0
 #define DQMAX 1024
-static INLINE bool dq_enable(int enable_tcq, TX_SIZE tx_size, int plane) {
+static INLINE bool dq_enable(int enable_tcq, TX_SIZE tx_size, int plane,
+                             TX_CLASS tx_class) {
   int dq_en = enable_tcq != 0;
+  if (TCQ_DIS_CHR) {
+    dq_en &= plane == 0;
+  }
+  if (TCQ_DIS_1D) {
+    dq_en &= tx_class == TX_CLASS_2D;
+  }
 #if DQENABLE
   int width = get_txb_wide(tx_size);
   int height = get_txb_high(tx_size);
@@ -91,13 +100,12 @@ static INLINE bool dq_enable(int enable_tcq, TX_SIZE tx_size, int plane) {
             (width * height >= DQMIN));  // try other constraints?
 #else
   (void)tx_size;
-  (void)plane;
 #endif
   return dq_en;
 }
 
 int tcq_parity(int absLevel, int limits);
-int tcq_init_state(int tcq_mode);
+int tcq_init_state(int tcq_mode, int plane, TX_CLASS tx_class);
 int tcq_next_state(const int curState, const int absLevel, const int limits);
 #endif
 

@@ -100,7 +100,16 @@ int tcq_parity(int absLevel, int limits) {
   return par;
 }
 
-int tcq_init_state(int tcq_mode) { return tcq_mode << 8; }
+int tcq_init_state(int tcq_mode, int plane, TX_CLASS tx_class) {
+  int state = tcq_mode << 8;
+  if (TCQ_DIS_CHR && plane != 0) {
+    state = 0;
+  }
+  if (TCQ_DIS_1D && tx_class != TX_CLASS_2D) {
+    state = 0;
+  }
+  return state;
+}
 
 int tcq_next_state(const int curState, const int absLevel, const int limits) {
   int tcq_mode = curState >> 8;

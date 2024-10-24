@@ -6842,7 +6842,7 @@ static INLINE int get_ref_frame_disp_order_hint(AV1_COMMON *const cm,
 static int read_uncompressed_header(AV1Decoder *pbi,
                                     struct aom_read_bit_buffer *rb) {
   AV1_COMMON *const cm = &pbi->common;
-  const SequenceHeader *const seq_params = &cm->seq_params;
+   SequenceHeader *const seq_params = &cm->seq_params;
   CurrentFrame *const current_frame = &cm->current_frame;
   FeatureFlags *const features = &cm->features;
   MACROBLOCKD *const xd = &pbi->dcb.xd;
@@ -7034,7 +7034,9 @@ static int read_uncompressed_header(AV1Decoder *pbi,
     }
   }
   features->disable_cdf_update = aom_rb_read_bit(rb);
-
+  if (current_frame->frame_type == KEY_FRAME) {
+    seq_params->cfl_ds_filter_index = aom_rb_read_literal(rb, 2);
+  }
   if (seq_params->force_screen_content_tools == 2) {
     features->allow_screen_content_tools = aom_rb_read_bit(rb);
   } else {

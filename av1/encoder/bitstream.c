@@ -5677,7 +5677,7 @@ static AOM_INLINE void write_uncompressed_header_obu(
     }
   }
   aom_wb_write_bit(wb, features->disable_cdf_update);
-
+  aom_wb_write_literal(wb, seq_params->cfl_ds_filter_index, 2);
   if (seq_params->force_screen_content_tools == 2) {
     aom_wb_write_bit(wb, features->allow_screen_content_tools);
   } else {

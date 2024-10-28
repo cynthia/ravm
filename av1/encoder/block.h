@@ -248,7 +248,7 @@ typedef struct LV_MAP_COEFF_COST {
 #endif
                [8];
 #if CONFIG_DQ
-  //! Quick access to base costs 0-3 for optimized access.
+  //! Quick access to base costs for optimized access.
   int32_t base_cost_zero[DQ_CTXS][SIG_COEF_CONTEXTS];
   int32_t base_cost_uv_zero[DQ_CTXS][SIG_COEF_CONTEXTS];
   uint16_t base_cost_low_tbl[5][SIG_COEF_CONTEXTS][DQ_CTXS][2];
@@ -261,6 +261,9 @@ typedef struct LV_MAP_COEFF_COST {
   uint16_t base_eob_cost_uv_tbl[5][SIG_COEF_CONTEXTS_EOB][2];
   uint16_t base_lf_eob_cost_tbl[9][SIG_COEF_CONTEXTS_EOB][2];
   uint16_t base_lf_eob_cost_uv_tbl[9][SIG_COEF_CONTEXTS_EOB][2];
+  //! Quick access to mid (br) costs for optimized access.
+  uint16_t mid_cost_tbl[11][LEVEL_CONTEXTS][DQ_CTXS][2];
+  uint16_t mid_lf_cost_tbl[15][LF_LEVEL_CONTEXTS][DQ_CTXS][2];
 #endif
   /*! \brief Cost for encoding the last non-zero coefficient.
    *

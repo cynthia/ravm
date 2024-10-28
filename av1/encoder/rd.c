@@ -45,6 +45,9 @@
 #include "av1/encoder/rd.h"
 #include "av1/encoder/rdopt_utils.h"
 #include "av1/encoder/tokenize.h"
+#if CONFIG_DQ
+#include "av1/encoder/trellis_quant.h"
+#endif
 
 #define RD_THRESH_POW 1.25
 
@@ -1066,6 +1069,25 @@ static void set_block_thresholds(const AV1_COMMON *cm, RD_OPT *rd) {
 
 void av1_fill_coeff_costs(CoeffCosts *coeff_costs, FRAME_CONTEXT *fc,
                           const int num_planes) {
+#if CONFIG_DQ
+  static const uint8_t trel_abslev[15][4] = {
+    { 2, 1, 1, 2 },  // qIdx=1
+    { 2, 3, 1, 2 },  // qidx=2
+    { 2, 3, 3, 2 },  // qidx=3
+    { 2, 3, 3, 4 },  // qidx=4
+    { 4, 3, 3, 4 },  // qidx=5
+    { 4, 5, 3, 4 },  // qidx=6
+    { 4, 5, 5, 4 },  // qidx=7
+    { 4, 5, 5, 6 },  // qidx=8
+    { 6, 5, 5, 6 },  // qidx=9
+    { 6, 7, 5, 6 },  // qidx=10
+    { 6, 7, 7, 6 },  // qidx=11
+    { 6, 7, 7, 8 },  // qidx=12
+    { 8, 7, 7, 8 },  // qidx=13
+    { 8, 9, 7, 8 },  // qidx=14
+    { 8, 9, 9, 8 },  // qidx=15
+  };
+#endif
   const int nplanes = AOMMIN(num_planes, PLANE_TYPES);
   for (int eob_multi_size = 0; eob_multi_size < 7; ++eob_multi_size) {
     for (int plane = 0; plane < nplanes; ++plane) {
@@ -1185,17 +1207,6 @@ void av1_fill_coeff_costs(CoeffCosts *coeff_costs, FRAME_CONTEXT *fc,
         }
       }
       // Precompute some base_costs for trellis, interleaved for quick access.
-      static const uint8_t trel_abslev[9][4] = {
-        { 2, 1, 1, 2 },  // qIdx = 1
-        { 2, 3, 1, 2 },  // qIdx = 2
-        { 2, 3, 3, 2 },  // qIdx = 3
-        { 2, 3, 3, 4 },  // qIdx = 4
-        { 4, 3, 3, 4 },  // qIdx = 5
-        { 4, 5, 3, 4 },  // qIdx = 6
-        { 4, 5, 5, 4 },  // qIdx = 7
-        { 4, 5, 5, 6 },  // qIdx = 8
-        { 6, 5, 5, 6 },  // qIdx = 9
-      };
       for (int idx = 0; idx < 5; idx++) {
         int a0 = AOMMIN(trel_abslev[idx][0], 3);
         int a1 = AOMMIN(trel_abslev[idx][1], 3);
@@ -1466,6 +1477,46 @@ void av1_fill_coeff_costs(CoeffCosts *coeff_costs, FRAME_CONTEXT *fc,
               pcost->lps_cost[ctx][i] - pcost->lps_cost[ctx][i - 1];
         }
       }
+#if CONFIG_DQ
+      // Precalc mid costs for default region.
+      for (int idx = 0; idx < 5 + 2 * COEFF_BASE_RANGE; idx++) {
+        int a0 = get_low_range(trel_abslev[idx][0], 0);
+        int a1 = get_low_range(trel_abslev[idx][1], 0);
+        int a2 = get_low_range(trel_abslev[idx][2], 0);
+        int a3 = get_low_range(trel_abslev[idx][3], 0);
+        for (int ctx = 0; ctx < LEVEL_CONTEXTS; ++ctx) {
+          // DQ0, absLev 0 / 2
+          pcost->mid_cost_tbl[idx][ctx][0][0] =
+              a0 < 0 ? 0 : pcost->lps_cost[ctx][a0];
+          pcost->mid_cost_tbl[idx][ctx][0][1] =
+              a2 < 0 ? 0 : pcost->lps_cost[ctx][a2];
+          // DQ1, absLev 1 / 3
+          pcost->mid_cost_tbl[idx][ctx][1][0] =
+              a1 < 0 ? 0 : pcost->lps_cost[ctx][a1];
+          pcost->mid_cost_tbl[idx][ctx][1][1] =
+              a3 < 0 ? 0 : pcost->lps_cost[ctx][a3];
+        }
+      }
+      // Precalc mid costs for default region.
+      for (int idx = 0; idx < 9 + 2 * COEFF_BASE_RANGE; idx++) {
+        int a0 = get_low_range(trel_abslev[idx][0], 1);
+        int a1 = get_low_range(trel_abslev[idx][1], 1);
+        int a2 = get_low_range(trel_abslev[idx][2], 1);
+        int a3 = get_low_range(trel_abslev[idx][3], 1);
+        for (int ctx = 0; ctx < LF_LEVEL_CONTEXTS; ++ctx) {
+          // DQ0, absLev 0 / 2
+          pcost->mid_lf_cost_tbl[idx][ctx][0][0] =
+              a0 < 0 ? 0 : pcost->lps_lf_cost[ctx][a0];
+          pcost->mid_lf_cost_tbl[idx][ctx][0][1] =
+              a2 < 0 ? 0 : pcost->lps_lf_cost[ctx][a2];
+          // DQ1, absLev 1 / 3
+          pcost->mid_lf_cost_tbl[idx][ctx][1][0] =
+              a1 < 0 ? 0 : pcost->lps_lf_cost[ctx][a1];
+          pcost->mid_lf_cost_tbl[idx][ctx][1][1] =
+              a3 < 0 ? 0 : pcost->lps_lf_cost[ctx][a3];
+        }
+      }
+#endif
     }
   }
 

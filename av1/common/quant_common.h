@@ -30,7 +30,7 @@ extern "C" {
 #define QINDEX_INCR 2   // tunable QP index increment
 #define NEWHR 1         // 1:parity is determined by (base + LR)
 #define TCQ_DIS_CHR 1   // 1:disable TCQ for chroma blocks
-#define TCQ_DIS_1D 0    // [WIP] 1:disable TCQ for 1D scan blocks
+#define TCQ_DIS_1D 1    // [WIP] 1:disable TCQ for 1D scan blocks
 #else
 #define TCQ_HDR_FLAG 0
 #define DQENABLE 0   // Determine whether to use DQ by dq_enable()

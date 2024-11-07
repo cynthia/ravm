@@ -159,6 +159,9 @@ set_aom_config_var(CONFIG_IST_NON_ZERO_DEPTH_DCT_ONLY 0
 #IST multiset for inter
 set_aom_config_var(CONFIG_IST_INTER_MULTISET 1
                    "Enable multiset IST for inter TU.")
+#IST set reduction (non-normative)
+set_aom_config_var(CONFIG_IST_REDUCTION 1
+                   "Use 4 sets for IST encoder search.")
 
 # AV2 experiment flags.
 set_aom_config_var(CONFIG_IMPROVEIDTX 1

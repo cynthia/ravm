@@ -3848,9 +3848,15 @@ static int encode_frame_to_data_rate(AV1_COMP *cpi, size_t *size,
     cpi->is_screen_content_type = features->allow_screen_content_tools;
   }
 #endif  // CONFIG_IBC_SR_EXT
-  if (cpi->common.current_frame.frame_type == KEY_FRAME) {
+  const bool compute_ds_filter =
+      ((cpi->common.current_frame.frame_type == KEY_FRAME &&
+        cpi->common.show_frame) ||
+       cpi->common.current_frame.frame_type == S_FRAME) &&
+      !cpi->common.show_existing_frame;
+  if (compute_ds_filter) {
     av1_set_downsample_filter_options(cpi);
   }
+
   // frame type has been decided outside of this function call
   cm->cur_frame->frame_type = current_frame->frame_type;
 

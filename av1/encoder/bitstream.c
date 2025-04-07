@@ -2052,10 +2052,15 @@ static AOM_INLINE void write_ccso(AV1_COMMON *cm, MACROBLOCKD *const xd,
   const CommonModeInfoParams *const mi_params = &cm->mi_params;
   const int mi_row = xd->mi_row;
   const int mi_col = xd->mi_col;
+#if CONFIG_CCSO_FU_BUGFIX
+  const int blk_size_y = (1 << (CCSO_BLK_SIZE - MI_SIZE_LOG2)) - 1;
+  const int blk_size_x = (1 << (CCSO_BLK_SIZE - MI_SIZE_LOG2)) - 1;
+#else
   const int blk_size_y =
       (1 << (CCSO_BLK_SIZE + xd->plane[1].subsampling_y - MI_SIZE_LOG2)) - 1;
   const int blk_size_x =
       (1 << (CCSO_BLK_SIZE + xd->plane[1].subsampling_x - MI_SIZE_LOG2)) - 1;
+#endif  // CONFIG_CCSO_FU_BUGFIX
   const MB_MODE_INFO *mbmi =
       mi_params->mi_grid_base[(mi_row & ~blk_size_y) * mi_params->mi_stride +
                               (mi_col & ~blk_size_x)];
@@ -6104,7 +6109,7 @@ static AOM_INLINE void write_sequence_header_beyond_av1(
 #if CONFIG_SAME_REF_COMPOUND
   aom_wb_write_literal(wb, seq_params->num_same_ref_compound, 2);
 #endif  // CONFIG_SAME_REF_COMPOUND
-  aom_wb_write_bit(wb, seq_params->enable_sdp);
+  if (!seq_params->monochrome) aom_wb_write_bit(wb, seq_params->enable_sdp);
   aom_wb_write_bit(wb, seq_params->enable_ist);
   aom_wb_write_bit(wb, seq_params->enable_inter_ist);
 #if CONFIG_CHROMA_TX

@@ -15,6 +15,9 @@
 
 #include "av1/encoder/encoder.h"
 #include "av1/encoder/encodetxb.h"
+#if CONFIG_ML_PART_SPLIT
+#include "tools/ml/py_bridge.h"
+#endif
 
 #if CONFIG_ML_PART_SPLIT
 #include "av1/encoder/part_split_prune_tflite.h"
@@ -86,6 +89,7 @@ static AOM_INLINE void alloc_compressor_data(AV1_COMP *cpi) {
   av1_setup_shared_coeff_buffer(&cpi->common, &cpi->td.shared_coeff_buf);
   av1_setup_sms_tree(cpi, &cpi->td);
   av1_setup_sms_bufs(&cpi->common, &cpi->td);
+  av1_setup_sms_pred_buf(&cpi->common, &cpi->td);
   cpi->td.firstpass_ctx =
       av1_alloc_pmc(cm, SHARED_PART, 0, 0, BLOCK_16X16, NULL, PARTITION_NONE, 0,
                     cm->seq_params.subsampling_x, cm->seq_params.subsampling_y,
@@ -278,6 +282,41 @@ static AOM_INLINE void dealloc_compressor_data(AV1_COMP *cpi) {
 #if CONFIG_DIP_EXT_PRUNING
   intra_dip_mode_prune_close(&(cpi->td.dip_pruning_model));
 #endif  // CONFIG_DIP_EXT_PRUNING
+  av1_free_sms_pred_buf(&cpi->td);
+
+  // for (int i = 0; i < 32; i++) {
+  //   cm->prune_non[i] += cpi->td.prune_non[i];
+  //   cm->prune_spl[i] += cpi->td.prune_spl[i];
+  //   cm->prune_ver[i] += cpi->td.prune_ver[i];
+  //   cm->prune_hor[i] += cpi->td.prune_hor[i];
+  //   cm->force_non[i] += cpi->td.force_non[i];
+  //   cm->force_spl[i] += cpi->td.force_spl[i];
+  //   cm->force_ver[i] += cpi->td.force_ver[i];
+  //   cm->force_hor[i] += cpi->td.force_hor[i];
+  //   cm->prune_tot[i] += cpi->td.prune_tot[i];
+  //   cm->ftr_time[i] += cpi->td.ftr_time[i];
+  //   cm->inf_time[i] += cpi->td.inf_time[i];
+  //   cm->non_time[i] += cpi->td.non_time[i];
+
+  //  if (cm->prune_non[i] || cm->prune_spl[i] || cm->prune_ver[i] ||
+  //      cm->prune_hor[i]) {
+  //    printf(
+  //        "%d: pnon=%d%%,pspl=%d%%,pver=%d%%,phor=%d%% "
+  //        "fnon=%d%%,fspl=%d%%,fver=%d%%,fhor=%d%%\n",
+  //        i, 100 * cm->prune_non[i] / cm->prune_tot[i],
+  //        100 * cm->prune_spl[i] / cm->prune_tot[i],
+  //        100 * cm->prune_ver[i] / cm->prune_tot[i],
+  //        100 * cm->prune_hor[i] / cm->prune_tot[i],
+  //        100 * cm->force_non[i] / cm->prune_tot[i],
+  //        100 * cm->force_spl[i] / cm->prune_tot[i],
+  //        100 * cm->force_ver[i] / cm->prune_tot[i],
+  //        100 * cm->force_hor[i] / cm->prune_tot[i]);
+  //  }
+  //  if (cm->ftr_time[i] || cm->inf_time[i]) {
+  //    printf("%d: ftr:%" PRIu64 ",inf:%" PRIu64 ",non:%" PRIu64 "\n", i,
+  //           cm->ftr_time[i], cm->inf_time[i], cm->non_time[i]);
+  //  }
+  //}
   aom_free(cpi->td.mb.palette_buffer);
   release_compound_type_rd_buffers(&cpi->td.mb.comp_rd_buffer);
   aom_free(cpi->td.mb.tmp_conv_dst);

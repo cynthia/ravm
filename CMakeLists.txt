@@ -569,6 +569,18 @@ if(CONFIG_AV1_ENCODER)
       twopass_encoder)
   endif()
 
+  if(CONFIG_ML_PART_SPLIT)
+    include(FetchContent)
+    message(STATUS "Building CNPY ...")
+
+    set(ZLIB_USE_STATIC_LIBS "ON")
+    include_directories("${AOM_ROOT}/third_party/cnpy")
+    add_subdirectory(third_party/cnpy)
+
+    find_package(ZLIB REQUIRED)
+    target_link_libraries(aom PRIVATE ${ZLIB_LIBRARIES})
+  endif()
+
   if(ENABLE_TOOLS)
     if(CONFIG_ENTROPY_STATS AND NOT BUILD_SHARED_LIBS)
 
@@ -967,6 +979,15 @@ if(CONFIG_TENSORFLOW_LITE AND CONFIG_AV1_ENCODER)
     list(APPEND AOM_APP_TARGETS cnn_restore_y4m)
     add_dependencies(cnn_restore_y4m tensorflow-lite)
     target_link_libraries(cnn_restore_y4m PRIVATE tensorflow-lite)
+  endif()
+endif()
+
+if(CONFIG_ML_PART_SPLIT AND CONFIG_AV1_ENCODER)
+  if(ENABLE_EXAMPLES OR ENABLE_TOOLS)
+    foreach(aom_app ${AOM_APP_TARGETS})
+      add_dependencies(${aom_app} cnpy)
+      target_link_libraries(${aom_app} PRIVATE cnpy)
+    endforeach()
   endif()
 endif()
 

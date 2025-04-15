@@ -77,5 +77,8 @@ int av1_ml_part_split_infer(AV1_COMP *const cpi, MACROBLOCK *x, int mi_row,
                             int mi_col, BLOCK_SIZE bsize,
                             const TileInfo *tile_info, ThreadData *td,
                             bool search_none_after_rect,
-                            bool* prune_list);
+                            bool* prune_list, MLResult* mls_results,
+                            size_t* ml_count);
+
+
 #endif  // AV1_ENCODER_PARTITION_ML_H_

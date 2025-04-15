@@ -302,6 +302,9 @@ typedef struct av1_codec_arg_definitions {
   arg_def_t crop_win_top_offset;
   arg_def_t crop_win_bottom_offset;
 #endif  // CONFIG_CROP_WIN_CWG_F220
+#if CONFIG_ML_PART_SPLIT
+  arg_def_t py_datafile_name;
+#endif
 } av1_codec_arg_definitions_t;
 
 extern const av1_codec_arg_definitions_t g_av1_codec_arg_defs;

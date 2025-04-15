@@ -876,3 +876,28 @@ PC_TREE *av1_look_for_counterpart_block(PC_TREE *pc_tree) {
   // Search from the highest common ancestor
   return counterpart_from_different_partition(current, pc_tree);
 }
+void av1_setup_sms_pred_buf(struct AV1Common *cm, struct ThreadData *td) {
+  unsigned int width = ((cm->width + MAX_SB_SIZE - 1) >> MAX_SB_SIZE_LOG2)
+                       << MAX_SB_SIZE_LOG2;
+  unsigned int height = ((cm->height + MAX_SB_SIZE - 1) >> MAX_SB_SIZE_LOG2)
+                        << MAX_SB_SIZE_LOG2;
+  uint16_t *buf =
+      (uint16_t *)aom_memalign(16, width * height * sizeof(uint16_t));
+  struct buf_2d tmp = { .buf = buf,
+                        .buf0 = buf,
+                        .width = cm->width,
+                        .height = cm->height,
+                        .stride = width };
+  td->sms_pred_buf = tmp;
+  printf("SMS frame w:%d h:%d w:%d h:%d\n", cm->width, cm->height, width,
+         height);
+}
+
+void av1_free_sms_pred_buf(struct ThreadData *td) {
+  if (td->sms_pred_buf.buf0 != NULL) {
+    printf("SMS frame free\n");
+    aom_free(td->sms_pred_buf.buf0);
+    td->sms_pred_buf.buf0 = NULL;
+    td->sms_pred_buf.buf = NULL;
+  }
+}

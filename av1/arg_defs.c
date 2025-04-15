@@ -892,4 +892,9 @@ const av1_codec_arg_definitions_t g_av1_codec_arg_defs = {
   .enable_short_refresh_frame_flags =
       ARG_DEF(NULL, "enable-short-refresh-frame-flags", 1,
               "Signal refresh frame flags with N bits. (0: N = 8, 1 : N = 3)"),
+#if CONFIG_ML_PART_SPLIT
+  .py_datafile_name =
+      ARG_DEF(NULL, "py-datafile", 1,
+              "Where to store debug data to be later analyzed from colab."),
+#endif
 };

@@ -254,6 +254,10 @@ typedef struct {
    * Indicates the maximum aspect ratio of allowed partition block sizes.
    */
   unsigned int max_partition_aspect_ratio;
+
+#if CONFIG_ML_PART_SPLIT
+  const char *py_datafile_name;
+#endif
 } PartitionCfg;
 
 /*!
@@ -1722,6 +1726,12 @@ typedef struct RD_COUNTS {
   int warped_used[2];
 } RD_COUNTS;
 
+typedef struct {
+  unsigned int valid : 1;
+  unsigned int low_test : 1;
+  unsigned int high_test : 1;
+} part_ml_inf;
+
 typedef struct ThreadData {
   MACROBLOCK mb;
   RD_COUNTS rd_counts;
@@ -1754,9 +1764,23 @@ typedef struct ThreadData {
   PICK_MODE_CONTEXT *firstpass_ctx;
 #if CONFIG_ML_PART_SPLIT
   void *partition_model;
+  void *py_bridge;
 #endif  // CONFIG_ML_PART_SPLIT
   void *dip_pruning_model;
   struct buf_2d sms_pred_buf;
+
+  // unsigned int prune_non[32];
+  // unsigned int prune_spl[32];
+  // unsigned int prune_hor[32];
+  // unsigned int prune_ver[32];
+  // unsigned int force_non[32];
+  // unsigned int force_spl[32];
+  // unsigned int force_hor[32];
+  // unsigned int force_ver[32];
+  // unsigned int prune_tot[32];
+  // uint64_t ftr_time[32];
+  // uint64_t inf_time[32];
+  // uint64_t non_time[32];
 } ThreadData;
 
 struct EncWorkerData;

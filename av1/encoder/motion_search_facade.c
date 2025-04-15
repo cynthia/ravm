@@ -1450,7 +1450,7 @@ int_mv av1_simple_motion_sse_var(AV1_COMP *cpi, MACROBLOCK *x, int mi_row,
 
 /*!\brief A simplified version for motion search used for speed features. Same
  * as \ref av1_simple_motion_search, but it is used with ERP. */
-int_mv av1_simple_motion_search_ext(AV1_COMP *const cpi,
+int_mv av1_simple_motion_search_ext(AV1_COMP *const cpi, ThreadData *td,
                                     const TileInfo *const tile, MACROBLOCK *x,
                                     int mi_row, int mi_col, BLOCK_SIZE bsize,
                                     int ref, FULLPEL_MV start_mv,
@@ -1569,8 +1569,27 @@ int_mv av1_simple_motion_search_ext(AV1_COMP *const cpi,
   mbmi->mv[0] = best_mv;
 
   // Get a copy of the prediction output
+  struct buf_2d dst_old = xd->plane[AOM_PLANE_Y].dst;
+  uint32_t buf_off = dst_old.buf - dst_old.buf0;
+  uint32_t tx = buf_off % dst_old.stride;
+  uint32_t ty = buf_off / dst_old.stride;
+  td->sms_pred_buf.buf =
+      td->sms_pred_buf.buf0 + tx + ty * td->sms_pred_buf.stride;
+  xd->plane[AOM_PLANE_Y].dst = td->sms_pred_buf;
   av1_enc_build_inter_predictor(cm, xd, mi_row, mi_col, NULL, bsize,
                                 AOM_PLANE_Y, AOM_PLANE_Y);
+  xd->plane[AOM_PLANE_Y].dst = dst_old;
+  // copy the data back
+  int blk_w = block_size_wide[bsize];
+  int blk_h = block_size_high[bsize];
+  uint16_t *ptr0 = dst_old.buf, *ptr1 = td->sms_pred_buf.buf;
+  for (int i = 0; i < blk_h; i++) {
+    for (int j = 0; j < blk_w; j++) {
+      ptr0[j] = ptr1[j];
+    }
+    ptr0 += dst_old.stride;
+    ptr1 += td->sms_pred_buf.stride;
+  }
 
   aom_clear_system_state();
 

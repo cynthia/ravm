@@ -544,6 +544,7 @@ static AOM_INLINE void create_enc_workers(AV1_COMP *cpi, int num_workers) {
       // Set up sms_tree.
       av1_setup_sms_tree(cpi, thread_data->td);
       av1_setup_sms_bufs(cm, thread_data->td);
+      av1_setup_sms_pred_buf(cm, thread_data->td);
 
       for (int x = 0; x < 2; x++)
         for (int y = 0; y < 2; y++)

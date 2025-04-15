@@ -849,6 +849,7 @@ void reallocate_sb_size_dependent_buffers(AV1_COMP *cpi) {
 #if CONFIG_DIP_EXT_PRUNING
   intra_dip_mode_prune_close(&(cpi->td.dip_pruning_model));
 #endif  // CONFIG_DIP_EXT_PRUNING
+  av1_free_sms_pred_buf(&cpi->td);
   av1_free_pmc(cpi->td.firstpass_ctx, num_planes);
   cpi->td.firstpass_ctx = NULL;
   alloc_compressor_data(cpi);
@@ -936,6 +937,7 @@ void av1_setup_frame(AV1_COMP *cpi) {
 #if CONFIG_DIP_EXT_PRUNING
     intra_dip_mode_prune_close(&(cpi->td.dip_pruning_model));
 #endif  // CONFIG_DIP_EXT_PRUNING
+    av1_free_sms_pred_buf(&cpi->td);
     av1_free_pmc(cpi->td.firstpass_ctx, av1_num_planes(cm));
     cpi->td.firstpass_ctx = NULL;
     alloc_compressor_data(cpi);

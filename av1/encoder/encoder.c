@@ -87,6 +87,7 @@
 
 #if CONFIG_ML_PART_SPLIT
 #include "av1/encoder/part_split_prune_tflite.h"
+#include "tools/ml/py_bridge.h"
 #endif  // CONFIG_ML_PART_SPLIT
 
 #if CONFIG_DIP_EXT_PRUNING
@@ -1128,6 +1129,7 @@ void av1_change_config(struct AV1_COMP *cpi, const AV1EncoderConfig *oxcf) {
 #if CONFIG_DIP_EXT_PRUNING
       intra_dip_mode_prune_close(&(cpi->td.dip_pruning_model));
 #endif  // CONFIG_DIP_EXT_PRUNING
+      av1_free_sms_pred_buf(&cpi->td);
       av1_free_pmc(cpi->td.firstpass_ctx, av1_num_planes(cm));
       cpi->td.firstpass_ctx = NULL;
       alloc_compressor_data(cpi);
@@ -1210,6 +1212,13 @@ void av1_change_config(struct AV1_COMP *cpi, const AV1EncoderConfig *oxcf) {
   }
 
   cpi->alloc_pyramid = oxcf->tool_cfg.enable_global_motion;
+#if CONFIG_ML_PART_SPLIT
+  if (cpi->oxcf.part_cfg.py_datafile_name) {
+    size_t count;
+    py_datafile_delete_old_files(cpi->oxcf.part_cfg.py_datafile_name, &count);
+    printf("\x1b[92mDeleted %d old stats\x1b[0m\n", count);
+  }
+#endif
 }
 
 static INLINE void init_frame_info(FRAME_INFO *frame_info,
@@ -1568,6 +1577,7 @@ static AOM_INLINE void free_thread_data(AV1_COMP *cpi) {
     av1_free_shared_coeff_buffer(&thread_data->td->shared_coeff_buf);
     av1_free_sms_tree(thread_data->td);
     av1_free_sms_bufs(thread_data->td);
+    av1_free_sms_pred_buf(&cpi->td);
 #if CONFIG_ML_PART_SPLIT
     av2_part_prune_tflite_close(&(thread_data->td->partition_model));
 #endif  // CONFIG_ML_PART_SPLIT

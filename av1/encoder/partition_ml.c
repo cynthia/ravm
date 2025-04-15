@@ -365,8 +365,8 @@ struct ModelParams {
 };
 
 #define USE_MODEL(tgt_intra, tgt_level, tgt_bsize, model_type, low, high, qp_low, qp_high) {\
-  if (tgt_intra == intra && (tgt_level == harsh_level) && tgt_bsize == bsize && *num_models < 12) { \
-    if (!model_in_list(model_type, out, *num_models)) { \
+  if (tgt_intra == intra && (tgt_level == harsh_level || ds_mode) && tgt_bsize == bsize && *num_models < 12) { \
+    if (!ds_mode || !model_in_list(model_type, out, *num_models)) { \
       out[*num_models] = model_type; \
       struct ModelParams tmp = {low, high, qp_low, qp_high}; \
       params[*num_models] = tmp; \
@@ -376,7 +376,7 @@ struct ModelParams {
 }
 
 static void get_model_type(bool intra, BLOCK_SIZE bsize, int harsh_level,
-    MODEL_TYPE* out, struct ModelParams* params, int* num_models) {
+    bool ds_mode, MODEL_TYPE* out, struct ModelParams* params, int* num_models) {
   // TODO: de-dup the guys
   *num_models = 0;
   //        lvl blk model                                    low   high qp_l qp_h
@@ -657,7 +657,9 @@ int av1_ml_part_split_infer(AV1_COMP *const cpi, MACROBLOCK *x, int mi_row,
                             int mi_col, BLOCK_SIZE bsize,
                             const TileInfo *tile_info, ThreadData *td,
                             bool search_none_after_rect,
-                            bool* prune_list) {
+                            bool* prune_list, MLResult* ml_results,
+                            size_t* ml_count) {
+  *ml_count = 0;
   for (int i = 0; i < 4; i++) {
     prune_list[i] = false;
   }
@@ -682,8 +684,8 @@ int av1_ml_part_split_infer(AV1_COMP *const cpi, MACROBLOCK *x, int mi_row,
   MODEL_TYPE model_types[12];
   struct ModelParams model_params[12];
   int num_models = 0;
-  get_model_type(key_frame, bsize, harsh_level, model_types, model_params,
-                 &num_models);
+  get_model_type(key_frame, bsize, harsh_level, !!ml_results, model_types,
+                 model_params, &num_models);
   float ml_input[FEATURE_INTER_MAX] = { 0.0f };
   float ml_output[1] = { 0.0f };
   bool has_features = false;
@@ -714,6 +716,34 @@ int av1_ml_part_split_infer(AV1_COMP *const cpi, MACROBLOCK *x, int mi_row,
         ml_output, model_type);
 
     assert(!had_error);
+
+    // When in dataset mode we still run ML but we don't do anything
+    // about the result.
+    // ml_results being NULL indicates, not need to collect
+    if (ml_results) {
+      params.thresh_low = 0;
+      params.thresh_high = 1;
+      MLResult* result = &ml_results[(*ml_count)++];
+      for (int i = 0; i < FEATURE_INTER_MAX; i++)
+        result->x[i] = ml_input[i];
+      result->y = ml_output[0];
+      result->model = model_type;
+      result->x_shape = get_model_n_features(model_type);
+
+      // also check the correctness of the inverse
+      struct InputSpec input_spec;
+      av2_model_input_spec(model_type, &input_spec);
+      if (input_spec.valid) {
+        for (int i = 0; i < result->x_shape; i++) {
+          float diff = 1 / input_spec.std[i] - input_spec.invstd[i];
+          if (diff >= 0.00005) {
+            printf("[%d] %f != 1/%f, %f\n", model_type, input_spec.invstd[i],
+                   input_spec.std[i], diff);
+            break;
+          }
+        }
+      }
+    }
 
     if (had_error)
       continue;

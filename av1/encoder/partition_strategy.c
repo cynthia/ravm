@@ -1259,7 +1259,7 @@ static void compute_sms_data(AV1_COMP *const cpi, const TileInfo *const tile,
     for (int idx = 0; idx < sms_data->num_start_mvs; idx++) {
       const MV start_mv = sms_data->start_mv_list[idx];
       const FULLPEL_MV start_mv_full = get_fullmv_from_mv(&start_mv);
-      av1_simple_motion_search_ext(cpi, tile, x, mi_row, mi_col, bsize,
+      av1_simple_motion_search_ext(cpi, td, tile, x, mi_row, mi_col, bsize,
                                    ref_frame, start_mv_full, 1, 1, sms_data);
       sms_data->var = cpi->fn_ptr[bsize].vf(src_buf, src_stride, dst_buf,
                                             dst_stride, &sms_data->sse);

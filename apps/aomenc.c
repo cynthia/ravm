@@ -228,6 +228,9 @@ static const int av1_arg_ctrl_map[] = { AOME_SET_CPUUSED,
 #endif
                                         AV1E_SET_SUBGOP_CONFIG_STR,
                                         AV1E_SET_SUBGOP_CONFIG_PATH,
+#if CONFIG_ML_PART_SPLIT
+                                        AV1E_SET_PY_DATAFILE_NAME,
+#endif  // CONFIG_ML_PART_SPLIT
                                         AV1E_SET_FRAME_OUTPUT_ORDER_DERIVATION,
                                         AV1E_SET_ENABLE_CDF_AVERAGING,
                                         AV1E_SET_ENABLE_BRU,
@@ -429,6 +432,9 @@ const arg_def_t *av1_ctrl_args[] = {
 #endif
   &g_av1_codec_arg_defs.subgop_config_str,
   &g_av1_codec_arg_defs.subgop_config_path,
+#if CONFIG_ML_PART_SPLIT
+  &g_av1_codec_arg_defs.py_datafile_name,
+#endif
   &g_av1_codec_arg_defs.frame_hash_metadata,
   &g_av1_codec_arg_defs.frame_hash_per_plane,
   NULL,
@@ -1009,6 +1015,11 @@ static void set_config_arg_ctrls(struct stream_config *config, int key,
     return;
   }
 #endif
+
+  if (key == AV1E_SET_PY_DATAFILE_NAME) {
+    config->py_datafile_name = arg->val;
+    return;
+  }
 
   if (key == AV1E_SET_SUBGOP_CONFIG_STR) {
     config->subgop_config_str = arg->val;
@@ -1808,6 +1819,10 @@ static void initialize_encoder(struct stream_state *stream,
                                 AV1E_SET_FILM_GRAIN_BLOCK_SIZE,
                                 stream->config.film_grain_block_size);
 #endif
+  if (stream->config.py_datafile_name) {
+    AOM_CODEC_CONTROL_TYPECHECKED(&stream->encoder, AV1E_SET_PY_DATAFILE_NAME,
+                                  stream->config.py_datafile_name);
+  }
   AOM_CODEC_CONTROL_TYPECHECKED(&stream->encoder, AV1E_SET_COLOR_RANGE,
                                 stream->config.color_range);
 

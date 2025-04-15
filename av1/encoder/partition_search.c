@@ -45,6 +45,7 @@
 
 #if CONFIG_ML_PART_SPLIT
 #include "av1/encoder/partition_ml.h"
+#include "tools/ml/py_bridge.h"
 #endif
 
 static void update_partition_cdfs_and_counts(MACROBLOCKD *xd, int blk_col,
@@ -3758,6 +3759,9 @@ static void none_partition_search(
     return;
   }
 
+  struct aom_usec_timer non_timer;
+  aom_usec_timer_start(&non_timer);
+
   int pt_cost = 0;
   RD_STATS best_remain_rdcost;
 
@@ -3819,6 +3823,8 @@ static void none_partition_search(
     partition_timer_on = 0;
   }
 #endif
+  aom_usec_timer_mark(&non_timer);
+  // td->non_time[bsize] += aom_usec_timer_elapsed(&non_timer);
 
   *pb_source_variance = x->source_variance;
   if (none_rd) *none_rd = this_rdc->rdcost;
@@ -6145,6 +6151,8 @@ BEGIN_PARTITION_SEARCH:
   // Partition block source pixel variance.
   unsigned int pb_source_variance = UINT_MAX;
 #if CONFIG_ML_PART_SPLIT
+  MLResult ml_results[8];
+  size_t ml_count = 0;
   int next_force_prune_flags[2][3] = { { 0, 0, 0 }, { 0, 0, 0 } };
   // Don't use ML pruning if this is the second attempt to find a valid
   // partition.
@@ -6168,9 +6176,10 @@ BEGIN_PARTITION_SEARCH:
     //        prune either one or both.
     if (!force_prune_flags[PRUNE_OTHER]) {
       bool prune_list[4];
+      MLResult *ml_arg = cpi->oxcf.part_cfg.py_datafile_name ? ml_results : NULL;
       int ml_result =
           av1_ml_part_split_infer(cpi, x, mi_row, mi_col, bsize, tile_info, td,
-              search_none_after_rect, prune_list);
+              search_none_after_rect, prune_list, ml_arg, &ml_count);
       if (ml_result == ML_PART_FORCE_NONE || ml_result == ML_PART_FORCE_SPLIT ||
           ml_result == ML_PART_FORCE_VERT || ml_result == ML_PART_FORCE_HORZ) {
         part_search_state.prune_partition_3[0] = 1;
@@ -6553,6 +6562,48 @@ BEGIN_PARTITION_SEARCH:
   // Reset the PC_TREE deallocation flag.
   int pc_tree_dealloc = 0;
 
+#if CONFIG_ML_PART_SPLIT
+  // Only storing dataset if the datafile is provided, and only if:
+  //   * evaluated this branch and not bailed out;
+  //   * partition picked on its merit and not based on its context;
+  if (part_search_state.found_best_partition &&
+      part_search_state.forced_partition == PARTITION_INVALID &&
+      part_search_state.partition_none_allowed &&
+      part_search_state.partition_rect_allowed[HORZ] &&
+      part_search_state.partition_rect_allowed[VERT] &&
+      cpi->oxcf.part_cfg.py_datafile_name) {
+
+    float label = pc_tree->partitioning;
+    float true_label = pc_tree->partitioning;
+    if (pc_tree->partitioning == PARTITION_VERT &&
+        pc_tree->vertical[pc_tree->region_type][0]->partitioning ==
+            PARTITION_HORZ &&
+        pc_tree->vertical[pc_tree->region_type][1]->partitioning ==
+            PARTITION_HORZ)
+      label = PARTITION_SPLIT;
+    if (pc_tree->partitioning == PARTITION_HORZ &&
+        pc_tree->horizontal[pc_tree->region_type][0]->partitioning ==
+            PARTITION_VERT &&
+        pc_tree->horizontal[pc_tree->region_type][1]->partitioning ==
+            PARTITION_VERT)
+      label = PARTITION_SPLIT;
+    for (size_t i = 0; i < ml_count; i++) {
+      char data_file[64];
+      char var_name[16];
+      sprintf(data_file, "model_%d_%s", ml_results[i].model,
+              get_model_name(ml_results[i].model));
+      sprintf(var_name, "x_%d", cm->cur_frame->absolute_poc);
+      py_datafile_add_1d(&td->py_bridge, data_file, var_name, ml_results[i].x,
+                         ml_results[i].x_shape);
+      sprintf(var_name, "y_%d", cm->cur_frame->absolute_poc);
+      py_datafile_add_0d(&td->py_bridge, data_file, var_name, &ml_results[i].y);
+      sprintf(var_name, "label_%d", cm->cur_frame->absolute_poc);
+      py_datafile_add_0d(&td->py_bridge, data_file, var_name, &label);
+      sprintf(var_name, "true_%d", cm->cur_frame->absolute_poc);
+      py_datafile_add_0d(&td->py_bridge, data_file, var_name, &true_label);
+    }
+  }
+#endif
   // If a valid partition is found and reconstruction is required for future
   // sub-blocks in the same group.
   if (part_search_state.found_best_partition && pc_tree->index != 3) {

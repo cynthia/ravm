@@ -37,6 +37,10 @@
 #include "aom_dsp/psnr.h"
 #include "aom_ports/aom_timer.h"
 
+#if CONFIG_ML_PART_SPLIT
+#include "tools/ml/py_bridge.h"
+#endif
+
 #define MAG_SIZE (4)
 
 struct av1_extracfg {
@@ -251,6 +255,9 @@ struct av1_extracfg {
   int crop_win_top_offset;     // cropping window top offset
   int crop_win_bottom_offset;  // cropping window bottom offset
 #endif                         // CONFIG_CROP_WIN_CWG_F220
+#if CONFIG_ML_PART_SPLIT
+  char *py_datafile_name;
+#endif
 };
 
 // Example subgop configs. Currently not used by default.
@@ -587,6 +594,9 @@ static struct av1_extracfg default_extra_cfg = {
   0,     // crop_win_top_offset
   0,     // crop_win_bottom_offset
 #endif  // CONFIG_CROP_WIN_CWG_F220
+#if CONFIG_ML_PART_SPLIT
+  NULL,  // py_datafile_name
+#endif   // CONFIG_ML_PART_SPLIT
 };
 // clang-format on
 
@@ -1760,6 +1770,9 @@ static aom_codec_err_t set_encoder_config(AV1EncoderConfig *oxcf,
   part_cfg->enable_ext_partitions = extra_cfg->enable_ext_partitions;
   part_cfg->min_partition_size = extra_cfg->min_partition_size;
   part_cfg->max_partition_size = extra_cfg->max_partition_size;
+#if CONFIG_ML_PART_SPLIT
+  part_cfg->py_datafile_name = extra_cfg->py_datafile_name;
+#endif
 
   // Set intra mode configuration.
   intra_mode_cfg->enable_angle_delta = extra_cfg->enable_angle_delta;
@@ -2682,6 +2695,13 @@ static aom_codec_err_t ctrl_set_film_grain_test_vector(
   return update_extra_cfg(ctx, &extra_cfg);
 }
 
+static aom_codec_err_t ctrl_set_py_datafile(aom_codec_alg_priv_t *ctx,
+                                            va_list args) {
+  struct av1_extracfg extra_cfg = ctx->extra_cfg;
+  extra_cfg.py_datafile_name = CAST(AV1E_SET_PY_DATAFILE_NAME, args);
+  return update_extra_cfg(ctx, &extra_cfg);
+}
+
 static aom_codec_err_t ctrl_set_film_grain_table(aom_codec_alg_priv_t *ctx,
                                                  va_list args) {
   struct av1_extracfg extra_cfg = ctx->extra_cfg;
@@ -3147,6 +3167,17 @@ static void report_stats(AV1_COMP *cpi, size_t frame_size, uint64_t cx_time) {
       fprintf(stdout, "]\n");
 #endif  // CONFIG_CWG_F317_TEST_PATTERN
   }
+#if CONFIG_ML_PART_SPLIT
+  MultiThreadInfo *const mt_info = &cpi->mt_info;
+  for (int t = 0; t < mt_info->num_workers; ++t) {
+    EncWorkerData *const thread_data = &mt_info->tile_thr_data[t];
+    py_datafile_fold(&cpi->td.py_bridge, &thread_data->td->py_bridge);
+  }
+  if (cpi->oxcf.part_cfg.py_datafile_name) {
+    printf("Storing PY data to: %s\n", cpi->oxcf.part_cfg.py_datafile_name);
+    py_datafile_close(&cpi->td.py_bridge, cpi->oxcf.part_cfg.py_datafile_name);
+  }
+#endif
 }
 
 // TODO(Mufaddal): Check feasibility of abstracting functions related to LAP
@@ -4071,6 +4102,9 @@ static aom_codec_err_t encoder_set_option(aom_codec_alg_priv_t *ctx,
   } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.film_grain_test, argv,
                               err_string)) {
     extra_cfg.film_grain_test_vector = arg_parse_int_helper(&arg, err_string);
+  } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.py_datafile_name,
+                              argv, err_string)) {
+    extra_cfg.py_datafile_name = value;
   } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.film_grain_table,
                               argv, err_string)) {
     extra_cfg.film_grain_table_filename = value;
@@ -4613,6 +4647,9 @@ static aom_codec_ctrl_fn_map_t encoder_ctrl_maps[] = {
   { AV1E_SET_FILM_GRAIN_TABLE, ctrl_set_film_grain_table },
 #if CONFIG_FGS_BLOCK_SIZE
   { AV1E_SET_FILM_GRAIN_BLOCK_SIZE, ctrl_set_film_grain_block_size },
+#endif
+#if CONFIG_ML_PART_SPLIT
+  { AV1E_SET_PY_DATAFILE_NAME, ctrl_set_py_datafile },
 #endif
   { AV1E_SET_DENOISE_NOISE_LEVEL, ctrl_set_denoise_noise_level },
   { AV1E_SET_DENOISE_BLOCK_SIZE, ctrl_set_denoise_block_size },

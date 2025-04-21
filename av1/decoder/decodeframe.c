@@ -3894,6 +3894,12 @@ static AOM_INLINE void setup_ccso(AV1_COMMON *cm,
 #endif  // CONFIG_CCSO_SIGFIX
             cm->ccso_info.max_band_log2[plane] = aom_rb_read_literal(rb, 2);
           }
+#if CONFIG_CCSO_DEBUG
+          printf("CCSO: plane %d quant_idx %d ext_filter_support %d edge_clf %d ccso_bo_only %d max_band_log2 %d scale_idx %d @ %s\n",
+                 plane, cm->ccso_info.quant_idx[plane], cm->ccso_info.ext_filter_support[plane],
+                 cm->ccso_info.edge_clf[plane], cm->ccso_info.ccso_bo_only[plane],
+                 cm->ccso_info.max_band_log2[plane], cm->ccso_info.scale_idx[plane], __FUNCTION__);
+#endif
           const int max_band = 1 << cm->ccso_info.max_band_log2[plane];
 #if !CONFIG_CCSO_SIGFIX
           cm->ccso_info.edge_clf[plane] = aom_rb_read_bit(rb);

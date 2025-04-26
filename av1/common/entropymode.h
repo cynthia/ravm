@@ -422,7 +422,9 @@ typedef struct frame_contexts {
 #if CONFIG_PALETTE_LINE_COPY
   aom_cdf_prob identity_row_cdf_y[PALETTE_ROW_FLAG_CONTEXTS][CDF_SIZE(3)];
   aom_cdf_prob identity_row_cdf_uv[PALETTE_ROW_FLAG_CONTEXTS][CDF_SIZE(3)];
+#if !CONFIG_PLT_DIR_CTX
   aom_cdf_prob palette_direction_cdf[CDF_SIZE(2)];
+#endif  // !CONFIG_PLT_DIR_CTX
 #else
   aom_cdf_prob identity_row_cdf_y[PALETTE_ROW_FLAG_CONTEXTS][CDF_SIZE(2)];
   aom_cdf_prob identity_row_cdf_uv[PALETTE_ROW_FLAG_CONTEXTS][CDF_SIZE(2)];
@@ -542,7 +544,9 @@ typedef struct frame_contexts {
   aom_cdf_prob wienerns_uv_sym_cdf[CDF_SIZE(2)];
   aom_cdf_prob wienerns_4part_cdf[WIENERNS_4PART_CTX_MAX][CDF_SIZE(4)];
   aom_cdf_prob pc_wiener_restore_cdf[CDF_SIZE(2)];
+#if !CONFIG_MERGE_PARA_CTX
   aom_cdf_prob merged_param_cdf[CDF_SIZE(2)];
+#endif  // !CONFIG_MERGE_PARA_CTX
 #if !CONFIG_AIMC
   aom_cdf_prob y_mode_cdf[BLOCK_SIZE_GROUPS][CDF_SIZE(INTRA_MODES)];
   aom_cdf_prob uv_mode_cdf[CFL_ALLOWED_TYPES][INTRA_MODES]

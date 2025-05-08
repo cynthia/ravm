@@ -158,6 +158,9 @@ set_aom_config_var(CONFIG_PLT_DIR_CTX 1 "by-pass PLT dir coding. FG8-Test24")
 set_aom_config_var(CONFIG_MERGE_PARA_CTX 1
                    "by-pass merge para coding. FG8-Test26")
 
+set_aom_config_var(CONFIG_BYPASS_WARP_PARAM_HIGH 1 "bypass coding FG8-Test22")
+set_aom_config_var(CONFIG_BYPASS_WARP_PARAM_SIGN 1 "bypass coding FG8-Test23")
+
 # AV2 experiment flags.
 set_aom_config_var(CONFIG_IMPROVEIDTX 1
                    "AV2 enable improved identity transform coding.")

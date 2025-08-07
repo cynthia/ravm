@@ -135,12 +135,19 @@ static aom_codec_err_t decoder_destroy(aom_codec_alg_priv_t *ctx) {
   printf(
       "avg_ctx_syms : %lld\t avg_bypass_syms : %lld\t max_ctx_syms : %lld\t "
       "max_bypass_syms : %lld\t max_bits : %lld\t total_bits : %lld\t "
-      "context_switches : %lld\t total_hits : %lld\n",
+      "context_switches : %lld\t total_hits : %lld\t avg_bins(sym-1) : %lld\t max_bins(sym-1) : %lld \t "
+      "avg_ctx_log2 : %lld\t avg_bypass_log2 : %lld\t max_ctx_log2 : %lld\t max_bypass_log2 : %lld\t \n",
       (long long)(tot_ctx_syms / tot_frames),
       (long long)(tot_bypass_syms / tot_frames), max_ctx_syms, max_bypass_syms,
       (long long)(max_bits / 65536), (long long)(tot_bits / 65536),
       (long long)(total_context_switch / tot_frames),
-      (long long)(total_total_hits / tot_frames));
+      (long long)(total_total_hits / tot_frames),
+      (long long)(tot_symlen_minus1 / tot_frames),
+      (long long)(max_symlen_minus1),
+      (long long)(tot_ctx_log2 / tot_frames),
+      (long long)(tot_bypass_log2 / tot_frames),
+      (long long)(max_ctx_log2),
+      (long long)(max_bypass_log2));
 #endif  // CONFIG_THROUGHPUT_ANALYSIS
 
   if (ctx->frame_worker != NULL) {

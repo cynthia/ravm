@@ -19,9 +19,15 @@ extern "C" {
 
 #if CONFIG_THROUGHPUT_ANALYSIS
 extern int64_t tot_ctx_syms;
+extern int64_t tot_symlen_minus1;
+extern int64_t tot_bypass_log2;
+extern int64_t tot_ctx_log2;
 extern int64_t tot_bypass_syms;
 extern int64_t max_ctx_syms;
 extern int64_t max_bypass_syms;
+extern int64_t max_symlen_minus1;
+extern int64_t max_bypass_log2;
+extern int64_t max_ctx_log2;
 extern int64_t max_bits;
 extern int64_t tot_bits;
 extern int64_t tot_frames;

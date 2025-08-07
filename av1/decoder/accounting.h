@@ -102,6 +102,10 @@ typedef struct {
   int num_bypass_coded;
   /** Context coded. */
   int num_ctx_coded;
+  /** Estimate bins coded. */
+  int num_symlen_minus1;
+  int num_ctx_log2;
+  int num_bypass_log2;
   uint16_t *prev_context_id;
   int context_switch;
   int total_hits;

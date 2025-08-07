@@ -1376,12 +1376,20 @@ struct total_sym_stats {
   int64_t tot_bits;
   /** total ctx coded symbols. */
   int64_t tot_ctx_syms;
+  /** total symbol - 1 counts for bin estimate. */
+  int64_t tot_symlen_minus1;
+  int64_t tot_bypass_log2;
+  int64_t tot_ctx_log2;
   /** total bypass coded symbols. */
   int64_t tot_bypass_syms;
   /** peak ctx coded symbols. */
   int64_t peak_ctx_syms;
   /** peak bypass coded symbols. */
   int64_t peak_bypass_syms;
+  /** peak symbols - 1 symbols. */
+  int64_t peak_symlen_minus1;
+  int64_t peak_bypass_log2;
+  int64_t peak_ctx_log2;
   /** peak bits. */
   int64_t peak_bits;
   /** total number of cdf switches */

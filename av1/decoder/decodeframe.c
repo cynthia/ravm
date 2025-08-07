@@ -114,9 +114,15 @@ void copy_frame_filters_to_runits_if_needed(AV1_COMMON *cm) {
 
 #if CONFIG_THROUGHPUT_ANALYSIS
 int64_t tot_ctx_syms = { 0 };
+int64_t tot_symlen_minus1 = { 0 };
+int64_t tot_bypass_log2 = { 0 };
+int64_t tot_ctx_log2 = { 0 };
 int64_t tot_bypass_syms = { 0 };
 int64_t max_ctx_syms = { 0 };
 int64_t max_bypass_syms = { 0 };
+int64_t max_symlen_minus1 = { 0 };
+int64_t max_bypass_log2 = { 0 };
+int64_t max_ctx_log2 = { 0 };
 int64_t max_bits = { 0 };
 int64_t tot_bits = { 0 };
 int64_t tot_frames = { 0 };
@@ -4720,17 +4726,26 @@ static void aom_accounting_cal_total(AV1Decoder *pbi) {
   if (pbi->decoding_first_frame) {
     pbi->common.sym_stats.frame_dec_order = 0;
     pbi->common.sym_stats.tot_ctx_syms = 0;
+    pbi->common.sym_stats.tot_symlen_minus1 = 0;
+    pbi->common.sym_stats.tot_bypass_log2 = 0;
+    pbi->common.sym_stats.tot_ctx_log2 = 0;
     pbi->common.sym_stats.total_total_hits = 0;
     pbi->common.sym_stats.total_context_switch = 0;
     pbi->common.sym_stats.tot_bypass_syms = 0;
     pbi->common.sym_stats.tot_bits = 0;
     pbi->common.sym_stats.peak_ctx_syms = 0;
+    pbi->common.sym_stats.peak_symlen_minus1 = 0;
+    pbi->common.sym_stats.peak_bypass_log2 = 0;
+    pbi->common.sym_stats.peak_ctx_log2 = 0;
     pbi->common.sym_stats.peak_bypass_syms = 0;
     pbi->common.sym_stats.peak_bits = 0;
   }
   Accounting accounting = pbi->accounting;
   int64_t frm_ctx_syms = accounting.syms.num_ctx_coded;
   int64_t frm_bypass_syms = accounting.syms.num_bypass_coded;
+  int64_t frm_symlen_minus1 = accounting.syms.num_symlen_minus1;
+  int64_t frm_bypass_log2 = accounting.syms.num_bypass_log2;
+  int64_t frm_ctx_log2 = accounting.syms.num_ctx_log2;
   int64_t frm_context_switch = accounting.syms.context_switch;
   int64_t frm_total_hits = accounting.syms.total_hits;
   int64_t frm_bits = 0;
@@ -4741,6 +4756,9 @@ static void aom_accounting_cal_total(AV1Decoder *pbi) {
   int64_t peak_ctx_syms = pbi->common.sym_stats.peak_ctx_syms;
   int64_t peak_bypass_syms = pbi->common.sym_stats.peak_bypass_syms;
   pbi->common.sym_stats.tot_ctx_syms += frm_ctx_syms;
+  pbi->common.sym_stats.tot_symlen_minus1 += frm_symlen_minus1;
+  pbi->common.sym_stats.tot_bypass_log2 += frm_bypass_log2;
+  pbi->common.sym_stats.tot_ctx_log2 += frm_ctx_log2;
   pbi->common.sym_stats.total_context_switch += frm_context_switch;
   pbi->common.sym_stats.total_total_hits += frm_total_hits;
   pbi->common.sym_stats.tot_bypass_syms += frm_bypass_syms;
@@ -4751,13 +4769,22 @@ static void aom_accounting_cal_total(AV1Decoder *pbi) {
     pbi->common.sym_stats.peak_ctx_syms = frm_ctx_syms;
     pbi->common.sym_stats.peak_bypass_syms = frm_bypass_syms;
     pbi->common.sym_stats.peak_bits = frm_bits;
+    pbi->common.sym_stats.peak_symlen_minus1 = frm_symlen_minus1;
+    pbi->common.sym_stats.peak_bypass_log2 = frm_bypass_log2;
+    pbi->common.sym_stats.peak_ctx_log2 = frm_ctx_log2;
   }
   tot_ctx_syms = pbi->common.sym_stats.tot_ctx_syms;
+  tot_symlen_minus1 = pbi->common.sym_stats.tot_symlen_minus1;
+  tot_ctx_log2 = pbi->common.sym_stats.tot_ctx_log2;
+  tot_bypass_log2 = pbi->common.sym_stats.tot_bypass_log2;
   tot_bypass_syms = pbi->common.sym_stats.tot_bypass_syms;
   tot_bits = pbi->common.sym_stats.tot_bits;
   total_context_switch = pbi->common.sym_stats.total_context_switch;
   total_total_hits = pbi->common.sym_stats.total_total_hits;
   max_ctx_syms = pbi->common.sym_stats.peak_ctx_syms;
+  max_symlen_minus1 = pbi->common.sym_stats.peak_symlen_minus1;
+  max_bypass_log2 = pbi->common.sym_stats.peak_bypass_log2;
+  max_ctx_log2 = pbi->common.sym_stats.peak_ctx_log2;
   max_bypass_syms = pbi->common.sym_stats.peak_bypass_syms;
   max_bits = pbi->common.sym_stats.peak_bits;
   tot_frames = pbi->common.sym_stats.frame_dec_order;

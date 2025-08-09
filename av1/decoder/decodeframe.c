@@ -8555,7 +8555,7 @@ static int read_uncompressed_header(AV1Decoder *pbi,
 #else   // CONFIG_EXT_SEG
   const int max_seg_num = MAX_SEGMENTS;
 #endif  // CONFIG_EXT_SEG
-  for (int i = 0; i < max_seg_num; i++) {
+  for (int i = 0; i < (cm->seg.enabled ? max_seg_num : 1); i++) {
     const int qindex = av1_get_qindex(&cm->seg, i, quant_params->base_qindex,
                                       cm->seq_params.bit_depth);
     xd->lossless[i] =

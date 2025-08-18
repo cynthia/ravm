@@ -805,6 +805,183 @@ static int get_remaining_mi_size(const MB_MODE_INFO *mbmi,
   return mi_remain_size;
 }
 
+// Optimized version of set_lpf_parameters for Y plane only.
+static TX_SIZE set_lpf_parameters_y(
+    AV1_DEBLOCKING_PARAMETERS *const params, MB_MODE_INFO *mbmi,
+#if CONFIG_BRU
+    AV1_COMMON *const cm,
+#else
+    const AV1_COMMON *const cm,
+#endif  // CONFIG_BRU
+    TX_SIZE *pv_ts, const uint32_t curr_q, const uint32_t curr_side,
+    const int curr_skipped, const uint32_t pv_q, const uint32_t pv_side,
+    const int pv_skip_txfm, const MACROBLOCKD *const xd,
+    const EDGE_DIR edge_dir, const uint32_t x, const uint32_t y,
+    const int plane, const struct macroblockd_plane *const plane_ptr) {
+  // If current mbmi is not correctly setup, return an invalid value to stop
+  // filtering. One example is that if this tile is not coded, then its mbmi
+  // it not set up.
+  if (mbmi == NULL) return TX_INVALID;
+  // no deblocking is required
+  const uint32_t width = plane_ptr->dst.width;
+  const uint32_t height = plane_ptr->dst.height;
+  // just return the smallest transform unit size
+  if ((width <= x) || (height <= y)) return TX_4X4;
+
+#if CONFIG_ASYM_DF
+  params->filter_length_neg = 0;
+  params->filter_length_pos = 0;
+#else
+  params->filter_length = 0;
+#endif  // CONFIG_ASYM_DF
+  TREE_TYPE tree_type = SHARED_PART;
+  const int scale_horz = 0;
+  const int scale_vert = 0;
+  const bool is_sdp_eligible = cm->seq_params.enable_sdp &&
+                               !cm->seq_params.monochrome &&
+                               mbmi->region_type == INTRA_REGION;
+  if (is_sdp_eligible) {
+    tree_type = (plane == AOM_PLANE_Y) ? LUMA_PART : CHROMA_PART;
+  }
+  bool tu_edge;
+  const int mi_row = y >> MI_SIZE_LOG2;
+  const int mi_col = x >> MI_SIZE_LOG2;
+#if CONFIG_LF_SUB_PU
+  bool is_tx_m_partition = false;
+  TX_SIZE ts =
+      get_transform_size(xd, mbmi, edge_dir, mi_row, mi_col, plane, tree_type,
+                         plane_ptr, &tu_edge, &is_tx_m_partition);
+#else
+  TX_SIZE ts = get_transform_size(xd, mbmi, edge_dir, mi_row, mi_col, plane,
+                                  tree_type, plane_ptr, &tu_edge);
+#endif  // CONFIG_LF_SUB_PU
+  const uint32_t coord = (VERT_EDGE == edge_dir) ? (x) : (y);
+#if CONFIG_LF_SUB_PU
+  int32_t sub_pu_edge = 0;
+  check_sub_pu_edge(cm, xd, mbmi, plane, tree_type, scale_horz, scale_vert,
+                    edge_dir, coord, &ts, &sub_pu_edge, &is_tx_m_partition);
+  if (!tu_edge && !sub_pu_edge) return ts;
+#else
+  if (!tu_edge) return ts;
+#endif  // CONFIG_LF_SUB_PU
+#if CONFIG_BRU
+  if (cm->bru.enabled) {
+    if (mbmi->sb_active_mode != BRU_ACTIVE_SB) {
+      aom_internal_error(&cm->error, AOM_CODEC_ERROR,
+                         "Invalid BRU activity in deblocking: only active SB "
+                         "can be filtered");
+    }
+  }
+#endif  // CONFIG_BRU
+  // prepare outer edge parameters. deblock the edge if it's an edge of a TU
+  if (coord) {
+    const uint32_t pu_starting_coord = get_pu_starting_cooord(
+        mbmi, plane, tree_type, scale_horz, scale_vert, edge_dir);
+    const bool pu_edge = (coord == pu_starting_coord);
+#if CONFIG_LF_SUB_PU
+    const int none_skip_txfm = (!pv_skip_txfm || !curr_skipped);
+#endif  // CONFIG_LF_SUB_PU
+    if (((curr_q && curr_side) || (pv_q && pv_side)) &&
+#if CONFIG_LF_SUB_PU
+        (none_skip_txfm || sub_pu_edge
+#else
+        (!pv_skip_txfm || !curr_skipped
+#endif  // CONFIG_LF_SUB_PU
+         || pu_edge)) {
+      TX_SIZE clipped_ts = ts;
+      if (((VERT_EDGE == edge_dir) && (width < x + 16)) ||
+          ((HORZ_EDGE == edge_dir) && (height < y + 16))) {
+        // make sure filtering does not get outside the frame size
+        clipped_ts = AOMMIN(clipped_ts, TX_16X16);
+      }
+      const TX_SIZE min_ts = AOMMIN(clipped_ts, *pv_ts);
+      if (TX_4X4 >= min_ts) {
+#if CONFIG_ASYM_DF
+        params->filter_length_neg = 4;
+        params->filter_length_pos = 4;
+#else
+        params->filter_length = 4;
+#endif  // CONFIG_ASYM_DF
+      } else if (TX_8X8 == min_ts) {
+#if CONFIG_ASYM_DF
+        params->filter_length_neg = 8;
+        params->filter_length_pos = 8;
+#else
+        params->filter_length = 8;
+#endif  // CONFIG_ASYM_DF
+      } else if (TX_16X16 == min_ts) {
+#if CONFIG_ASYM_DF
+        params->filter_length_neg = 14;
+        params->filter_length_pos = 14;
+#else
+        params->filter_length = 14;
+#endif  // CONFIG_ASYM_DF
+      } else {
+        // if the current and the previous blocks are skipped,
+        // deblock the edge if the edge belongs to a PU's edge only.
+        const unsigned int hor_sb_size = block_size_wide[cm->sb_size];
+#if CONFIG_ASYM_DF
+        const int vert_sb_mask = block_size_high[BLOCK_64X64] - 1;
+#else
+        const int vert_sb_mask = block_size_high[cm->sb_size] - 1;
+#endif  // CONFIG_ASYM_DF
+        const int horz_superblock_edge =
+            (HORZ_EDGE == edge_dir) && !(coord & vert_sb_mask);
+        int vert_tile_edge = 0;
+        for (int i = 1; i < cm->tiles.cols; ++i) {
+#if CONFIG_ASYM_DF
+          if ((cm->tiles.col_start_sb[i] * hor_sb_size == coord) &&
+              (VERT_EDGE == edge_dir))
+#else
+          if (cm->tiles.col_start_sb[i] * hor_sb_size == coord)
+#endif  // CONFIG_ASYM_DF
+          {
+            vert_tile_edge = 1;
+          }
+        }
+        if (horz_superblock_edge || vert_tile_edge) {
+#if CONFIG_ASYM_DF
+          params->filter_length_neg = 14;
+          params->filter_length_pos = 18;
+#else
+          params->filter_length = 14;
+#endif  // CONFIG_ASYM_DF
+        } else {
+#if CONFIG_ASYM_DF
+          params->filter_length_neg = 18;
+          params->filter_length_pos = 18;
+#else
+          params->filter_length = 22;
+#endif  // CONFIG_ASYM_DF
+        }
+      }
+
+      *pv_ts = ts;
+      // update the level if the current block is skipped,
+      // but the previous one is not
+#if CONFIG_DF_DQP
+      params->q_threshold = (curr_q && pv_q) ? (curr_q + pv_q + 1) >> 1
+                            : (curr_q)       ? (curr_q)
+                                             : (pv_q);
+      params->side_threshold = curr_side && pv_side
+                                   ? (curr_side + pv_side + 1) >> 1
+                               : (curr_side) ? (curr_side)
+                                             : (pv_side);
+#else
+      params->q_threshold = (curr_q) ? (curr_q) : (pv_q);
+      params->side_threshold = (curr_side) ? (curr_side) : (pv_side);
+#endif  // CONFIG_DF_DQP
+#if CONFIG_LF_SUB_PU
+      if (sub_pu_edge && !tu_edge) {
+        params->q_threshold >>= SUB_PU_THR_SHIFT;
+        params->side_threshold >>= SUB_PU_THR_SHIFT;
+      }
+#endif  // CONFIG_LF_SUB_PU
+    }
+  }
+  return ts;
+}
+
 // Return TX_SIZE from get_transform_size(), so it is plane and direction
 // aware
 static TX_SIZE set_lpf_parameters(
@@ -1368,6 +1545,168 @@ void av1_filter_block_plane_vert(AV1_COMMON *const cm,
     }
   }
 }
+
+// Optimized version of vertical deblocking filter for Y plane only.
+// It is equivalent to av1_filter_block_plane_vert but faster.
+void av1_filter_block_plane_vert_y(
+#if CONFIG_BRU
+    AV1_COMMON *const cm,
+#else
+    const AV1_COMMON *const cm,
+#endif  // CONFIG_BRU
+    const MACROBLOCKD *const xd, const int plane,
+    const MACROBLOCKD_PLANE *const plane_ptr, const int mi_row,
+    const int mi_col) {
+  if (!plane && !cm->lf.filter_level[0]) return;
+  const int mib_size = cm->mib_size;
+  const int mi_stride = cm->mi_params.mi_stride;
+  MB_MODE_INFO **mi_row_ptr =
+      cm->mi_params.mi_grid_base + mi_row * mi_stride + mi_col;
+  MB_MODE_INFO *mbmi = mi_row_ptr[0];
+  int prev_mi_row = mi_row;
+  const int prev_mi_col = mi_col == 0 ? 0 : mi_col - 1;
+  MB_MODE_INFO **prev_mi_row_ptr =
+      cm->mi_params.mi_grid_base + prev_mi_row * mi_stride + prev_mi_col;
+  MB_MODE_INFO *mi_prev = prev_mi_row_ptr[0];
+#if CONFIG_BRU
+  if (cm->bru.enabled) {
+    if (mbmi->sb_active_mode != BRU_ACTIVE_SB) return;
+  }
+#endif  // CONFIG_BRU
+  uint16_t *const dst_ptr = plane_ptr->dst.buf;
+  const int dst_stride = plane_ptr->dst.stride;
+  const int y_range = AOMMIN(mib_size, cm->mi_params.mi_rows - mi_row);
+  const int x_range = AOMMIN(mib_size, cm->mi_params.mi_cols - mi_col);
+  const int x_start = mi_col << MI_SIZE_LOG2;
+  const int y_start = mi_row << MI_SIZE_LOG2;
+  const aom_bit_depth_t bit_depth = cm->seq_params.bit_depth;
+  const EDGE_DIR edge_dir = VERT_EDGE;
+  TX_SIZE prev_tx_size = TX_32X32;
+  uint32_t prev_q = av1_get_filter_q(&cm->lf_info, edge_dir, plane, mi_prev
+#if CONFIG_DF_DQP
+                                     ,
+                                     cm->seq_params.bit_depth
+#endif  // CONFIG_DF_DQP
+  );
+  uint32_t prev_side =
+      av1_get_filter_side(&cm->lf_info, edge_dir, plane, mi_prev
+#if CONFIG_DF_DQP
+                          ,
+                          cm->seq_params.bit_depth
+#endif  // CONFIG_DF_DQP
+      );
+  int prev_skip_txfm = mi_prev->skip_txfm[0] && is_inter_block(mi_prev, 0);
+  AV1_DEBLOCKING_PARAMETERS params;
+  memset(&params, 0, sizeof(params));
+
+  for (int y = 0; y < y_range; y++, mi_row_ptr += mi_stride,
+           prev_mi_row_ptr += mi_stride, ++prev_mi_row) {
+    const int y_offset = y << MI_SIZE_LOG2;
+    uint16_t *p = dst_ptr + y_offset * dst_stride;
+    MB_MODE_INFO **mi_ptr = mi_row_ptr;
+    for (int x = 0; x < x_range;) {
+      mbmi = mi_ptr[0];
+      if (x == 0) {
+        mi_prev = prev_mi_row_ptr[0];
+        TREE_TYPE prev_tree_type = SHARED_PART;
+        const bool is_prev_sdp_eligible = cm->seq_params.enable_sdp &&
+                                          !cm->seq_params.monochrome &&
+                                          mi_prev->region_type == INTRA_REGION;
+        if (is_prev_sdp_eligible) {
+          prev_tree_type = (plane == AOM_PLANE_Y) ? LUMA_PART : CHROMA_PART;
+        }
+        bool prev_tu_edge;
+#if CONFIG_LF_SUB_PU
+        bool pv_is_tx_m_partition = false;
+#endif
+        prev_tx_size =
+            get_transform_size(xd, mi_prev, edge_dir, prev_mi_row, prev_mi_col,
+                               plane, prev_tree_type, plane_ptr, &prev_tu_edge
+#if CONFIG_LF_SUB_PU
+                               ,
+                               &pv_is_tx_m_partition
+#endif  // CONFIG_LF_SUB_PU
+            );
+#if CONFIG_LF_SUB_PU
+        int32_t pv_sub_pu_edge = 0;
+        const int scale_horz = 0;
+        const int scale_vert = 0;
+        check_sub_pu_edge(cm, xd, mi_prev, plane, prev_tree_type, scale_horz,
+                          scale_vert, edge_dir, 0, &prev_tx_size,
+                          &pv_sub_pu_edge, &pv_is_tx_m_partition);
+#endif  // CONFIG_LF_SUB_PU
+      }
+      // inner loop always filter vertical edges in a MI block. If MI size
+      // is 8x8, it will filter the vertical edge aligned with a 8x8 block.
+      // If 4x4 transform is used, it will then filter the internal edge
+      //  aligned with a 4x4 block
+      const uint32_t x_offset = x << MI_SIZE_LOG2;
+      const uint32_t curr_x = x_start + x_offset;
+      const uint32_t curr_y = y_start + y_offset;
+      const uint32_t curr_q =
+          av1_get_filter_q(&cm->lf_info, edge_dir, plane, mbmi
+#if CONFIG_DF_DQP
+                           ,
+                           cm->seq_params.bit_depth
+#endif  // CONFIG_DF_DQP
+          );
+      const uint32_t curr_side =
+          av1_get_filter_side(&cm->lf_info, edge_dir, plane, mbmi
+#if CONFIG_DF_DQP
+                              ,
+                              cm->seq_params.bit_depth
+#endif  // CONFIG_DF_DQP
+          );
+      const int curr_skipped = mbmi->skip_txfm[0] && is_inter_block(mbmi, 0);
+
+      TX_SIZE tx_size = set_lpf_parameters_y(
+          &params, mbmi, cm, &prev_tx_size, curr_q, curr_side, curr_skipped,
+          prev_q, prev_side, prev_skip_txfm, xd, edge_dir, curr_x, curr_y,
+          plane, plane_ptr);
+      if (tx_size == TX_INVALID) {
+#if CONFIG_ASYM_DF
+        params.filter_length_neg = 0;
+        params.filter_length_pos = 0;
+#else
+        params.filter_length = 0;
+#endif  // CONFIG_ASYM_DF
+        tx_size = TX_4X4;
+      }
+#if CONFIG_ASYM_DF
+      if (params.filter_length_neg || params.filter_length_pos)
+#else
+      if (params.filter_length)
+#endif  // CONFIG_ASYM_DF
+      {
+        aom_highbd_lpf_vertical_generic(
+            p, dst_stride,
+#if CONFIG_ASYM_DF
+            params.filter_length_neg, params.filter_length_pos,
+#else
+            params.filter_length,
+#endif  // CONFIG_ASYM_DF
+            &params.q_threshold, &params.side_threshold, bit_depth
+#if CONFIG_LF_SUB_PU && !CONFIG_IMPROVE_TIP_LF
+            ,
+            4
+#endif  // CONFIG_LF_SUB_PU  && !CONFIG_IMPROVE_TIP_LF
+        );
+      }
+
+      // update info
+      prev_q = curr_q;
+      prev_side = curr_side;
+      prev_skip_txfm = curr_skipped;
+
+      // advance the destination pointer
+      const uint32_t advance_units = tx_size_wide_unit[tx_size];
+      x += advance_units;
+      p += tx_size_wide[tx_size];
+      mi_ptr += advance_units;
+    }
+  }
+}
+
 void av1_filter_block_plane_horz(AV1_COMMON *const cm,
                                  const MACROBLOCKD *const xd, const int plane,
                                  const MACROBLOCKD_PLANE *const plane_ptr,
@@ -1500,6 +1839,167 @@ void av1_filter_block_plane_horz(AV1_COMMON *const cm,
   }
 }
 
+// Optimized version of horizontal deblocking filter for Y plane only
+// It is equivalent to av1_filter_block_plane_horz but faster.
+void av1_filter_block_plane_horz_y(
+#if CONFIG_BRU
+    AV1_COMMON *const cm,
+#else
+    const AV1_COMMON *const cm,
+#endif  // CONFIG_BRU
+    const MACROBLOCKD *const xd, const int plane,
+    const MACROBLOCKD_PLANE *const plane_ptr, const int mi_row,
+    const int mi_col) {
+  if (!plane && !cm->lf.filter_level[1]) return;
+  const int mib_size = cm->mib_size;
+  const int mi_stride = cm->mi_params.mi_stride;
+  MB_MODE_INFO **mi_col_ptr =
+      cm->mi_params.mi_grid_base + mi_row * mi_stride + mi_col;
+  MB_MODE_INFO *mbmi = mi_col_ptr[0];
+  const int prev_mi_row = mi_row == 0 ? 0 : mi_row - 1;
+  int prev_mi_col = mi_col;
+  MB_MODE_INFO **prev_mi_col_ptr =
+      cm->mi_params.mi_grid_base + prev_mi_row * mi_stride + prev_mi_col;
+  MB_MODE_INFO *mi_prev = prev_mi_col_ptr[0];
+#if CONFIG_BRU
+  if (cm->bru.enabled) {
+    if (mbmi->sb_active_mode != BRU_ACTIVE_SB) return;
+  }
+#endif  // CONFIG_BRU
+  uint16_t *const dst_ptr = plane_ptr->dst.buf;
+  const int dst_stride = plane_ptr->dst.stride;
+  const int y_range = AOMMIN(mib_size, cm->mi_params.mi_rows - mi_row);
+  const int x_range = AOMMIN(mib_size, cm->mi_params.mi_cols - mi_col);
+  const int x_start = mi_col << MI_SIZE_LOG2;
+  const int y_start = mi_row << MI_SIZE_LOG2;
+  const aom_bit_depth_t bit_depth = cm->seq_params.bit_depth;
+  const EDGE_DIR edge_dir = HORZ_EDGE;
+  TX_SIZE prev_tx_size = TX_32X32;
+  uint32_t prev_q = av1_get_filter_q(&cm->lf_info, edge_dir, plane, mi_prev
+#if CONFIG_DF_DQP
+                                     ,
+                                     cm->seq_params.bit_depth
+#endif  // CONFIG_DF_DQP
+  );
+  uint32_t prev_side =
+      av1_get_filter_side(&cm->lf_info, edge_dir, plane, mi_prev
+#if CONFIG_DF_DQP
+                          ,
+                          cm->seq_params.bit_depth
+#endif  // CONFIG_DF_DQP
+      );
+  int prev_skip_txfm = mi_prev->skip_txfm[0] && is_inter_block(mi_prev, 0);
+  AV1_DEBLOCKING_PARAMETERS params;
+  memset(&params, 0, sizeof(params));
+
+  for (int x = 0; x < x_range;
+       x++, ++mi_col_ptr, ++prev_mi_col_ptr, ++prev_mi_col) {
+    const int x_offset = x << MI_SIZE_LOG2;
+    uint16_t *p = dst_ptr + (x << MI_SIZE_LOG2);
+    MB_MODE_INFO **mi_ptr = mi_col_ptr;
+    for (int y = 0; y < y_range;) {
+      mbmi = mi_ptr[0];
+      if (y == 0) {
+        mi_prev = prev_mi_col_ptr[0];
+        TREE_TYPE prev_tree_type = SHARED_PART;
+        const bool is_prev_sdp_eligible = cm->seq_params.enable_sdp &&
+                                          !cm->seq_params.monochrome &&
+                                          mi_prev->region_type == INTRA_REGION;
+        if (is_prev_sdp_eligible) {
+          prev_tree_type = (plane == AOM_PLANE_Y) ? LUMA_PART : CHROMA_PART;
+        }
+        bool prev_tu_edge;
+#if CONFIG_LF_SUB_PU
+        bool pv_is_tx_m_partition = false;
+#endif
+        prev_tx_size =
+            get_transform_size(xd, mi_prev, edge_dir, prev_mi_row, prev_mi_col,
+                               plane, prev_tree_type, plane_ptr, &prev_tu_edge
+#if CONFIG_LF_SUB_PU
+                               ,
+                               &pv_is_tx_m_partition
+#endif  // CONFIG_LF_SUB_PU
+            );
+#if CONFIG_LF_SUB_PU
+        int32_t pv_sub_pu_edge = 0;
+        const int scale_horz = 0;
+        const int scale_vert = 0;
+        check_sub_pu_edge(cm, xd, mi_prev, plane, prev_tree_type, scale_horz,
+                          scale_vert, edge_dir, 0, &prev_tx_size,
+                          &pv_sub_pu_edge, &pv_is_tx_m_partition);
+#endif  // CONFIG_LF_SUB_PU
+      }
+      // inner loop always filter vertical edges in a MI block. If MI size
+      // is 8x8, it will first filter the vertical edge aligned with a 8x8
+      // block. If 4x4 transform is used, it will then filter the internal
+      // edge aligned with a 4x4 block
+      const uint32_t y_offset = y << MI_SIZE_LOG2;
+      const uint32_t curr_x = x_start + x_offset;
+      const uint32_t curr_y = y_start + y_offset;
+      const uint32_t curr_q =
+          av1_get_filter_q(&cm->lf_info, edge_dir, plane, mbmi
+#if CONFIG_DF_DQP
+                           ,
+                           cm->seq_params.bit_depth
+#endif  // CONFIG_DF_DQP
+          );
+      const uint32_t curr_side =
+          av1_get_filter_side(&cm->lf_info, edge_dir, plane, mbmi
+#if CONFIG_DF_DQP
+                              ,
+                              cm->seq_params.bit_depth
+#endif  // CONFIG_DF_DQP
+          );
+      const int curr_skipped = mbmi->skip_txfm[0] && is_inter_block(mbmi, 0);
+
+      TX_SIZE tx_size = set_lpf_parameters_y(
+          &params, mbmi, cm, &prev_tx_size, curr_q, curr_side, curr_skipped,
+          prev_q, prev_side, prev_skip_txfm, xd, edge_dir, curr_x, curr_y,
+          plane, plane_ptr);
+      if (tx_size == TX_INVALID) {
+#if CONFIG_ASYM_DF
+        params.filter_length_neg = 0;
+        params.filter_length_pos = 0;
+#else
+        params.filter_length = 0;
+#endif  // CONFIG_ASYM_DF
+        tx_size = TX_4X4;
+      }
+#if CONFIG_ASYM_DF
+      if (params.filter_length_neg || params.filter_length_pos)
+#else
+      if (params.filter_length)
+#endif  // CONFIG_ASYM_DF
+      {
+        aom_highbd_lpf_horizontal_generic(
+            p, dst_stride,
+#if CONFIG_ASYM_DF
+            params.filter_length_neg, params.filter_length_pos,
+#else
+            params.filter_length,
+#endif  // CONFIG_ASYM_DF
+            &params.q_threshold, &params.side_threshold, bit_depth
+#if CONFIG_LF_SUB_PU && !CONFIG_IMPROVE_TIP_LF
+            ,
+            4
+#endif  // CONFIG_LF_SUB_PU && !CONFIG_IMPROVE_TIP_LF
+        );
+      }
+
+      // update info
+      prev_q = curr_q;
+      prev_side = curr_side;
+      prev_skip_txfm = curr_skipped;
+
+      // advance the destination pointer
+      const uint32_t advance_units = tx_size_high_unit[tx_size];
+      y += advance_units;
+      p += tx_size_high[tx_size] * dst_stride;
+      mi_ptr += advance_units * mi_stride;
+    }
+  }
+}
+
 static void loop_filter_rows(YV12_BUFFER_CONFIG *frame_buffer, AV1_COMMON *cm,
                              MACROBLOCKD *xd, int start, int stop,
                              int plane_start, int plane_end) {
@@ -1525,21 +2025,36 @@ static void loop_filter_rows(YV12_BUFFER_CONFIG *frame_buffer, AV1_COMMON *cm,
           // filter vertical edges
           av1_setup_dst_planes(pd, frame_buffer, mi_row, mi_col, plane,
                                plane + 1, NULL);
-          av1_filter_block_plane_vert(cm, xd, plane, &pd[plane], mi_row,
-                                      mi_col);
+          if (plane == 0) {
+            av1_filter_block_plane_vert_y(cm, xd, plane, &pd[plane], mi_row,
+                                          mi_col);
+          } else {
+            av1_filter_block_plane_vert(cm, xd, plane, &pd[plane], mi_row,
+                                        mi_col);
+          }
           // filter horizontal edges
           if (mi_col - mib_size >= 0) {
             av1_setup_dst_planes(pd, frame_buffer, mi_row, mi_col - mib_size,
                                  plane, plane + 1, NULL);
-            av1_filter_block_plane_horz(cm, xd, plane, &pd[plane], mi_row,
-                                        mi_col - mib_size);
+            if (plane == 0) {
+              av1_filter_block_plane_horz_y(cm, xd, plane, &pd[plane], mi_row,
+                                            mi_col - mib_size);
+            } else {
+              av1_filter_block_plane_horz(cm, xd, plane, &pd[plane], mi_row,
+                                          mi_col - mib_size);
+            }
           }
         }
         // filter horizontal edges
         av1_setup_dst_planes(pd, frame_buffer, mi_row, mi_col - mib_size, plane,
                              plane + 1, NULL);
-        av1_filter_block_plane_horz(cm, xd, plane, &pd[plane], mi_row,
-                                    mi_col - mib_size);
+        if (plane == 0) {
+          av1_filter_block_plane_horz_y(cm, xd, plane, &pd[plane], mi_row,
+                                        mi_col - mib_size);
+        } else {
+          av1_filter_block_plane_horz(cm, xd, plane, &pd[plane], mi_row,
+                                      mi_col - mib_size);
+        }
       }
     } else {
       // filter all vertical edges in every 128x128 super block
@@ -1547,8 +2062,13 @@ static void loop_filter_rows(YV12_BUFFER_CONFIG *frame_buffer, AV1_COMMON *cm,
         for (mi_col = col_start; mi_col < col_end; mi_col += mib_size) {
           av1_setup_dst_planes(pd, frame_buffer, mi_row, mi_col, plane,
                                plane + 1, NULL);
-          av1_filter_block_plane_vert(cm, xd, plane, &pd[plane], mi_row,
-                                      mi_col);
+          if (plane == 0) {
+            av1_filter_block_plane_vert_y(cm, xd, plane, &pd[plane], mi_row,
+                                          mi_col);
+          } else {
+            av1_filter_block_plane_vert(cm, xd, plane, &pd[plane], mi_row,
+                                        mi_col);
+          }
         }
       }
 
@@ -1557,8 +2077,13 @@ static void loop_filter_rows(YV12_BUFFER_CONFIG *frame_buffer, AV1_COMMON *cm,
         for (mi_col = col_start; mi_col < col_end; mi_col += mib_size) {
           av1_setup_dst_planes(pd, frame_buffer, mi_row, mi_col, plane,
                                plane + 1, NULL);
-          av1_filter_block_plane_horz(cm, xd, plane, &pd[plane], mi_row,
-                                      mi_col);
+          if (plane == 0) {
+            av1_filter_block_plane_horz_y(cm, xd, plane, &pd[plane], mi_row,
+                                          mi_col);
+          } else {
+            av1_filter_block_plane_horz(cm, xd, plane, &pd[plane], mi_row,
+                                        mi_col);
+          }
         }
       }
     }

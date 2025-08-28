@@ -34,13 +34,8 @@ extern "C" {
 #define CLIP(x, lo, hi) ((x) < (lo) ? (lo) : (x) > (hi) ? (hi) : (x))
 #define RINT(x) ((x) < 0 ? (int)((x) - 0.5) : (int)((x) + 0.5))
 
-#if CONFIG_CONTROL_LOOPFILTERS_ACROSS_TILES
-#define USE_LOOP_RESTORATION_MT \
-  0  // Enable when multithrading works again w/
-     // CONFIG_CONTROL_LOOPFILTERS_ACROSS_TILES
-#else
+// Whether to use multithreaded LR
 #define USE_LOOP_RESTORATION_MT 1
-#endif  // CONFIG_CONTROL_LOOPFILTERS_ACROSS_TILES
 
 #define RESTORATION_PROC_UNIT_SIZE 64
 

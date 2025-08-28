@@ -2603,9 +2603,15 @@ void gdf_optimizer(AV1_COMP *cpi, AV1_COMMON *cm) {
 #if CONFIG_CONTROL_LOOPFILTERS_ACROSS_TILES
               int tile_boundary_left = (j_min == tile_rect.left);
               int tile_boundary_right = (j_max == tile_rect.right);
-              gdf_setup_processing_stripe_leftright_boundary(
-                  &cm->gdf_info, i_min, i_max, j_min, j_max, tile_boundary_left,
-                  tile_boundary_right);
+              uint16_t *backup_inp_ptr = cm->gdf_info.inp_ptr;
+              int backup_inp_stride = cm->gdf_info.inp_stride;
+              if (tile_boundary_left || tile_boundary_right) {
+                backup_inp_ptr = cm->gdf_info.inp_ptr;
+                backup_inp_stride = cm->gdf_info.inp_stride;
+                gdf_alloc_processing_stripe_leftright_boundary(
+                    &cm->gdf_info, i_min, i_max, j_min, j_max,
+                    tile_boundary_left, tile_boundary_right);
+              }
 #endif  // CONFIG_CONTROL_LOOPFILTERS_ACROSS_TILES
               int use_gdf_local =
                   gdf_block_adjust_and_validate(&i_min, &i_max, &j_min, &j_max);
@@ -2686,9 +2692,13 @@ void gdf_optimizer(AV1_COMP *cpi, AV1_COMMON *cm) {
                 }
               }
 #if CONFIG_CONTROL_LOOPFILTERS_ACROSS_TILES
-              gdf_restore_processing_stripe_leftright_boundary(
-                  &cm->gdf_info, i_min, i_max, j_min, j_max, tile_boundary_left,
-                  tile_boundary_right);
+              if (tile_boundary_left || tile_boundary_right) {
+                gdf_dealloc_processing_stripe_leftright_boundary(
+                    &cm->gdf_info, i_min, i_max, j_min, j_max,
+                    tile_boundary_left, tile_boundary_right);
+                cm->gdf_info.inp_ptr = backup_inp_ptr;
+                cm->gdf_info.inp_stride = backup_inp_stride;
+              }
 #endif  // CONFIG_CONTROL_LOOPFILTERS_ACROSS_TILES
             }
 #if CONFIG_GDF_IMPROVEMENT && (GDF_TEST_VIRTUAL_BOUNDARY == 2)

@@ -288,93 +288,64 @@ void gdf_copy_guided_frame(AV1_COMMON *cm) {
 }
 
 #if CONFIG_CONTROL_LOOPFILTERS_ACROSS_TILES
-void gdf_setup_processing_stripe_leftright_boundary(GdfInfo *gdf, int i_min,
+void gdf_alloc_processing_stripe_leftright_boundary(GdfInfo *gdf, int i_min,
                                                     int i_max, int j_min,
                                                     int j_max,
                                                     int tile_boundary_left,
                                                     int tile_boundary_right) {
+  if (!tile_boundary_left && !tile_boundary_right) return;
   const int data_stride = gdf->inp_stride;
   const int h = i_max - i_min;
   const int w = j_max - j_min;
   const int h_border = GDF_TEST_EXTRA_HOR_BORDER;
   const int v_border = GDF_TEST_EXTRA_VER_BORDER;
-  const int stride = GDF_TEST_EXTRA_HOR_BORDER;
-  assert(h <= RESTORATION_PROC_UNIT_SIZE);
   uint16_t *data_tl = gdf->inp_ptr + i_min * data_stride + j_min;
+
+  int new_data_w = w + 2 * h_border;
+  int new_data_stride = new_data_w;
+  uint16_t *new_data = (uint16_t *)aom_malloc(
+      (h + 2 * v_border) * new_data_stride * sizeof(*data_tl));
+  uint16_t *new_data_tl = new_data + v_border * new_data_stride + h_border;
+  for (int i = -v_border; i < h + v_border; ++i) {
+    memcpy(new_data_tl + i * new_data_stride - h_border,
+           data_tl + i * data_stride - h_border, new_data_w * sizeof(*data_tl));
+  }
   if (tile_boundary_left) {
-    uint16_t *d = data_tl - v_border * data_stride - h_border;
-    for (int i = 0; i < v_border; ++i) {
-      memcpy(gdf->tmp_save_left + i * stride, d + i * data_stride,
-             h_border * sizeof(*d));
+    uint16_t *d = new_data_tl - v_border * new_data_stride - h_border;
+    for (int i = 0; i < h + 2 * v_border; ++i) {
       // Replicate
-      aom_memset16(d + i * data_stride, *(d + i * data_stride + h_border),
-                   h_border);
-    }
-    for (int i = v_border; i < h + v_border; ++i) {
-      memcpy(gdf->tmp_save_left + i * stride, d + i * data_stride,
-             h_border * sizeof(*d));
-      // Replicate
-      aom_memset16(d + i * data_stride, *(d + i * data_stride + h_border),
-                   h_border);
-    }
-    for (int i = h + v_border; i < h + 2 * v_border; ++i) {
-      memcpy(gdf->tmp_save_left + i * stride, d + i * data_stride,
-             h_border * sizeof(*d));
-      // Replicate
-      aom_memset16(d + i * data_stride, *(d + i * data_stride + h_border),
-                   h_border);
+      aom_memset16(d + i * new_data_stride,
+                   *(d + i * new_data_stride + h_border), h_border);
     }
   }
   if (tile_boundary_right) {
-    uint16_t *d = data_tl + w - v_border * data_stride;
-    for (int i = 0; i < v_border; ++i) {
-      memcpy(gdf->tmp_save_right + i * stride, d + i * data_stride,
-             h_border * sizeof(*d));
+    uint16_t *d = new_data_tl + w - v_border * new_data_stride;
+    for (int i = 0; i < h + 2 * v_border; ++i) {
       // Replicate
-      aom_memset16(d + i * data_stride, *(d + i * data_stride - 1), h_border);
-    }
-    for (int i = v_border; i < h + v_border; ++i) {
-      memcpy(gdf->tmp_save_right + i * stride, d + i * data_stride,
-             h_border * sizeof(*d));
-      // Replicate
-      aom_memset16(d + i * data_stride, *(d + i * data_stride - 1), h_border);
-    }
-    for (int i = h + v_border; i < h + 2 * v_border; ++i) {
-      memcpy(gdf->tmp_save_right + i * stride, d + i * data_stride,
-             h_border * sizeof(*d));
-      // Replicate
-      aom_memset16(d + i * data_stride, *(d + i * data_stride - 1), h_border);
+      aom_memset16(d + i * new_data_stride, *(d + i * new_data_stride - 1),
+                   h_border);
     }
   }
+  gdf->inp_ptr = new_data_tl - (i_min * new_data_stride + j_min);
+  gdf->inp_stride = new_data_stride;
 }
 
-void gdf_restore_processing_stripe_leftright_boundary(GdfInfo *gdf, int i_min,
+void gdf_dealloc_processing_stripe_leftright_boundary(GdfInfo *gdf, int i_min,
                                                       int i_max, int j_min,
                                                       int j_max,
                                                       int tile_boundary_left,
                                                       int tile_boundary_right) {
+  (void)i_max;
+  (void)j_max;
+  if (!tile_boundary_left && !tile_boundary_right) return;
   const int data_stride = gdf->inp_stride;
-  const int h = i_max - i_min;
-  const int w = j_max - j_min;
   const int h_border = GDF_TEST_EXTRA_HOR_BORDER;
   const int v_border = GDF_TEST_EXTRA_VER_BORDER;
-  const int stride = GDF_TEST_EXTRA_HOR_BORDER;
-  assert(h <= RESTORATION_PROC_UNIT_SIZE);
   uint16_t *data_tl = gdf->inp_ptr + i_min * data_stride + j_min;
-  if (tile_boundary_left) {
-    uint16_t *d = data_tl - v_border * data_stride - h_border;
-    for (int i = 0; i < h + 2 * v_border; ++i) {
-      memcpy(d + i * data_stride, gdf->tmp_save_left + i * stride,
-             h_border * sizeof(*d));
-    }
-  }
-  if (tile_boundary_right) {
-    uint16_t *d = data_tl + w - v_border * data_stride;
-    for (int i = 0; i < h + 2 * v_border; ++i) {
-      memcpy(d + i * data_stride, gdf->tmp_save_right + i * stride,
-             h_border * sizeof(*d));
-    }
-  }
+  data_tl -= v_border * data_stride + h_border;
+  gdf->inp_ptr = NULL;
+  gdf->inp_stride = 0;
+  aom_free(data_tl);
 }
 #endif  // CONFIG_CONTROL_LOOPFILTERS_ACROSS_TILES
 
@@ -651,9 +622,15 @@ void gdf_filter_frame(AV1_COMMON *cm) {
 #if CONFIG_CONTROL_LOOPFILTERS_ACROSS_TILES
               int tile_boundary_left = (j_min == tile_rect.left);
               int tile_boundary_right = (j_max == tile_rect.right);
-              gdf_setup_processing_stripe_leftright_boundary(
-                  &cm->gdf_info, i_min, i_max, j_min, j_max, tile_boundary_left,
-                  tile_boundary_right);
+              uint16_t *backup_inp_ptr = cm->gdf_info.inp_ptr;
+              int backup_inp_stride = cm->gdf_info.inp_stride;
+              if (tile_boundary_left || tile_boundary_right) {
+                backup_inp_ptr = cm->gdf_info.inp_ptr;
+                backup_inp_stride = cm->gdf_info.inp_stride;
+                gdf_alloc_processing_stripe_leftright_boundary(
+                    &cm->gdf_info, i_min, i_max, j_min, j_max,
+                    tile_boundary_left, tile_boundary_right);
+              }
 #endif  // CONFIG_CONTROL_LOOPFILTERS_ACROSS_TILES
 
               int use_gdf_local = 1;
@@ -774,9 +751,13 @@ void gdf_filter_frame(AV1_COMMON *cm) {
                 }
               }
 #if CONFIG_CONTROL_LOOPFILTERS_ACROSS_TILES
-              gdf_restore_processing_stripe_leftright_boundary(
-                  &cm->gdf_info, i_min, i_max, j_min, j_max, tile_boundary_left,
-                  tile_boundary_right);
+              if (tile_boundary_left || tile_boundary_right) {
+                gdf_dealloc_processing_stripe_leftright_boundary(
+                    &cm->gdf_info, i_min, i_max, j_min, j_max,
+                    tile_boundary_left, tile_boundary_right);
+                cm->gdf_info.inp_ptr = backup_inp_ptr;
+                cm->gdf_info.inp_stride = backup_inp_stride;
+              }
 #endif  // CONFIG_CONTROL_LOOPFILTERS_ACROSS_TILES
             }  // u_pos
 #if CONFIG_GDF_IMPROVEMENT && (GDF_TEST_VIRTUAL_BOUNDARY == 2)

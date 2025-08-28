@@ -122,19 +122,19 @@ static inline int gdf_block_adjust_and_validate(int *i_min, int *i_max,
   return (*i_max > *i_min) && (*j_max > *j_min);
 }
 
-/*!\brief Function to copy left/right buffers when disabling filtering
- * across tiles is desired.
+/*!\brief Function to alloc left/right buffers at tile boundaries when
+ * disabling filtering across tiles is desired.
  */
-void gdf_setup_processing_stripe_leftright_boundary(GdfInfo *gdf, int i_min,
+void gdf_alloc_processing_stripe_leftright_boundary(GdfInfo *gdf, int i_min,
                                                     int i_max, int j_min,
                                                     int j_max,
                                                     int tile_boundary_left,
                                                     int tile_boundary_right);
 
-/*!\brief Function to restore left/right buffers when disabling filtering
+/*!\brief Function to dealloc left/right buffers when disabling filtering
  * across tiles is desired.
  */
-void gdf_restore_processing_stripe_leftright_boundary(GdfInfo *gdf, int i_min,
+void gdf_dealloc_processing_stripe_leftright_boundary(GdfInfo *gdf, int i_min,
                                                       int i_max, int j_min,
                                                       int j_max,
                                                       int tile_boundary_left,

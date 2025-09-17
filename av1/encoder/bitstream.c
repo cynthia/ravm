@@ -6694,10 +6694,12 @@ static AOM_INLINE void write_uncompressed_header_obu
     }
   }
 
-  if (quant_params->using_qmatrix) {
+  if (quant_params->using_qmatrix && quant_params->qm_index_bits > 0) {
     const struct segmentation *seg = &cm->seg;
-#if !CONFIG_F311_QM_PARAMS
-    if (!seg->enabled && quant_params->qm_index_bits > 0) {
+#if CONFIG_F311_QM_PARAMS
+    assert(seg->enabled);
+#else
+    if (!seg->enabled) {
       aom_internal_error(&cm->error, AOM_CODEC_ERROR,
                          "The frame does not use segmentation but uses "
                          "per-segment quantizer matrices");
@@ -6724,7 +6726,7 @@ static AOM_INLINE void write_uncompressed_header_obu
            0) &&
           (quant_params->v_ac_delta_q + cm->seq_params.base_uv_ac_delta_q <= 0);
 
-      if (!lossless && (quant_params->qm_index_bits > 0)) {
+      if (!lossless) {
 #if CONFIG_QM_DEBUG
         printf("[ENC-FRM] qm_index[%d]: %d\n", i, quant_params->qm_index[i]);
 #endif

@@ -808,14 +808,9 @@ static int get_remaining_mi_size(const MB_MODE_INFO *mbmi,
 // Optimized version of set_lpf_parameters for Y plane only.
 static TX_SIZE set_lpf_parameters_y(
     AV1_DEBLOCKING_PARAMETERS *const params, MB_MODE_INFO *mbmi,
-#if CONFIG_BRU
-    AV1_COMMON *const cm,
-#else
-    const AV1_COMMON *const cm,
-#endif  // CONFIG_BRU
-    TX_SIZE *pv_ts, const uint32_t curr_q, const uint32_t curr_side,
-    const int curr_skipped, const uint32_t pv_q, const uint32_t pv_side,
-    const int pv_skip_txfm, const MACROBLOCKD *const xd,
+    AV1_COMMON *const cm, TX_SIZE *pv_ts, const uint32_t curr_q,
+    const uint32_t curr_side, const int curr_skipped, const uint32_t pv_q,
+    const uint32_t pv_side, const int pv_skip_txfm, const MACROBLOCKD *const xd,
     const EDGE_DIR edge_dir, const uint32_t x, const uint32_t y,
     const int plane, const struct macroblockd_plane *const plane_ptr) {
   // If current mbmi is not correctly setup, return an invalid value to stop
@@ -846,25 +841,16 @@ static TX_SIZE set_lpf_parameters_y(
   bool tu_edge;
   const int mi_row = y >> MI_SIZE_LOG2;
   const int mi_col = x >> MI_SIZE_LOG2;
-#if CONFIG_LF_SUB_PU
-  bool is_tx_m_partition = false;
+  tx_info_t tx_info = { 0, 0, TX_PARTITION_NONE, TX_4X4 };
+  int is_tx_m_partition = 0;
   TX_SIZE ts =
       get_transform_size(xd, mbmi, edge_dir, mi_row, mi_col, plane, tree_type,
-                         plane_ptr, &tu_edge, &is_tx_m_partition);
-#else
-  TX_SIZE ts = get_transform_size(xd, mbmi, edge_dir, mi_row, mi_col, plane,
-                                  tree_type, plane_ptr, &tu_edge);
-#endif  // CONFIG_LF_SUB_PU
+                         plane_ptr, &tu_edge, &tx_info, &is_tx_m_partition);
   const uint32_t coord = (VERT_EDGE == edge_dir) ? (x) : (y);
-#if CONFIG_LF_SUB_PU
   int32_t sub_pu_edge = 0;
   check_sub_pu_edge(cm, xd, mbmi, plane, tree_type, scale_horz, scale_vert,
                     edge_dir, coord, &ts, &sub_pu_edge, &is_tx_m_partition);
   if (!tu_edge && !sub_pu_edge) return ts;
-#else
-  if (!tu_edge) return ts;
-#endif  // CONFIG_LF_SUB_PU
-#if CONFIG_BRU
   if (cm->bru.enabled) {
     if (mbmi->sb_active_mode != BRU_ACTIVE_SB) {
       aom_internal_error(&cm->error, AOM_CODEC_ERROR,
@@ -872,22 +858,14 @@ static TX_SIZE set_lpf_parameters_y(
                          "can be filtered");
     }
   }
-#endif  // CONFIG_BRU
   // prepare outer edge parameters. deblock the edge if it's an edge of a TU
   if (coord) {
     const uint32_t pu_starting_coord = get_pu_starting_cooord(
         mbmi, plane, tree_type, scale_horz, scale_vert, edge_dir);
     const bool pu_edge = (coord == pu_starting_coord);
-#if CONFIG_LF_SUB_PU
     const int none_skip_txfm = (!pv_skip_txfm || !curr_skipped);
-#endif  // CONFIG_LF_SUB_PU
     if (((curr_q && curr_side) || (pv_q && pv_side)) &&
-#if CONFIG_LF_SUB_PU
-        (none_skip_txfm || sub_pu_edge
-#else
-        (!pv_skip_txfm || !curr_skipped
-#endif  // CONFIG_LF_SUB_PU
-         || pu_edge)) {
+        (none_skip_txfm || sub_pu_edge || pu_edge)) {
       TX_SIZE clipped_ts = ts;
       if (((VERT_EDGE == edge_dir) && (width < x + 16)) ||
           ((HORZ_EDGE == edge_dir) && (height < y + 16))) {
@@ -971,12 +949,10 @@ static TX_SIZE set_lpf_parameters_y(
       params->q_threshold = (curr_q) ? (curr_q) : (pv_q);
       params->side_threshold = (curr_side) ? (curr_side) : (pv_side);
 #endif  // CONFIG_DF_DQP
-#if CONFIG_LF_SUB_PU
       if (sub_pu_edge && !tu_edge) {
         params->q_threshold >>= SUB_PU_THR_SHIFT;
         params->side_threshold >>= SUB_PU_THR_SHIFT;
       }
-#endif  // CONFIG_LF_SUB_PU
     }
   }
   return ts;
@@ -1490,10 +1466,11 @@ void av1_filter_block_plane_vert(AV1_COMMON *const cm,
 #if CONFIG_DISABLE_LOOP_FILTERS_LOSSLESS
             !skip_deblock_lossless &&
 #endif  // CONFIG_DISABLE_LOOP_FILTERS_LOSSLESS
-            (params->filter_length_neg || params->filter_length_pos)) {
+            (params->filter_length_neg || params->filter_length_pos))
 #else
-        if (params->filter_length) {
+        if (params->filter_length)
 #endif  // CONFIG_ASYM_DF
+        {
 
 #if CONFIG_DISABLE_LOOP_FILTERS_LOSSLESS
           if (!(is_lossless_prev_block || is_lossless_current_block)) {
@@ -1548,15 +1525,10 @@ void av1_filter_block_plane_vert(AV1_COMMON *const cm,
 
 // Optimized version of vertical deblocking filter for Y plane only.
 // It is equivalent to av1_filter_block_plane_vert but faster.
-void av1_filter_block_plane_vert_y(
-#if CONFIG_BRU
-    AV1_COMMON *const cm,
-#else
-    const AV1_COMMON *const cm,
-#endif  // CONFIG_BRU
-    const MACROBLOCKD *const xd, const int plane,
-    const MACROBLOCKD_PLANE *const plane_ptr, const int mi_row,
-    const int mi_col) {
+void av1_filter_block_plane_vert_y(AV1_COMMON *const cm,
+                                   const MACROBLOCKD *const xd, const int plane,
+                                   const MACROBLOCKD_PLANE *const plane_ptr,
+                                   const int mi_row, const int mi_col) {
   if (!plane && !cm->lf.filter_level[0]) return;
   const int mib_size = cm->mib_size;
   const int mi_stride = cm->mi_params.mi_stride;
@@ -1568,11 +1540,9 @@ void av1_filter_block_plane_vert_y(
   MB_MODE_INFO **prev_mi_row_ptr =
       cm->mi_params.mi_grid_base + prev_mi_row * mi_stride + prev_mi_col;
   MB_MODE_INFO *mi_prev = prev_mi_row_ptr[0];
-#if CONFIG_BRU
   if (cm->bru.enabled) {
     if (mbmi->sb_active_mode != BRU_ACTIVE_SB) return;
   }
-#endif  // CONFIG_BRU
   uint16_t *const dst_ptr = plane_ptr->dst.buf;
   const int dst_stride = plane_ptr->dst.stride;
   const int y_range = AOMMIN(mib_size, cm->mi_params.mi_rows - mi_row);
@@ -1616,25 +1586,18 @@ void av1_filter_block_plane_vert_y(
           prev_tree_type = (plane == AOM_PLANE_Y) ? LUMA_PART : CHROMA_PART;
         }
         bool prev_tu_edge;
-#if CONFIG_LF_SUB_PU
-        bool pv_is_tx_m_partition = false;
-#endif
+        int pv_is_tx_m_partition = 0;
+        tx_info_t prev_tx_info = { 0, 0, TX_PARTITION_NONE, TX_4X4 };
         prev_tx_size =
             get_transform_size(xd, mi_prev, edge_dir, prev_mi_row, prev_mi_col,
-                               plane, prev_tree_type, plane_ptr, &prev_tu_edge
-#if CONFIG_LF_SUB_PU
-                               ,
-                               &pv_is_tx_m_partition
-#endif  // CONFIG_LF_SUB_PU
-            );
-#if CONFIG_LF_SUB_PU
+                               plane, prev_tree_type, plane_ptr, &prev_tu_edge,
+                               &prev_tx_info, &pv_is_tx_m_partition);
         int32_t pv_sub_pu_edge = 0;
         const int scale_horz = 0;
         const int scale_vert = 0;
         check_sub_pu_edge(cm, xd, mi_prev, plane, prev_tree_type, scale_horz,
                           scale_vert, edge_dir, 0, &prev_tx_size,
                           &pv_sub_pu_edge, &pv_is_tx_m_partition);
-#endif  // CONFIG_LF_SUB_PU
       }
       // inner loop always filter vertical edges in a MI block. If MI size
       // is 8x8, it will filter the vertical edge aligned with a 8x8 block.
@@ -1672,25 +1635,52 @@ void av1_filter_block_plane_vert_y(
 #endif  // CONFIG_ASYM_DF
         tx_size = TX_4X4;
       }
+#if CONFIG_DISABLE_LOOP_FILTERS_LOSSLESS
+      bool is_lossless_current_block =
+          cm->features.lossless_segment[mbmi->segment_id];
+      bool is_lossless_prev_block =
+          cm->features.lossless_segment[mi_prev->segment_id];
+      bool skip_deblock_lossless =
+          is_lossless_current_block && is_lossless_prev_block;
+#endif  // CONFIG_DISABLE_LOOP_FILTERS_LOSSLESS
+
+      int do_filter = 1;
+#if CONFIG_CONTROL_LOOPFILTERS_ACROSS_TILES
+      if (cm->seq_params.disable_loopfilters_across_tiles) {
+        if (is_vert_tile_boundary(&cm->tiles, mi_col + x)) do_filter = 0;
+      }
+#endif  // CONFIG_CONTROL_LOOPFILTERS_ACROSS_TILES
+      if (do_filter) {
 #if CONFIG_ASYM_DF
-      if (params.filter_length_neg || params.filter_length_pos)
+        if (
+#if CONFIG_DISABLE_LOOP_FILTERS_LOSSLESS
+            !skip_deblock_lossless &&
+#endif  // CONFIG_DISABLE_LOOP_FILTERS_LOSSLESS
+            (params.filter_length_neg || params.filter_length_pos))
 #else
-      if (params.filter_length)
+        if (params.filter_length)
 #endif  // CONFIG_ASYM_DF
-      {
-        aom_highbd_lpf_vertical_generic(
-            p, dst_stride,
+        {
+#if CONFIG_DISABLE_LOOP_FILTERS_LOSSLESS
+          if (!(is_lossless_prev_block || is_lossless_current_block)) {
+#endif  // CONFIG_DISABLE_LOOP_FILTERS_LOSSLESS
+            aom_highbd_lpf_vertical_generic(
+                p, dst_stride,
 #if CONFIG_ASYM_DF
-            params.filter_length_neg, params.filter_length_pos,
+                params.filter_length_neg, params.filter_length_pos,
 #else
-            params.filter_length,
+              params.filter_length,
 #endif  // CONFIG_ASYM_DF
-            &params.q_threshold, &params.side_threshold, bit_depth
-#if CONFIG_LF_SUB_PU && !CONFIG_IMPROVE_TIP_LF
-            ,
-            4
-#endif  // CONFIG_LF_SUB_PU  && !CONFIG_IMPROVE_TIP_LF
-        );
+                &params.q_threshold, &params.side_threshold, bit_depth
+#if CONFIG_DISABLE_LOOP_FILTERS_LOSSLESS
+                ,
+                is_lossless_prev_block, is_lossless_current_block
+#endif  // CONFIG_DISABLE_LOOP_FILTERS_LOSSLESS
+            );
+#if CONFIG_DISABLE_LOOP_FILTERS_LOSSLESS
+          }
+#endif  // CONFIG_DISABLE_LOOP_FILTERS_LOSSLESS
+        }
       }
 
       // update info
@@ -1841,15 +1831,10 @@ void av1_filter_block_plane_horz(AV1_COMMON *const cm,
 
 // Optimized version of horizontal deblocking filter for Y plane only
 // It is equivalent to av1_filter_block_plane_horz but faster.
-void av1_filter_block_plane_horz_y(
-#if CONFIG_BRU
-    AV1_COMMON *const cm,
-#else
-    const AV1_COMMON *const cm,
-#endif  // CONFIG_BRU
-    const MACROBLOCKD *const xd, const int plane,
-    const MACROBLOCKD_PLANE *const plane_ptr, const int mi_row,
-    const int mi_col) {
+void av1_filter_block_plane_horz_y(AV1_COMMON *const cm,
+                                   const MACROBLOCKD *const xd, const int plane,
+                                   const MACROBLOCKD_PLANE *const plane_ptr,
+                                   const int mi_row, const int mi_col) {
   if (!plane && !cm->lf.filter_level[1]) return;
   const int mib_size = cm->mib_size;
   const int mi_stride = cm->mi_params.mi_stride;
@@ -1861,11 +1846,9 @@ void av1_filter_block_plane_horz_y(
   MB_MODE_INFO **prev_mi_col_ptr =
       cm->mi_params.mi_grid_base + prev_mi_row * mi_stride + prev_mi_col;
   MB_MODE_INFO *mi_prev = prev_mi_col_ptr[0];
-#if CONFIG_BRU
   if (cm->bru.enabled) {
     if (mbmi->sb_active_mode != BRU_ACTIVE_SB) return;
   }
-#endif  // CONFIG_BRU
   uint16_t *const dst_ptr = plane_ptr->dst.buf;
   const int dst_stride = plane_ptr->dst.stride;
   const int y_range = AOMMIN(mib_size, cm->mi_params.mi_rows - mi_row);
@@ -1909,25 +1892,18 @@ void av1_filter_block_plane_horz_y(
           prev_tree_type = (plane == AOM_PLANE_Y) ? LUMA_PART : CHROMA_PART;
         }
         bool prev_tu_edge;
-#if CONFIG_LF_SUB_PU
-        bool pv_is_tx_m_partition = false;
-#endif
+        int pv_is_tx_m_partition = 0;
+        tx_info_t prev_tx_info = { 0, 0, TX_PARTITION_NONE, TX_4X4 };
         prev_tx_size =
             get_transform_size(xd, mi_prev, edge_dir, prev_mi_row, prev_mi_col,
-                               plane, prev_tree_type, plane_ptr, &prev_tu_edge
-#if CONFIG_LF_SUB_PU
-                               ,
-                               &pv_is_tx_m_partition
-#endif  // CONFIG_LF_SUB_PU
-            );
-#if CONFIG_LF_SUB_PU
+                               plane, prev_tree_type, plane_ptr, &prev_tu_edge,
+                               &prev_tx_info, &pv_is_tx_m_partition);
         int32_t pv_sub_pu_edge = 0;
         const int scale_horz = 0;
         const int scale_vert = 0;
         check_sub_pu_edge(cm, xd, mi_prev, plane, prev_tree_type, scale_horz,
                           scale_vert, edge_dir, 0, &prev_tx_size,
                           &pv_sub_pu_edge, &pv_is_tx_m_partition);
-#endif  // CONFIG_LF_SUB_PU
       }
       // inner loop always filter vertical edges in a MI block. If MI size
       // is 8x8, it will first filter the vertical edge aligned with a 8x8
@@ -1965,25 +1941,52 @@ void av1_filter_block_plane_horz_y(
 #endif  // CONFIG_ASYM_DF
         tx_size = TX_4X4;
       }
+#if CONFIG_DISABLE_LOOP_FILTERS_LOSSLESS
+      bool is_lossless_current_block =
+          cm->features.lossless_segment[mbmi->segment_id];
+      bool is_lossless_prev_block =
+          cm->features.lossless_segment[mi_prev->segment_id];
+      bool skip_deblock_lossless =
+          is_lossless_current_block && is_lossless_prev_block;
+#endif  // CONFIG_DISABLE_LOOP_FILTERS_LOSSLESS
+
+      int do_filter = 1;
+#if CONFIG_CONTROL_LOOPFILTERS_ACROSS_TILES
+      if (cm->seq_params.disable_loopfilters_across_tiles) {
+        if (is_horz_tile_boundary(&cm->tiles, mi_row + y)) do_filter = 0;
+      }
+#endif  // CONFIG_CONTROL_LOOPFILTERS_ACROSS_TILES
+      if (do_filter) {
 #if CONFIG_ASYM_DF
-      if (params.filter_length_neg || params.filter_length_pos)
+        if (
+#if CONFIG_DISABLE_LOOP_FILTERS_LOSSLESS
+            !skip_deblock_lossless &&
+#endif  // CONFIG_DISABLE_LOOP_FILTERS_LOSSLESS
+            (params.filter_length_neg || params.filter_length_pos))
 #else
-      if (params.filter_length)
+        if (params.filter_length)
 #endif  // CONFIG_ASYM_DF
-      {
-        aom_highbd_lpf_horizontal_generic(
-            p, dst_stride,
+        {
+#if CONFIG_DISABLE_LOOP_FILTERS_LOSSLESS
+          if (!(is_lossless_current_block || is_lossless_prev_block)) {
+#endif  // CONFIG_DISABLE_LOOP_FILTERS_LOSSLESS
+            aom_highbd_lpf_horizontal_generic(
+                p, dst_stride,
 #if CONFIG_ASYM_DF
-            params.filter_length_neg, params.filter_length_pos,
+                params.filter_length_neg, params.filter_length_pos,
 #else
-            params.filter_length,
+              params.filter_length,
 #endif  // CONFIG_ASYM_DF
-            &params.q_threshold, &params.side_threshold, bit_depth
-#if CONFIG_LF_SUB_PU && !CONFIG_IMPROVE_TIP_LF
-            ,
-            4
-#endif  // CONFIG_LF_SUB_PU && !CONFIG_IMPROVE_TIP_LF
-        );
+                &params.q_threshold, &params.side_threshold, bit_depth
+#if CONFIG_DISABLE_LOOP_FILTERS_LOSSLESS
+                ,
+                is_lossless_prev_block, is_lossless_current_block
+#endif  // CONFIG_DISABLE_LOOP_FILTERS_LOSSLESS
+            );
+#if CONFIG_DISABLE_LOOP_FILTERS_LOSSLESS
+          }
+#endif  // CONFIG_DISABLE_LOOP_FILTERS_LOSSLESS
+        }
       }
 
       // update info
@@ -2000,9 +2003,9 @@ void av1_filter_block_plane_horz_y(
   }
 }
 
-static void loop_filter_rows(YV12_BUFFER_CONFIG *frame_buffer, AV1_COMMON *cm,
-                             MACROBLOCKD *xd, int start, int stop,
-                             int plane_start, int plane_end) {
+static void loop_filter_rows(YV12_BUFFER_CONFIG *frame_buffer,
+                             AV1_COMMON *const cm, MACROBLOCKD *xd, int start,
+                             int stop, int plane_start, int plane_end) {
   struct macroblockd_plane *pd = xd->plane;
   const int col_start = 0;
   const int col_end = cm->mi_params.mi_cols;

@@ -542,20 +542,20 @@ static const aom_cdf_prob default_skip_mode_cdfs[3][CDF_SIZE(2)] = {
 
 static const aom_cdf_prob default_lossless_tx_size_cdf[4][2][CDF_SIZE(2)] = {
   {
-    { AOM_CDF2(16384),   0 },
-    { AOM_CDF2(16384),   0 },
+    { AOM_CDF2(16384),   1 },
+    { AOM_CDF2(16384),   1 },
   },
   {
-    { AOM_CDF2(16384),   0 },
-    { AOM_CDF2(16384),   0 },
+    { AOM_CDF2(16384),  75 },
+    { AOM_CDF2(16384),  75 },
   },
   {
-    { AOM_CDF2(16384),   0 },
-    { AOM_CDF2(16384),   0 },
+    { AOM_CDF2(16384),  75 },
+    { AOM_CDF2(16384),  75 },
   },
   {
-    { AOM_CDF2(16384),   0 },
-    { AOM_CDF2(16384),   0 },
+    { AOM_CDF2(16384),  75 },
+    { AOM_CDF2(16384),  75 },
   },
 };
 
@@ -570,7 +570,7 @@ static const aom_cdf_prob default_skip_txfm_cdfs[6][CDF_SIZE(2)] = {
   { AOM_CDF2( 3320),  90 },
 };
 
-static const aom_cdf_prob default_bru_mode_cdf[CDF_SIZE(3)] = { AOM_CDF3(10923, 21845),   0 };
+static const aom_cdf_prob default_bru_mode_cdf[CDF_SIZE(3)] = { AOM_CDF3( 4124, 16615),   0 };
 
 static const aom_cdf_prob default_intra_inter_cdf[4][CDF_SIZE(2)] = {
   { AOM_CDF2( 1522),   1 },
@@ -771,7 +771,7 @@ static const aom_cdf_prob default_switchable_interp_cdf[16][CDF_SIZE(3)] = {
   { AOM_CDF3(10923, 21845),   0 },
 };
 
-static const aom_cdf_prob default_delta_q_cdf[CDF_SIZE(8)] = { AOM_CDF8( 4096,  8192, 12288, 16384, 20480, 24576, 28672),   0 };
+static const aom_cdf_prob default_delta_q_cdf[CDF_SIZE(8)] = { AOM_CDF8(16594, 23325, 26424, 28225, 29358, 30099, 30613),  56 };
 
 static const aom_cdf_prob default_delta_lf_multi_cdf[4][CDF_SIZE(4)] = {
   { AOM_CDF4( 8192, 16384, 24576),   0 },
@@ -1874,9 +1874,9 @@ static const aom_cdf_prob default_segment_pred_cdf[3][CDF_SIZE(2)] = {
 };
 
 static const aom_cdf_prob default_spatial_pred_seg_tree_cdf[3][CDF_SIZE(8)] = {
-  { AOM_CDF8( 4096,  8192, 12288, 16384, 20480, 24576, 28672),   0 },
-  { AOM_CDF8( 4096,  8192, 12288, 16384, 20480, 24576, 28672),   0 },
-  { AOM_CDF8( 4096,  8192, 12288, 16384, 20480, 24576, 28672),   0 },
+  { AOM_CDF8( 5622,  7893, 16093, 18233, 27809, 28373, 32533),   0 },
+  { AOM_CDF8(14274, 18230, 22557, 24935, 29980, 30851, 32344),   0 },
+  { AOM_CDF8(27527, 28487, 28723, 28890, 32397, 32647, 32679),   0 },
 };
 
 static const aom_cdf_prob default_spatial_pred_seg_tree_cdf1[3][CDF_SIZE(8)] = {

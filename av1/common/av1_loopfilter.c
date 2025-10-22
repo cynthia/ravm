@@ -808,11 +808,14 @@ static int get_remaining_mi_size(const MB_MODE_INFO *mbmi,
 // Optimized version of set_lpf_parameters for Y plane only.
 static TX_SIZE set_lpf_parameters_y(
     AV1_DEBLOCKING_PARAMETERS *const params, MB_MODE_INFO *mbmi,
-    AV1_COMMON *const cm, TX_SIZE *pv_ts, const uint32_t curr_q,
-    const uint32_t curr_side, const int curr_skipped, const uint32_t pv_q,
-    const uint32_t pv_side, const int pv_skip_txfm, const MACROBLOCKD *const xd,
-    const EDGE_DIR edge_dir, const uint32_t x, const uint32_t y,
-    const int plane, const struct macroblockd_plane *const plane_ptr) {
+    AV1_COMMON *const cm, TX_SIZE *pv_ts, int *mi_size_prev,
+    const uint32_t curr_q, const uint32_t curr_side, const int curr_skipped,
+    const uint32_t pv_q, const uint32_t pv_side, const int pv_skip_txfm,
+    const MACROBLOCKD *const xd, const EDGE_DIR edge_dir, const uint32_t x,
+    const uint32_t y, const int plane,
+    const struct macroblockd_plane *const plane_ptr, TX_SIZE *tx_size,
+    int *mi_size_min) {
+  (void)tx_size;
   // If current mbmi is not correctly setup, return an invalid value to stop
   // filtering. One example is that if this tile is not coded, then its mbmi
   // it not set up.
@@ -955,6 +958,10 @@ static TX_SIZE set_lpf_parameters_y(
       }
     }
   }
+  const int mi_size_cur = get_remaining_mi_size(mbmi, &tx_info, edge_dir, x, y,
+                                                plane, tree_type, 0, 0);
+  *mi_size_min = AOMMIN(*mi_size_prev, mi_size_cur) - 1;
+  *mi_size_prev = mi_size_cur;
   return ts;
 }
 
@@ -1552,6 +1559,9 @@ void av1_filter_block_plane_vert_y(AV1_COMMON *const cm,
   const aom_bit_depth_t bit_depth = cm->seq_params.bit_depth;
   const EDGE_DIR edge_dir = VERT_EDGE;
   TX_SIZE prev_tx_size = TX_32X32;
+  const BLOCK_SIZE superblock_size = get_plane_block_size(cm->sb_size, 0, 0);
+  assert(superblock_size < BLOCK_SIZES_ALL);
+  int mi_size_prev = mi_size_high[superblock_size];
   uint32_t prev_q = av1_get_filter_q(&cm->lf_info, edge_dir, plane, mi_prev
 #if CONFIG_DF_DQP
                                      ,
@@ -1566,14 +1576,21 @@ void av1_filter_block_plane_vert_y(AV1_COMMON *const cm,
 #endif  // CONFIG_DF_DQP
       );
   int prev_skip_txfm = mi_prev->skip_txfm[0] && is_inter_block(mi_prev, 0);
-  AV1_DEBLOCKING_PARAMETERS params;
-  memset(&params, 0, sizeof(params));
+  AV1_DEBLOCKING_PARAMETERS params_buf[MAX_MIB_SIZE];
+  memset(params_buf, 0, sizeof(params_buf));
+  TX_SIZE tx_size_buf[MAX_MIB_SIZE] = { 0 };
+  int mi_size_min_height_buf[MAX_MIB_SIZE] = { 0 };
 
   for (int y = 0; y < y_range; y++, mi_row_ptr += mi_stride,
            prev_mi_row_ptr += mi_stride, ++prev_mi_row) {
     const int y_offset = y << MI_SIZE_LOG2;
     uint16_t *p = dst_ptr + y_offset * dst_stride;
     MB_MODE_INFO **mi_ptr = mi_row_ptr;
+
+    AV1_DEBLOCKING_PARAMETERS *params = params_buf;
+    TX_SIZE *tx_size = tx_size_buf;
+    int *mi_size_min_height = mi_size_min_height_buf;
+
     for (int x = 0; x < x_range;) {
       mbmi = mi_ptr[0];
       if (x == 0) {
@@ -1592,6 +1609,11 @@ void av1_filter_block_plane_vert_y(AV1_COMMON *const cm,
             get_transform_size(xd, mi_prev, edge_dir, prev_mi_row, prev_mi_col,
                                plane, prev_tree_type, plane_ptr, &prev_tu_edge,
                                &prev_tx_info, &pv_is_tx_m_partition);
+        const uint32_t curr_x = (mi_col * MI_SIZE) + x * MI_SIZE;
+        const uint32_t curr_y = (mi_row * MI_SIZE) + y * MI_SIZE;
+        mi_size_prev =
+            get_remaining_mi_size(mi_prev, &prev_tx_info, edge_dir, curr_x,
+                                  curr_y, plane, prev_tree_type, 0, 0);
         int32_t pv_sub_pu_edge = 0;
         const int scale_horz = 0;
         const int scale_vert = 0;
@@ -1621,19 +1643,20 @@ void av1_filter_block_plane_vert_y(AV1_COMMON *const cm,
 #endif  // CONFIG_DF_DQP
           );
       const int curr_skipped = mbmi->skip_txfm[0] && is_inter_block(mbmi, 0);
+      TX_SIZE cur_tx_size = TX_4X4;
 
-      TX_SIZE tx_size = set_lpf_parameters_y(
-          &params, mbmi, cm, &prev_tx_size, curr_q, curr_side, curr_skipped,
-          prev_q, prev_side, prev_skip_txfm, xd, edge_dir, curr_x, curr_y,
-          plane, plane_ptr);
-      if (tx_size == TX_INVALID) {
+      cur_tx_size = set_lpf_parameters_y(
+          params, mbmi, cm, &prev_tx_size, &mi_size_prev, curr_q, curr_side,
+          curr_skipped, prev_q, prev_side, prev_skip_txfm, xd, edge_dir, curr_x,
+          curr_y, plane, plane_ptr, tx_size, mi_size_min_height);
+      if (cur_tx_size == TX_INVALID) {
 #if CONFIG_ASYM_DF
-        params.filter_length_neg = 0;
-        params.filter_length_pos = 0;
+        params->filter_length_neg = 0;
+        params->filter_length_pos = 0;
 #else
-        params.filter_length = 0;
+        params->filter_length = 0;
 #endif  // CONFIG_ASYM_DF
-        tx_size = TX_4X4;
+        cur_tx_size = TX_4X4;
       }
 #if CONFIG_DISABLE_LOOP_FILTERS_LOSSLESS
       bool is_lossless_current_block =
@@ -1656,9 +1679,9 @@ void av1_filter_block_plane_vert_y(AV1_COMMON *const cm,
 #if CONFIG_DISABLE_LOOP_FILTERS_LOSSLESS
             !skip_deblock_lossless &&
 #endif  // CONFIG_DISABLE_LOOP_FILTERS_LOSSLESS
-            (params.filter_length_neg || params.filter_length_pos))
+            (params->filter_length_neg || params->filter_length_pos))
 #else
-        if (params.filter_length)
+        if (params->filter_length)
 #endif  // CONFIG_ASYM_DF
         {
 #if CONFIG_DISABLE_LOOP_FILTERS_LOSSLESS
@@ -1667,11 +1690,11 @@ void av1_filter_block_plane_vert_y(AV1_COMMON *const cm,
             aom_highbd_lpf_vertical_generic(
                 p, dst_stride,
 #if CONFIG_ASYM_DF
-                params.filter_length_neg, params.filter_length_pos,
+                params->filter_length_neg, params->filter_length_pos,
 #else
-              params.filter_length,
+              params->filter_length,
 #endif  // CONFIG_ASYM_DF
-                &params.q_threshold, &params.side_threshold, bit_depth
+                &params->q_threshold, &params->side_threshold, bit_depth
 #if CONFIG_DISABLE_LOOP_FILTERS_LOSSLESS
                 ,
                 is_lossless_prev_block, is_lossless_current_block
@@ -1689,10 +1712,14 @@ void av1_filter_block_plane_vert_y(AV1_COMMON *const cm,
       prev_skip_txfm = curr_skipped;
 
       // advance the destination pointer
-      const uint32_t advance_units = tx_size_wide_unit[tx_size];
+      *tx_size = cur_tx_size;
+      const uint32_t advance_units = tx_size_wide_unit[cur_tx_size];
       x += advance_units;
-      p += tx_size_wide[tx_size];
+      p += tx_size_wide[cur_tx_size];
       mi_ptr += advance_units;
+      params += advance_units;
+      tx_size += advance_units;
+      mi_size_min_height += advance_units;
     }
   }
 }
@@ -1858,6 +1885,9 @@ void av1_filter_block_plane_horz_y(AV1_COMMON *const cm,
   const aom_bit_depth_t bit_depth = cm->seq_params.bit_depth;
   const EDGE_DIR edge_dir = HORZ_EDGE;
   TX_SIZE prev_tx_size = TX_32X32;
+  const BLOCK_SIZE superblock_size = get_plane_block_size(cm->sb_size, 0, 0);
+  assert(superblock_size < BLOCK_SIZES_ALL);
+  int mi_size_prev = mi_size_high[superblock_size];
   uint32_t prev_q = av1_get_filter_q(&cm->lf_info, edge_dir, plane, mi_prev
 #if CONFIG_DF_DQP
                                      ,
@@ -1872,14 +1902,21 @@ void av1_filter_block_plane_horz_y(AV1_COMMON *const cm,
 #endif  // CONFIG_DF_DQP
       );
   int prev_skip_txfm = mi_prev->skip_txfm[0] && is_inter_block(mi_prev, 0);
-  AV1_DEBLOCKING_PARAMETERS params;
-  memset(&params, 0, sizeof(params));
+  AV1_DEBLOCKING_PARAMETERS params_buf[MAX_MIB_SIZE];
+  memset(params_buf, 0, sizeof(params_buf));
+  TX_SIZE tx_size_buf[MAX_MIB_SIZE] = { 0 };
+  int mi_size_min_width_buf[MAX_MIB_SIZE] = { 0 };
 
   for (int x = 0; x < x_range;
        x++, ++mi_col_ptr, ++prev_mi_col_ptr, ++prev_mi_col) {
     const int x_offset = x << MI_SIZE_LOG2;
     uint16_t *p = dst_ptr + (x << MI_SIZE_LOG2);
     MB_MODE_INFO **mi_ptr = mi_col_ptr;
+
+    AV1_DEBLOCKING_PARAMETERS *params = params_buf;
+    TX_SIZE *tx_size = tx_size_buf;
+    int *mi_size_min_width = mi_size_min_width_buf;
+
     for (int y = 0; y < y_range;) {
       mbmi = mi_ptr[0];
       if (y == 0) {
@@ -1898,6 +1935,11 @@ void av1_filter_block_plane_horz_y(AV1_COMMON *const cm,
             get_transform_size(xd, mi_prev, edge_dir, prev_mi_row, prev_mi_col,
                                plane, prev_tree_type, plane_ptr, &prev_tu_edge,
                                &prev_tx_info, &pv_is_tx_m_partition);
+        const uint32_t curr_x = (mi_col * MI_SIZE) + x * MI_SIZE;
+        const uint32_t curr_y = (mi_row * MI_SIZE) + y * MI_SIZE;
+        mi_size_prev =
+            get_remaining_mi_size(mi_prev, &prev_tx_info, edge_dir, curr_x,
+                                  curr_y, plane, prev_tree_type, 0, 0);
         int32_t pv_sub_pu_edge = 0;
         const int scale_horz = 0;
         const int scale_vert = 0;
@@ -1927,19 +1969,20 @@ void av1_filter_block_plane_horz_y(AV1_COMMON *const cm,
 #endif  // CONFIG_DF_DQP
           );
       const int curr_skipped = mbmi->skip_txfm[0] && is_inter_block(mbmi, 0);
+      TX_SIZE cur_tx_size = TX_4X4;
 
-      TX_SIZE tx_size = set_lpf_parameters_y(
-          &params, mbmi, cm, &prev_tx_size, curr_q, curr_side, curr_skipped,
-          prev_q, prev_side, prev_skip_txfm, xd, edge_dir, curr_x, curr_y,
-          plane, plane_ptr);
-      if (tx_size == TX_INVALID) {
+      cur_tx_size = set_lpf_parameters_y(
+          params, mbmi, cm, &prev_tx_size, &mi_size_prev, curr_q, curr_side,
+          curr_skipped, prev_q, prev_side, prev_skip_txfm, xd, edge_dir, curr_x,
+          curr_y, plane, plane_ptr, tx_size, mi_size_min_width);
+      if (cur_tx_size == TX_INVALID) {
 #if CONFIG_ASYM_DF
-        params.filter_length_neg = 0;
-        params.filter_length_pos = 0;
+        params->filter_length_neg = 0;
+        params->filter_length_pos = 0;
 #else
-        params.filter_length = 0;
+        params->filter_length = 0;
 #endif  // CONFIG_ASYM_DF
-        tx_size = TX_4X4;
+        cur_tx_size = TX_4X4;
       }
 #if CONFIG_DISABLE_LOOP_FILTERS_LOSSLESS
       bool is_lossless_current_block =
@@ -1962,9 +2005,9 @@ void av1_filter_block_plane_horz_y(AV1_COMMON *const cm,
 #if CONFIG_DISABLE_LOOP_FILTERS_LOSSLESS
             !skip_deblock_lossless &&
 #endif  // CONFIG_DISABLE_LOOP_FILTERS_LOSSLESS
-            (params.filter_length_neg || params.filter_length_pos))
+            (params->filter_length_neg || params->filter_length_pos))
 #else
-        if (params.filter_length)
+        if (params->filter_length)
 #endif  // CONFIG_ASYM_DF
         {
 #if CONFIG_DISABLE_LOOP_FILTERS_LOSSLESS
@@ -1973,11 +2016,11 @@ void av1_filter_block_plane_horz_y(AV1_COMMON *const cm,
             aom_highbd_lpf_horizontal_generic(
                 p, dst_stride,
 #if CONFIG_ASYM_DF
-                params.filter_length_neg, params.filter_length_pos,
+                params->filter_length_neg, params->filter_length_pos,
 #else
-              params.filter_length,
+              params->filter_length,
 #endif  // CONFIG_ASYM_DF
-                &params.q_threshold, &params.side_threshold, bit_depth
+                &params->q_threshold, &params->side_threshold, bit_depth
 #if CONFIG_DISABLE_LOOP_FILTERS_LOSSLESS
                 ,
                 is_lossless_prev_block, is_lossless_current_block
@@ -1995,10 +2038,14 @@ void av1_filter_block_plane_horz_y(AV1_COMMON *const cm,
       prev_skip_txfm = curr_skipped;
 
       // advance the destination pointer
-      const uint32_t advance_units = tx_size_high_unit[tx_size];
+      *tx_size = cur_tx_size;
+      const uint32_t advance_units = tx_size_high_unit[cur_tx_size];
       y += advance_units;
-      p += tx_size_high[tx_size] * dst_stride;
+      p += tx_size_high[cur_tx_size] * dst_stride;
       mi_ptr += advance_units * mi_stride;
+      params += advance_units;
+      tx_size += advance_units;
+      mi_size_min_width += advance_units;
     }
   }
 }

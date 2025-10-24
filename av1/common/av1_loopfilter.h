@@ -155,11 +155,19 @@ void av1_filter_block_plane_vert(struct AV1Common *const cm,
                                  const MACROBLOCKD *const xd, const int plane,
                                  const MACROBLOCKD_PLANE *const plane_ptr,
                                  const uint32_t mi_row, const uint32_t mi_col);
+void av1_filter_block_plane_vert_y(struct AV1Common *const cm,
+                                   const MACROBLOCKD *const xd, const int plane,
+                                   const MACROBLOCKD_PLANE *const plane_ptr,
+                                   const int mi_row, const int mi_col);
 
 void av1_filter_block_plane_horz(struct AV1Common *const cm,
                                  const MACROBLOCKD *const xd, const int plane,
                                  const MACROBLOCKD_PLANE *const plane_ptr,
                                  const uint32_t mi_row, const uint32_t mi_col);
+void av1_filter_block_plane_horz_y(struct AV1Common *const cm,
+                                   const MACROBLOCKD *const xd, const int plane,
+                                   const MACROBLOCKD_PLANE *const plane_ptr,
+                                   const int mi_row, const int mi_col);
 int df_quant_from_qindex(int q_index, int bit_depth);
 
 int df_side_from_qindex(int q_index, int bit_depth);

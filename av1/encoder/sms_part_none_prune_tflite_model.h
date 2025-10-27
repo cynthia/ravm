@@ -8,7 +8,8 @@
  * Media Patent License 1.0 was not distributed with this source code in the
  * PATENTS file, you can obtain it at www.aomedia.org/license/patent.
  */
-double sms_part_none_prune_tflite_model_bs12_110_mean[] = {
+/*
+double sms_part_none_prune_tflite_model_64X64_110_mean[] = {
   1.04041272e+01, -5.07948638e+00,  1.71626311e-02,  3.96386080e-02,
  -3.92626787e+00,  7.74259627e-03,  1.28935720e-02, -3.92796049e+00,
   7.79991724e-03,  1.28256441e-02, -3.88996314e+00,  7.80028241e-03,
@@ -27,7 +28,7 @@ double sms_part_none_prune_tflite_model_bs12_110_mean[] = {
   4.85960985e+00, -4.77850140e-02,  3.59635065e+00,  9.92635354e+00,
   2.70846570e-01,  1.61524241e-01};
 
-double sms_part_none_prune_tflite_model_bs12_110_std[] = {
+double sms_part_none_prune_tflite_model_64X64_110_std[] = {
  0.03064132, 2.56670826, 0.03203299, 0.02173016, 2.76963078, 0.01856685,
  0.0117152 , 2.73084347, 0.01875388, 0.01160003, 2.73379665, 0.01881135,
  0.0116296 , 2.69080056, 0.01845215, 0.01149093, 1.077614  , 0.54158209,
@@ -40,7 +41,7 @@ double sms_part_none_prune_tflite_model_bs12_110_std[] = {
  0.55389446, 1.00614156, 0.57513733, 2.68236575, 0.02442065, 0.01508975,
  1.10577999, 0.55806301, 1.00412109, 0.57081559, 0.30807914, 0.21169761};
 
-double sms_part_none_prune_tflite_model_bs12_110_std_inv[] = {
+double sms_part_none_prune_tflite_model_64X64_110_std_inv[] = {
 3.263567e+01, 3.896041e-01, 3.121782e+01, 4.601899e+01, 3.610590e-01,
 5.385943e+01, 8.535919e+01, 3.661872e-01, 5.332230e+01, 8.620667e+01,
 3.657917e-01, 5.315940e+01, 8.598748e+01, 3.716366e-01, 5.419423e+01,
@@ -56,7 +57,7 @@ double sms_part_none_prune_tflite_model_bs12_110_std_inv[] = {
 9.043390e-01, 1.791912e+00, 9.958958e-01, 1.751879e+00, 3.245919e+00,
 4.723719e+00};
 
-unsigned char sms_part_none_prune_tflite_model_bs12_110[] = {
+unsigned char sms_part_none_prune_tflite_model_64X64_110[] = {
   0x1c, 0x00, 0x00, 0x00, 0x54, 0x46, 0x4c, 0x33, 0x14, 0x00, 0x20, 0x00,
   0x1c, 0x00, 0x18, 0x00, 0x14, 0x00, 0x10, 0x00, 0x0c, 0x00, 0x00, 0x00,
   0x08, 0x00, 0x04, 0x00, 0x14, 0x00, 0x00, 0x00, 0x1c, 0x00, 0x00, 0x00,
@@ -669,7 +670,7 @@ unsigned char sms_part_none_prune_tflite_model_bs12_110[] = {
   0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02
 };
 
-double sms_part_none_prune_tflite_model_bs12_135_mean[] = {
+double sms_part_none_prune_tflite_model_64X64_135_mean[] = {
   1.20058371e+01, -6.73118354e+00,  6.69347697e-03,  1.75047469e-02,
  -6.02177589e+00,  3.17125525e-03,  4.65474487e-03, -6.03247930e+00,
   3.18257200e-03,  4.65477711e-03, -5.99292411e+00,  3.19305110e-03,
@@ -688,7 +689,7 @@ double sms_part_none_prune_tflite_model_bs12_135_mean[] = {
   4.53652545e+00, -5.17081920e-02,  2.25813135e+00,  9.91755618e+00,
   1.55092099e-01,  9.58963865e-02};
 
-double sms_part_none_prune_tflite_model_bs12_135_std[] = {
+double sms_part_none_prune_tflite_model_64X64_135_std[] = {
   0.02227795, 2.63964732, 0.01072177, 0.01460983, 3.08175955, 0.00647646,
   0.00665682, 3.04498798, 0.00638495, 0.00659149, 3.06685465, 0.00645002,
   0.00657236, 3.02195241, 0.00644511, 0.00649242, 1.078931  , 0.50768389,
@@ -701,7 +702,7 @@ double sms_part_none_prune_tflite_model_bs12_135_std[] = {
   0.51850147, 1.03445152, 0.55192627, 2.81120433, 0.00802132, 0.00937087,
   1.11651118, 0.52228065, 1.03620484, 0.54743166, 0.25064415, 0.24080757};
 
-double sms_part_none_prune_tflite_model_bs12_135_std_inv[] = {
+double sms_part_none_prune_tflite_model_64X64_135_std_inv[] = {
  4.488743e+01, 3.788385e-01, 9.326818e+01, 6.844707e+01, 3.244899e-01,
  1.544053e+02, 1.502219e+02, 3.284085e-01, 1.566183e+02, 1.517108e+02,
  3.260670e-01, 1.550383e+02, 1.521523e+02, 3.309119e-01, 1.551564e+02,
@@ -717,7 +718,7 @@ double sms_part_none_prune_tflite_model_bs12_135_std_inv[] = {
  8.956471e-01, 1.914679e+00, 9.650602e-01, 1.826712e+00, 3.989720e+00,
  4.152693e+00};
 
-unsigned char sms_part_none_prune_tflite_model_bs12_135[] = {
+unsigned char sms_part_none_prune_tflite_model_64X64_135[] = {
   0x1c, 0x00, 0x00, 0x00, 0x54, 0x46, 0x4c, 0x33, 0x14, 0x00, 0x20, 0x00,
   0x1c, 0x00, 0x18, 0x00, 0x14, 0x00, 0x10, 0x00, 0x0c, 0x00, 0x00, 0x00,
   0x08, 0x00, 0x04, 0x00, 0x14, 0x00, 0x00, 0x00, 0x1c, 0x00, 0x00, 0x00,
@@ -1330,7 +1331,7 @@ unsigned char sms_part_none_prune_tflite_model_bs12_135[] = {
   0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02
 };
 
-double sms_part_none_prune_tflite_model_bs9_110_mean[] = {
+double sms_part_none_prune_tflite_model_32X32_110_mean[] = {
   1.03491110e+01, -4.70601155e+00,  9.41639648e-03,  6.71813216e-02,
  -4.34175676e+00,  4.51304337e-03,  1.49437847e-02, -4.34549089e+00,
   4.51633002e-03,  1.49095283e-02, -4.31672289e+00,  4.52349718e-03,
@@ -1349,7 +1350,7 @@ double sms_part_none_prune_tflite_model_bs9_110_mean[] = {
   5.00979522e+00, -6.36352230e-02,  2.72298622e+00,  9.66164878e+00,
   4.46692542e-02,  2.09643599e-01};
 
-double sms_part_none_prune_tflite_model_bs9_110_std[] = {
+double sms_part_none_prune_tflite_model_32X32_110_std[] = {
   0.02732415, 2.17179996, 0.02086705, 0.05157368, 2.76312758, 0.01215916,
   0.01481117, 2.7202667 , 0.01208791, 0.01477575, 2.78416716, 0.0122251,
   0.01473175, 2.74306804, 0.01212331, 0.01467415, 1.2618907 , 0.64318266,
@@ -1362,7 +1363,7 @@ double sms_part_none_prune_tflite_model_bs9_110_std[] = {
   0.65668713, 1.01260751, 0.54230567, 2.39137017, 0.01564451, 0.02740826,
   1.31305985, 0.65912284, 1.01212852, 0.53239233, 0.16627907, 0.21028674};
 
-double sms_part_none_prune_tflite_model_bs9_110_std_inv[] = {
+double sms_part_none_prune_tflite_model_32X32_110_std_inv[] = {
   3.659766e+01, 4.604476e-01, 4.792244e+01, 1.938974e+01, 3.619087e-01,
   8.224252e+01, 6.751661e+01, 3.676110e-01, 8.272729e+01, 6.767846e+01,
   3.591738e-01, 8.179892e+01, 6.788060e+01, 3.645553e-01, 8.248572e+01,
@@ -1379,7 +1380,7 @@ double sms_part_none_prune_tflite_model_bs9_110_std_inv[] = {
   4.755412e+00,
 };
 
-unsigned char sms_part_none_prune_tflite_model_bs9_110[] = {
+unsigned char sms_part_none_prune_tflite_model_32X32_110[] = {
   0x1c, 0x00, 0x00, 0x00, 0x54, 0x46, 0x4c, 0x33, 0x14, 0x00, 0x20, 0x00,
   0x1c, 0x00, 0x18, 0x00, 0x14, 0x00, 0x10, 0x00, 0x0c, 0x00, 0x00, 0x00,
   0x08, 0x00, 0x04, 0x00, 0x14, 0x00, 0x00, 0x00, 0x1c, 0x00, 0x00, 0x00,
@@ -1992,7 +1993,7 @@ unsigned char sms_part_none_prune_tflite_model_bs9_110[] = {
   0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02
 };
 
-double sms_part_none_prune_tflite_model_bs9_135_mean[] = {
+double sms_part_none_prune_tflite_model_32X32_135_mean[] = {
   1.19646728e+01, -8.18626150e+00,  4.53162792e-03,  3.46325987e-02,
  -7.62094892e+00,  2.29007100e-03,  7.28919669e-03, -7.64059400e+00,
   2.30293066e-03,  7.29487573e-03, -7.61184161e+00,  2.29466730e-03,
@@ -2012,7 +2013,7 @@ double sms_part_none_prune_tflite_model_bs9_135_mean[] = {
   4.30376292e-02,  1.68381377e-01
 };
 
-double sms_part_none_prune_tflite_model_bs9_135_std[] = {
+double sms_part_none_prune_tflite_model_32X32_135_std[] = {
   0.01947192, 2.38158267, 0.00730351, 0.0322997 , 3.07353498, 0.00472063,
   0.00942717, 3.02805721, 0.0047409 , 0.0094266 , 3.06656241, 0.00469484,
   0.00939454, 3.01607218, 0.00472006, 0.00937124, 1.29970303, 0.6367754,
@@ -2026,7 +2027,7 @@ double sms_part_none_prune_tflite_model_bs9_135_std[] = {
   1.36597791, 0.6510608 , 0.98791506, 0.48562422, 0.16460667, 0.30942337
 };
 
-double sms_part_none_prune_tflite_model_bs9_135_std_inv[] = {
+double sms_part_none_prune_tflite_model_32X32_135_std_inv[] = {
   5.135600e+01, 4.198888e-01, 1.369205e+02, 3.096004e+01, 3.253583e-01,
   2.118361e+02, 1.060764e+02, 3.302448e-01, 2.109304e+02, 1.060828e+02,
   3.260980e-01, 2.129998e+02, 1.064448e+02, 3.315571e-01, 2.118617e+02,
@@ -2043,7 +2044,7 @@ double sms_part_none_prune_tflite_model_bs9_135_std_inv[] = {
   3.231818e+00,
 };
 
-unsigned char sms_part_none_prune_tflite_model_bs9_135[] = {
+unsigned char sms_part_none_prune_tflite_model_32X32_135[] = {
   0x1c, 0x00, 0x00, 0x00, 0x54, 0x46, 0x4c, 0x33, 0x14, 0x00, 0x20, 0x00,
   0x1c, 0x00, 0x18, 0x00, 0x14, 0x00, 0x10, 0x00, 0x0c, 0x00, 0x00, 0x00,
   0x08, 0x00, 0x04, 0x00, 0x14, 0x00, 0x00, 0x00, 0x1c, 0x00, 0x00, 0x00,
@@ -2656,7 +2657,7 @@ unsigned char sms_part_none_prune_tflite_model_bs9_135[] = {
   0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02
 };
 
-double sms_part_none_prune_tflite_model_bs6_110_mean[] = {
+double sms_part_none_prune_tflite_model_16X16_110_mean[] = {
   1.01879719e+01, -5.72890753e+00,  6.72940356e-03,  1.11627412e-01,
  -5.23954747e+00,  3.74332623e-03,  2.36857514e-02, -5.24650963e+00,
   3.74983748e-03,  2.37075832e-02, -5.23576807e+00,  3.74543723e-03,
@@ -2676,7 +2677,7 @@ double sms_part_none_prune_tflite_model_bs6_110_mean[] = {
   2.05881480e-02,  4.16914844e-01
 };
 
-double sms_part_none_prune_tflite_model_bs6_110_std[] = {
+double sms_part_none_prune_tflite_model_16X16_110_std[] = {
   0.03894488, 2.15949969, 0.01495654, 0.07801163, 2.80403778, 0.00943345,
   0.02256344, 2.78016698, 0.0094385 , 0.02255895, 2.8034761 , 0.00943855,
   0.02250194, 2.78087396, 0.00946434, 0.0224965 , 1.45393732, 0.7631033,
@@ -2690,7 +2691,7 @@ double sms_part_none_prune_tflite_model_bs6_110_std[] = {
   1.57136568, 0.77611975, 1.00343669, 0.57947887, 0.12485969, 0.40889506
 };
 
-double sms_part_none_prune_tflite_model_bs6_110_std_inv[] = {
+double sms_part_none_prune_tflite_model_16X16_110_std_inv[] = {
   2.567732e+01, 4.630702e-01, 6.686038e+01, 1.281860e+01, 3.566286e-01,
   1.060058e+02, 4.431948e+01, 3.596906e-01, 1.059490e+02, 4.432830e+01,
   3.567000e-01, 1.059485e+02, 4.444061e+01, 3.595992e-01, 1.056598e+02,
@@ -2707,7 +2708,7 @@ double sms_part_none_prune_tflite_model_bs6_110_std_inv[] = {
   2.445615e+00
 };
 
-unsigned char sms_part_none_prune_tflite_model_bs6_110[] = {
+unsigned char sms_part_none_prune_tflite_model_16X16_110[] = {
   0x1c, 0x00, 0x00, 0x00, 0x54, 0x46, 0x4c, 0x33, 0x14, 0x00, 0x20, 0x00,
   0x1c, 0x00, 0x18, 0x00, 0x14, 0x00, 0x10, 0x00, 0x0c, 0x00, 0x00, 0x00,
   0x08, 0x00, 0x04, 0x00, 0x14, 0x00, 0x00, 0x00, 0x1c, 0x00, 0x00, 0x00,
@@ -3320,7 +3321,7 @@ unsigned char sms_part_none_prune_tflite_model_bs6_110[] = {
   0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02
 };
 
-double sms_part_none_prune_tflite_model_bs6_135_mean[] = {
+double sms_part_none_prune_tflite_model_16X16_135_mean[] = {
   1.19576917e+01, -9.63616056e+00,  2.52489013e-03,  5.21113286e-02,
  -9.19005457e+00,  1.71355899e-03,  1.07658197e-02, -9.21466210e+00,
   1.71997434e-03,  1.07766938e-02, -9.20701289e+00,  1.71784149e-03,
@@ -3340,7 +3341,7 @@ double sms_part_none_prune_tflite_model_bs6_135_mean[] = {
   4.83067754e-03,  1.09523465e-01
 };
 
-double sms_part_none_prune_tflite_model_bs6_135_std[] = {
+double sms_part_none_prune_tflite_model_16X16_135_std[] = {
   0.02205163, 2.77725888, 0.00459341, 0.05131308, 3.43721125, 0.00357737,
   0.01446456, 3.38579678, 0.00359722, 0.0144554 , 3.41038949, 0.00358157,
   0.01445266, 3.36084645, 0.00360411, 0.01444728, 1.44372524, 0.6972994,
@@ -3354,7 +3355,7 @@ double sms_part_none_prune_tflite_model_bs6_135_std[] = {
   1.54444204, 0.70707065, 0.88865745, 0.54037438, 0.06530435, 0.27220316
 };
 
-double sms_part_none_prune_tflite_model_bs6_135_std_inv[] = {
+double sms_part_none_prune_tflite_model_16X16_135_std_inv[] = {
   4.534812e+01, 3.600673e-01, 2.177032e+02, 1.948821e+01, 2.909335e-01,
   2.795350e+02, 6.913449e+01, 2.953515e-01, 2.779924e+02, 6.917830e+01,
   2.932216e-01, 2.792072e+02, 6.919142e+01, 2.975441e-01, 2.774610e+02,
@@ -3371,7 +3372,7 @@ double sms_part_none_prune_tflite_model_bs6_135_std_inv[] = {
   3.673727e+00
 };
 
-unsigned char sms_part_none_prune_tflite_model_bs6_135[] = {
+unsigned char sms_part_none_prune_tflite_model_16X16_135[] = {
   0x1c, 0x00, 0x00, 0x00, 0x54, 0x46, 0x4c, 0x33, 0x14, 0x00, 0x20, 0x00,
   0x1c, 0x00, 0x18, 0x00, 0x14, 0x00, 0x10, 0x00, 0x0c, 0x00, 0x00, 0x00,
   0x08, 0x00, 0x04, 0x00, 0x14, 0x00, 0x00, 0x00, 0x1c, 0x00, 0x00, 0x00,
@@ -3983,3 +3984,4 @@ unsigned char sms_part_none_prune_tflite_model_bs6_135[] = {
   0x0b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x0c, 0x00, 0x00, 0x00,
   0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02
 };
+*/

@@ -60,7 +60,7 @@ static const nmv_context default_nmv_context = {
 
 #if CONFIG_MV_RANGE_EXTENSION
   { AOM_CDF2(16384), 0 },  // joint_shell_last_two_classes_cdf
-#endif                     // CONFIG_MV_RANGE_EXTENSION
+#endif  // CONFIG_MV_RANGE_EXTENSION
 
   {
       { AOM_CDF2(3268), 1 },

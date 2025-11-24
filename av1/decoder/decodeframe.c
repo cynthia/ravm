@@ -10524,10 +10524,19 @@ static int read_uncompressed_header(AV1Decoder *pbi,
   }
 
   if (features->coded_lossless || !cm->seq_params.enable_parity_hiding ||
-      features->tcq_mode)
+      features->tcq_mode) {
     features->allow_parity_hiding = false;
-  else
+  } else {
+#if CONFIG_CWG_F362
+    if (cm->seq_params.single_picture_header_flag) {
+      features->allow_parity_hiding = true;
+    } else {
+      features->allow_parity_hiding = aom_rb_read_bit(rb);
+    }
+#else
     features->allow_parity_hiding = aom_rb_read_bit(rb);
+#endif  // CONFIG_CWG_F362
+  }
 
 #if CONFIG_F255_QMOBU
   setup_segmentation_dequant(pbi, xd);

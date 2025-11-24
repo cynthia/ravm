@@ -7549,9 +7549,17 @@ static AOM_INLINE void write_uncompressed_header_obu
 
   if (features->coded_lossless || !cm->seq_params.enable_parity_hiding ||
       features->tcq_mode) {
-    assert(features->allow_parity_hiding == false);
+    assert(!features->allow_parity_hiding);
   } else {
+#if CONFIG_CWG_F362
+    if (cm->seq_params.single_picture_header_flag) {
+      assert(features->allow_parity_hiding);
+    } else {
+      aom_wb_write_bit(wb, features->allow_parity_hiding);
+    }
+#else
     aom_wb_write_bit(wb, features->allow_parity_hiding);
+#endif  // CONFIG_CWG_F362
   }
 
   if (features->all_lossless) {

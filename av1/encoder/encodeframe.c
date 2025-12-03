@@ -2075,6 +2075,13 @@ void av1_enc_setup_ph_frame(AV1_COMP *cpi) {
     cm->features.allow_parity_hiding = false;
   else
     cm->features.allow_parity_hiding = true;
+
+#if CONFIG_CWG_F362
+  if (cm->seq_params.single_picture_header_flag &&
+      !cm->features.allow_parity_hiding) {
+    cm->seq_params.enable_parity_hiding = 0;
+  }
+#endif  // CONFIG_CWG_F362
 }
 
 /*!\brief Encoder setup(only for the current frame), encoding, and recontruction

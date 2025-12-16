@@ -3763,19 +3763,45 @@ static AVM_INLINE void encode_loopfilter(AV2_COMMON *cm,
   }
 
 #if CONFIG_MFH_DF
-  //  int write_deblocking_filter_parameters_flag = 1;
+  // Check if we need to override MFH deblocking filter parameters
+  int write_deblocking_filter_parameters_flag = 1;
   if (cm->mfh_params[cm->cur_mfh_id]
           .mfh_deblocking_filter_parameters_present_flag) {
-    avm_wb_write_bit(wb, 1);  // override_deblocking_filter_parameters_flag
+    // Check if current parameters differ from MFH parameters
+    write_deblocking_filter_parameters_flag =
+        (lf->apply_deblocking_filter[0] !=
+         cm->mfh_params[cm->cur_mfh_id].mfh_apply_deblocking_filter[0]) ||
+        (lf->apply_deblocking_filter[1] !=
+         cm->mfh_params[cm->cur_mfh_id].mfh_apply_deblocking_filter[1]) ||
+        (lf->apply_deblocking_filter_u !=
+         cm->mfh_params[cm->cur_mfh_id].mfh_apply_deblocking_filter_u) ||
+        (lf->apply_deblocking_filter_v !=
+         cm->mfh_params[cm->cur_mfh_id].mfh_apply_deblocking_filter_v) ||
+        (lf->delta_q_luma[0] !=
+         cm->mfh_params[cm->cur_mfh_id].mfh_delta_q_luma[0]) ||
+        (lf->delta_q_luma[1] !=
+         cm->mfh_params[cm->cur_mfh_id].mfh_delta_q_luma[1]) ||
+        (lf->delta_side_luma[0] !=
+         cm->mfh_params[cm->cur_mfh_id].mfh_delta_side_luma[0]) ||
+        (lf->delta_side_luma[1] !=
+         cm->mfh_params[cm->cur_mfh_id].mfh_delta_side_luma[1]) ||
+        (lf->delta_q_u != cm->mfh_params[cm->cur_mfh_id].mfh_delta_q_u) ||
+        (lf->delta_side_u != cm->mfh_params[cm->cur_mfh_id].mfh_delta_side_u) ||
+        (lf->delta_q_v != cm->mfh_params[cm->cur_mfh_id].mfh_delta_q_v) ||
+        (lf->delta_side_v != cm->mfh_params[cm->cur_mfh_id].mfh_delta_side_v);
+
+    avm_wb_write_bit(wb, write_deblocking_filter_parameters_flag);
   }
-  avm_wb_write_bit(wb, lf->apply_deblocking_filter[0]);
 
-  avm_wb_write_bit(wb, lf->apply_deblocking_filter[1]);
+  if (write_deblocking_filter_parameters_flag) {
+    avm_wb_write_bit(wb, lf->apply_deblocking_filter[0]);
+    avm_wb_write_bit(wb, lf->apply_deblocking_filter[1]);
 
-  if (num_planes > 1) {
-    if (lf->apply_deblocking_filter[0] || lf->apply_deblocking_filter[1]) {
-      avm_wb_write_bit(wb, lf->apply_deblocking_filter_u);
-      avm_wb_write_bit(wb, lf->apply_deblocking_filter_v);
+    if (num_planes > 1) {
+      if (lf->apply_deblocking_filter[0] || lf->apply_deblocking_filter[1]) {
+        avm_wb_write_bit(wb, lf->apply_deblocking_filter_u);
+        avm_wb_write_bit(wb, lf->apply_deblocking_filter_v);
+      }
     }
   }
 #else
@@ -3791,6 +3817,13 @@ static AVM_INLINE void encode_loopfilter(AV2_COMMON *cm,
         avm_wb_write_bit(wb, lf->apply_deblocking_filter_v);
       }
     }
+  }
+#endif  // CONFIG_MFH_DF
+
+#if CONFIG_MFH_DF
+  // Only write delta parameters when writing deblocking filter parameters
+  if (!write_deblocking_filter_parameters_flag) {
+    return;
   }
 #endif  // CONFIG_MFH_DF
 

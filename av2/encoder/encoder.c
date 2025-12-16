@@ -3276,11 +3276,11 @@ static void loopfilter_frame(AV2_COMP *cpi, AV2_COMMON *cm) {
   }
 
 #if CONFIG_MFH_DF
-  //    cpi->cur_mfh_params.mfh_deblocking_filter_parameters_present_flag = 1;
-  lf->apply_deblocking_filter[0] =
-      cpi->cur_mfh_params.mfh_apply_deblocking_filter[0];
-  lf->apply_deblocking_filter[1] =
-      cpi->cur_mfh_params.mfh_apply_deblocking_filter[1];
+  // Store current loop filter parameters in MFH for potential reuse
+  cpi->cur_mfh_params.mfh_apply_deblocking_filter[0] =
+      lf->apply_deblocking_filter[0];
+  cpi->cur_mfh_params.mfh_apply_deblocking_filter[1] =
+      lf->apply_deblocking_filter[1];
 
   cpi->cur_mfh_params.mfh_apply_deblocking_filter_u =
       lf->apply_deblocking_filter_u;

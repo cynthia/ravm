@@ -3762,6 +3762,23 @@ static AVM_INLINE void encode_loopfilter(AV2_COMMON *cm,
     return;
   }
 
+#if CONFIG_MFH_DF
+  //  int write_deblocking_filter_parameters_flag = 1;
+  if (cm->mfh_params[cm->cur_mfh_id]
+          .mfh_deblocking_filter_parameters_present_flag) {
+    avm_wb_write_bit(wb, 1);  // override_deblocking_filter_parameters_flag
+  }
+  avm_wb_write_bit(wb, lf->apply_deblocking_filter[0]);
+
+  avm_wb_write_bit(wb, lf->apply_deblocking_filter[1]);
+
+  if (num_planes > 1) {
+    if (lf->apply_deblocking_filter[0] || lf->apply_deblocking_filter[1]) {
+      avm_wb_write_bit(wb, lf->apply_deblocking_filter_u);
+      avm_wb_write_bit(wb, lf->apply_deblocking_filter_v);
+    }
+  }
+#else
   // Encode the loop filter level and type
   if (!cm->mfh_params[cm->cur_mfh_id].mfh_deblocking_filter_update_flag) {
     avm_wb_write_bit(wb, lf->apply_deblocking_filter[0]);
@@ -3775,6 +3792,8 @@ static AVM_INLINE void encode_loopfilter(AV2_COMMON *cm,
       }
     }
   }
+#endif  // CONFIG_MFH_DF
+
   const uint8_t df_par_bits = cm->seq_params.df_par_bits_minus2 + 2;
   const uint8_t df_par_offset = 1 << (df_par_bits - 1);
   if (lf->apply_deblocking_filter[0]) {
@@ -6081,12 +6100,78 @@ static AVM_INLINE void write_multi_frame_header(
                          mfh_param->mfh_frame_height_bits_minus1 + 1);
   }
 
+#if CONFIG_MFH_DF
+  avm_wb_write_bit(wb,
+                   mfh_param->mfh_deblocking_filter_parameters_present_flag);
+  if (mfh_param->mfh_deblocking_filter_parameters_present_flag) {
+    // Encode the loop filter level and type
+    avm_wb_write_bit(wb, mfh_param->mfh_apply_deblocking_filter[0]);
+    avm_wb_write_bit(wb, mfh_param->mfh_apply_deblocking_filter[1]);
+
+    if (av2_num_planes(cm) > 1) {
+      if (mfh_param->mfh_apply_deblocking_filter[0] ||
+          mfh_param->mfh_apply_deblocking_filter[1]) {
+        avm_wb_write_bit(wb, mfh_param->mfh_apply_deblocking_filter_u);
+        avm_wb_write_bit(wb, mfh_param->mfh_apply_deblocking_filter_v);
+      }
+    }
+    const uint8_t df_par_bits = cm->seq_params.df_par_bits_minus2 + 2;
+    const uint8_t df_par_offset = 1 << (df_par_bits - 1);
+    if (mfh_param->mfh_apply_deblocking_filter[0]) {
+      int luma_delta_q_flag = mfh_param->mfh_delta_q_luma[0] != 0;
+
+      avm_wb_write_bit(wb, luma_delta_q_flag);
+      if (luma_delta_q_flag) {
+        avm_wb_write_literal(wb, mfh_param->mfh_delta_q_luma[0] + df_par_offset,
+                             df_par_bits);
+      }
+      assert(mfh_param->mfh_delta_q_luma[0] ==
+             mfh_param->mfh_delta_side_luma[0]);
+    }
+
+    if (mfh_param->mfh_apply_deblocking_filter[1]) {
+      int luma_delta_q_flag =
+          mfh_param->mfh_delta_q_luma[1] != mfh_param->mfh_delta_q_luma[0];
+
+      avm_wb_write_bit(wb, luma_delta_q_flag);
+      if (luma_delta_q_flag) {
+        avm_wb_write_literal(wb, mfh_param->mfh_delta_q_luma[1] + df_par_offset,
+                             df_par_bits);
+      }
+      assert(mfh_param->mfh_delta_q_luma[1] ==
+             mfh_param->mfh_delta_side_luma[1]);
+    }
+
+    if (mfh_param->mfh_apply_deblocking_filter_u) {
+      int u_delta_q_flag = mfh_param->mfh_delta_q_u != 0;
+
+      avm_wb_write_bit(wb, u_delta_q_flag);
+      if (u_delta_q_flag) {
+        avm_wb_write_literal(wb, mfh_param->mfh_delta_q_u + df_par_offset,
+                             df_par_bits);
+      }
+      assert(mfh_param->mfh_delta_q_u == mfh_param->mfh_delta_side_u);
+    }
+
+    if (mfh_param->mfh_apply_deblocking_filter_v) {
+      int v_delta_q_flag = mfh_param->mfh_delta_q_v != 0;
+
+      avm_wb_write_bit(wb, v_delta_q_flag);
+      if (v_delta_q_flag) {
+        avm_wb_write_literal(wb, mfh_param->mfh_delta_q_v + df_par_offset,
+                             df_par_bits);
+      }
+      assert(mfh_param->mfh_delta_q_v == mfh_param->mfh_delta_side_v);
+    }
+  }
+#else
   avm_wb_write_bit(wb, mfh_param->mfh_deblocking_filter_update_flag);
   if (mfh_param->mfh_deblocking_filter_update_flag) {
     for (int i = 0; i < 4; i++) {
       avm_wb_write_bit(wb, mfh_param->mfh_apply_deblocking_filter[i]);
     }
   }
+#endif  // CONFIG_MFH_DF
 
   if (mfh_param->mfh_tile_info_present_flag) {
     write_mfh_sb_size(mfh_param, wb);

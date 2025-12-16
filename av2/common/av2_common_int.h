@@ -1442,6 +1442,58 @@ typedef struct MultiFrameHeader {
    * Render size present flag
    */
   int mfh_render_size_present_flag;
+
+#if CONFIG_MFH_DF
+  /*!
+   * Presence of deblocking loop filter levels in this multi-frame header
+   */
+  int mfh_deblocking_filter_parameters_present_flag;
+  /*!
+   * deblocking filter parameters applied to frames that reference this
+   * multi-frame header
+   */
+  int mfh_apply_deblocking_filter[2];
+  /*!
+   * deblocking filter parameters applied to frames that reference this
+   * multi-frame header
+   */
+  int mfh_apply_deblocking_filter_u;
+  /*!
+   * deblocking filter parameters applied to frames that reference this
+   * multi-frame header
+   */
+  int mfh_apply_deblocking_filter_v;
+  /*!
+   * deblocking filter parameters applied to frames that reference this
+   * multi-frame header
+   */
+  int mfh_delta_q_luma[2];
+  /*!
+   * deblocking filter parameters applied to frames that reference this
+   * multi-frame header
+   */
+  int mfh_delta_side_luma[2];
+  /*!
+   * deblocking filter parameters applied to frames that reference this
+   * multi-frame header
+   */
+  int mfh_delta_q_u;
+  /*!
+   * deblocking filter parameters applied to frames that reference this
+   * multi-frame header
+   */
+  int mfh_delta_side_u;
+  /*!
+   * deblocking filter parameters applied to frames that reference this
+   * multi-frame header
+   */
+  int mfh_delta_q_v;
+  /*!
+   * deblocking filter parameters applied to frames that reference this
+   * multi-frame header
+   */
+  int mfh_delta_side_v;
+#else
   /*!
    * Presence of deblocking loop filter levels in this multi-frame header
    */
@@ -1450,9 +1502,8 @@ typedef struct MultiFrameHeader {
    * deblocking filter application to  frames that reference this multi-frame
    * header
    */
-
   int mfh_apply_deblocking_filter[4];
-
+#endif  // CONFIG_MFH_DF
   /*!
    * Presence of tile information in this multi-frame header
    */

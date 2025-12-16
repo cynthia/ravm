@@ -1067,7 +1067,12 @@ static void init_config(struct AV2_COMP *cpi, AV2EncoderConfig *oxcf) {
   av2_update_film_grain_parameters(cpi, oxcf);
 
   cm->cur_mfh_id = oxcf->tool_cfg.enable_mfh_obu_signaling ? 1 : 0;
+
+#if CONFIG_MFH_DF
+  cpi->cur_mfh_params.mfh_deblocking_filter_parameters_present_flag = 0;
+#else
   cpi->cur_mfh_params.mfh_deblocking_filter_update_flag = 0;
+#endif  // CONFIG_MFH_DF
   cpi->cur_mfh_params.mfh_tile_info_present_flag = 0;
 
   // Single thread case: use counts in common.
@@ -3269,6 +3274,30 @@ static void loopfilter_frame(AV2_COMP *cpi, AV2_COMMON *cm) {
     lf->apply_deblocking_filter[0] = 0;
     lf->apply_deblocking_filter[1] = 0;
   }
+
+#if CONFIG_MFH_DF
+  //    cpi->cur_mfh_params.mfh_deblocking_filter_parameters_present_flag = 1;
+  lf->apply_deblocking_filter[0] =
+      cpi->cur_mfh_params.mfh_apply_deblocking_filter[0];
+  lf->apply_deblocking_filter[1] =
+      cpi->cur_mfh_params.mfh_apply_deblocking_filter[1];
+
+  cpi->cur_mfh_params.mfh_apply_deblocking_filter_u =
+      lf->apply_deblocking_filter_u;
+  cpi->cur_mfh_params.mfh_apply_deblocking_filter_v =
+      lf->apply_deblocking_filter_v;
+
+  cpi->cur_mfh_params.mfh_delta_q_luma[0] = lf->delta_q_luma[0];
+  cpi->cur_mfh_params.mfh_delta_q_luma[1] = lf->delta_q_luma[1];
+
+  cpi->cur_mfh_params.mfh_delta_side_luma[0] = lf->delta_side_luma[0];
+  cpi->cur_mfh_params.mfh_delta_side_luma[1] = lf->delta_side_luma[1];
+
+  cpi->cur_mfh_params.mfh_delta_q_u = lf->delta_q_u;
+  cpi->cur_mfh_params.mfh_delta_side_u = lf->delta_side_u;
+  cpi->cur_mfh_params.mfh_delta_q_v = lf->delta_q_v;
+  cpi->cur_mfh_params.mfh_delta_side_v = lf->delta_side_v;
+#else
   cpi->cur_mfh_params.mfh_apply_deblocking_filter[0] =
       lf->apply_deblocking_filter[0];
   cpi->cur_mfh_params.mfh_apply_deblocking_filter[1] =
@@ -3277,6 +3306,8 @@ static void loopfilter_frame(AV2_COMP *cpi, AV2_COMMON *cm) {
       lf->apply_deblocking_filter_u;
   cpi->cur_mfh_params.mfh_apply_deblocking_filter[3] =
       lf->apply_deblocking_filter_v;
+#endif  // CONFIG_MFH_DF
+
   if (lf->apply_deblocking_filter[0] || lf->apply_deblocking_filter[1]) {
     if (num_workers > 1)
       av2_loop_filter_frame_mt(&cm->cur_frame->buf, cm, xd, 0, num_planes, 0,

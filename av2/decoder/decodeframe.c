@@ -3060,6 +3060,54 @@ static AVM_INLINE void setup_loopfilter(AV2_COMMON *cm,
   }
 
   assert(cm->mfh_valid[cm->cur_mfh_id]);
+
+#if CONFIG_MFH_DF
+  int read_deblocking_filter_parameters_flag = 1;
+  if (cm->mfh_params[cm->cur_mfh_id]
+          .mfh_deblocking_filter_parameters_present_flag)
+    read_deblocking_filter_parameters_flag = avm_rb_read_bit(rb);
+
+  if (!read_deblocking_filter_parameters_flag) {
+    lf->apply_deblocking_filter[0] =
+        cm->mfh_params[cm->cur_mfh_id].mfh_apply_deblocking_filter[0];
+    lf->apply_deblocking_filter[1] =
+        cm->mfh_params[cm->cur_mfh_id].mfh_apply_deblocking_filter[1];
+
+    lf->apply_deblocking_filter_u =
+        cm->mfh_params[cm->cur_mfh_id].mfh_apply_deblocking_filter_u;
+    lf->apply_deblocking_filter_v =
+        cm->mfh_params[cm->cur_mfh_id].mfh_apply_deblocking_filter_v;
+
+    lf->delta_q_luma[0] = cm->mfh_params[cm->cur_mfh_id].mfh_delta_q_luma[0];
+    lf->delta_q_luma[1] = cm->mfh_params[cm->cur_mfh_id].mfh_delta_q_luma[1];
+
+    lf->delta_side_luma[0] =
+        cm->mfh_params[cm->cur_mfh_id].mfh_delta_side_luma[0];
+    lf->delta_side_luma[1] =
+        cm->mfh_params[cm->cur_mfh_id].mfh_delta_side_luma[1];
+
+    lf->delta_q_u = cm->mfh_params[cm->cur_mfh_id].mfh_delta_q_u;
+    lf->delta_side_u = cm->mfh_params[cm->cur_mfh_id].mfh_delta_side_u;
+    lf->delta_q_v = cm->mfh_params[cm->cur_mfh_id].mfh_delta_q_v;
+    lf->delta_side_v = cm->mfh_params[cm->cur_mfh_id].mfh_delta_side_v;
+
+    return;
+  }
+
+  lf->apply_deblocking_filter[0] = avm_rb_read_bit(rb);
+  lf->apply_deblocking_filter[1] = avm_rb_read_bit(rb);
+
+  if (num_planes > 1) {
+    if (lf->apply_deblocking_filter[0] || lf->apply_deblocking_filter[1]) {
+      lf->apply_deblocking_filter_u = avm_rb_read_bit(rb);
+      lf->apply_deblocking_filter_v = avm_rb_read_bit(rb);
+    } else {
+      lf->apply_deblocking_filter_u = lf->apply_deblocking_filter_v = 0;
+    }
+  } else {
+    lf->apply_deblocking_filter_u = lf->apply_deblocking_filter_v = 0;
+  }
+#else
   if (cm->mfh_params[cm->cur_mfh_id].mfh_deblocking_filter_update_flag)
     lf->apply_deblocking_filter[0] =
         cm->mfh_params[cm->cur_mfh_id].mfh_apply_deblocking_filter[0];
@@ -3087,6 +3135,7 @@ static AVM_INLINE void setup_loopfilter(AV2_COMMON *cm,
   } else {
     lf->apply_deblocking_filter_u = lf->apply_deblocking_filter_v = 0;
   }
+#endif  // CONFIG_MFH_DF
 
   const uint8_t df_par_bits = cm->seq_params.df_par_bits_minus2 + 2;
   const uint8_t df_par_offset = 1 << (df_par_bits - 1);
@@ -6590,6 +6639,86 @@ void av2_read_multi_frame_header(AV2_COMMON *cm,
                         &mfh_param->mfh_frame_width,
                         &mfh_param->mfh_frame_height);
   }
+
+#if CONFIG_MFH_DF
+  mfh_param->mfh_deblocking_filter_parameters_present_flag =
+      avm_rb_read_bit(rb);
+  if (mfh_param->mfh_deblocking_filter_parameters_present_flag) {
+    mfh_param->mfh_apply_deblocking_filter[0] = avm_rb_read_bit(rb);
+    mfh_param->mfh_apply_deblocking_filter[1] = avm_rb_read_bit(rb);
+
+    if (av2_num_planes(cm) > 1) {
+      if (mfh_param->mfh_apply_deblocking_filter[0] ||
+          mfh_param->mfh_apply_deblocking_filter[1]) {
+        mfh_param->mfh_apply_deblocking_filter_u = avm_rb_read_bit(rb);
+        mfh_param->mfh_apply_deblocking_filter_v = avm_rb_read_bit(rb);
+      } else {
+        mfh_param->mfh_apply_deblocking_filter_u =
+            mfh_param->mfh_apply_deblocking_filter_v = 0;
+      }
+    } else {
+      mfh_param->mfh_apply_deblocking_filter_u =
+          mfh_param->mfh_apply_deblocking_filter_v = 0;
+    }
+
+    const uint8_t df_par_bits = cm->seq_params.df_par_bits_minus2 + 2;
+    const uint8_t df_par_offset = 1 << (df_par_bits - 1);
+
+    if (mfh_param->mfh_apply_deblocking_filter[0]) {
+      int luma_delta_q = avm_rb_read_bit(rb);
+      if (luma_delta_q) {
+        mfh_param->mfh_delta_q_luma[0] =
+            avm_rb_read_literal(rb, df_par_bits) - df_par_offset;
+      } else {
+        mfh_param->mfh_delta_q_luma[0] = 0;
+      }
+      mfh_param->mfh_delta_side_luma[0] = mfh_param->mfh_delta_q_luma[0];
+    } else {
+      mfh_param->mfh_delta_q_luma[0] = 0;
+      mfh_param->mfh_delta_side_luma[0] = 0;
+    }
+    if (mfh_param->mfh_apply_deblocking_filter[1]) {
+      int luma_delta_q = avm_rb_read_bit(rb);
+      if (luma_delta_q) {
+        mfh_param->mfh_delta_q_luma[1] =
+            avm_rb_read_literal(rb, df_par_bits) - df_par_offset;
+      } else {
+        mfh_param->mfh_delta_q_luma[1] = mfh_param->mfh_delta_q_luma[0];
+      }
+      mfh_param->mfh_delta_side_luma[1] = mfh_param->mfh_delta_q_luma[1];
+    } else {
+      mfh_param->mfh_delta_q_luma[1] = 0;
+      mfh_param->mfh_delta_side_luma[1] = 0;
+    }
+
+    if (mfh_param->mfh_apply_deblocking_filter_u) {
+      int u_delta_q = avm_rb_read_bit(rb);
+      if (u_delta_q) {
+        mfh_param->mfh_delta_q_u =
+            avm_rb_read_literal(rb, df_par_bits) - df_par_offset;
+      } else {
+        mfh_param->mfh_delta_q_u = 0;
+      }
+      mfh_param->mfh_delta_side_u = mfh_param->mfh_delta_q_u;
+    } else {
+      mfh_param->mfh_delta_q_u = 0;
+      mfh_param->mfh_delta_side_u = 0;
+    }
+    if (mfh_param->mfh_apply_deblocking_filter_v) {
+      int v_delta_q = avm_rb_read_bit(rb);
+      if (v_delta_q) {
+        mfh_param->mfh_delta_q_v =
+            avm_rb_read_literal(rb, df_par_bits) - df_par_offset;
+      } else {
+        mfh_param->mfh_delta_q_v = 0;
+      }
+      mfh_param->mfh_delta_side_v = mfh_param->mfh_delta_q_v;
+    } else {
+      mfh_param->mfh_delta_q_v = 0;
+      mfh_param->mfh_delta_side_v = 0;
+    }
+  }
+#else
   mfh_param->mfh_deblocking_filter_update_flag = avm_rb_read_bit(rb);
   if (mfh_param->mfh_deblocking_filter_update_flag) {
     for (int i = 0; i < 4; i++) {
@@ -6600,6 +6729,7 @@ void av2_read_multi_frame_header(AV2_COMMON *cm,
       mfh_param->mfh_apply_deblocking_filter[i] = 0;
     }
   }
+#endif  // CONFIG_MFH_DF
 
   if (mfh_param->mfh_tile_info_present_flag) {
     read_mfh_sb_size(mfh_param, rb);
@@ -7615,10 +7745,34 @@ static void handle_zero_cur_mfh_id(AV2_COMMON *const cm) {
   cm->mfh_params[cm->cur_mfh_id].mfh_frame_width = seq_params->max_frame_width;
   cm->mfh_params[cm->cur_mfh_id].mfh_frame_height =
       seq_params->max_frame_height;
+
+#if CONFIG_MFH_DF
+  cm->mfh_params[cm->cur_mfh_id].mfh_deblocking_filter_parameters_present_flag =
+      0;
+
+  cm->mfh_params[cm->cur_mfh_id].mfh_apply_deblocking_filter[0] = 0;
+  cm->mfh_params[cm->cur_mfh_id].mfh_apply_deblocking_filter[1] = 0;
+
+  cm->mfh_params[cm->cur_mfh_id].mfh_apply_deblocking_filter_u = 0;
+  cm->mfh_params[cm->cur_mfh_id].mfh_apply_deblocking_filter_v = 0;
+
+  cm->mfh_params[cm->cur_mfh_id].mfh_delta_q_luma[0] = 0;
+  cm->mfh_params[cm->cur_mfh_id].mfh_delta_q_luma[1] = 0;
+
+  cm->mfh_params[cm->cur_mfh_id].mfh_delta_side_luma[0] = 0;
+  cm->mfh_params[cm->cur_mfh_id].mfh_delta_side_luma[1] = 0;
+
+  cm->mfh_params[cm->cur_mfh_id].mfh_delta_q_u = 0;
+  cm->mfh_params[cm->cur_mfh_id].mfh_delta_side_u = 0;
+  cm->mfh_params[cm->cur_mfh_id].mfh_delta_q_v = 0;
+  cm->mfh_params[cm->cur_mfh_id].mfh_delta_side_v = 0;
+#else
   cm->mfh_params[cm->cur_mfh_id].mfh_deblocking_filter_update_flag = 0;
   for (int i = 0; i < 4; i++) {
     cm->mfh_params[cm->cur_mfh_id].mfh_apply_deblocking_filter[i] = 0;
   }
+#endif  // CONFIG_MFH_DF
+
   cm->mfh_valid[cm->cur_mfh_id] = true;
 }
 

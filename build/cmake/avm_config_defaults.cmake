@@ -145,6 +145,7 @@ set_avm_config_var(CONFIG_PARAKIT_COLLECT_DATA 0
 # AV2 experiment flags.
 set_avm_config_var(CONFIG_METADATA 1 "F161 metadata syntax")
 set_avm_config_var(CONFIG_ICC_METADATA 1 "ICC metadata syntax")
+set_avm_config_var(CONFIG_MFH_DF 1 "Add DF parameters to MFH")
 
 set_avm_config_var(CONFIG_CWG_E242_SEQ_HDR_ID 1 "Signal sequence header id.")
 

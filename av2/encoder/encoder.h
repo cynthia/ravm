@@ -50,6 +50,7 @@
 #include "av2/encoder/tokenize.h"
 #include "av2/encoder/tpl_model.h"
 #include "av2/encoder/av2_noise_estimate.h"
+#include "av2/common/banding_metadata.h"
 
 #if CONFIG_INTERNAL_STATS
 #include "avm_dsp/ssim.h"
@@ -846,6 +847,8 @@ typedef struct {
   bool enable_ccso;
   // Indicates if CCSO unit size should match superblock size.
   int ccso_unit_matches_sb;
+  // Indicates if banding metadata should be enabled.
+  bool enable_band_metadata;
   bool enable_lf_sub_pu;
   // Indicates if deblocking on sub block should be enabled.
   // Indicates if adaptive MVD resolution should be enabled.
@@ -3002,6 +3005,15 @@ typedef struct AV2_COMP {
    */
 
   uint8_t tier[MAX_NUM_OPERATING_POINTS];  // seq_tier in spec. One bit: 0 or 1.
+
+  /*!
+   * Banding hints metadata for the current frame
+   */
+  avm_banding_hints_metadata_t band_metadata;
+  /*!
+   * Flag indicating if banding metadata is available for the current frame
+   */
+  int band_metadata_present;
 } AV2_COMP;
 
 /*!

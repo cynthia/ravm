@@ -31,6 +31,7 @@
 #include "av2/decoder/inspection.h"
 #endif
 #include "av2/decoder/annexF.h"
+#include "av2/common/banding_metadata.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -666,6 +667,14 @@ typedef struct AV2Decoder {
   int doh_tu_order_hint_bits;      // OrderHintBits of first picture in TU
   int doh_tu_order_hint_bits_set;  // Whether doh_tu_order_hint_bits has been
                                    // set
+  /*!
+   * Banding hints metadata for the current frame
+   */
+  avm_banding_hints_metadata_t band_metadata;
+  /*!
+   * Flag indicating if banding metadata is available for the current frame
+   */
+  int band_metadata_present;
 } AV2Decoder;
 
 // Returns 0 on success. Sets pbi->common.error.error_code to a nonzero error

@@ -120,6 +120,9 @@ int parse_cfg(const char *file, cfg_options_t *config) {
     GET_PARAMS(enable_restoration);
     GET_PARAMS(enable_ccso);
     GET_PARAMS(ccso_unit_matches_sb);
+#if CONFIG_BAND_DETECTION
+    GET_PARAMS(enable_band_metadata);
+#endif  // CONFIG_BAND_DETECTION
     GET_PARAMS(enable_lf_sub_pu);
     GET_PARAMS(enable_warped_motion);
     GET_PARAMS(enable_global_motion);

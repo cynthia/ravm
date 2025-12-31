@@ -538,6 +538,58 @@ enum {
 
 /*!\cond */
 
+#if CONFIG_BAND_DETECTION
+typedef struct BandingBuffers {
+  /** c_values */
+  float *c_values;
+  /** mask buffer */
+  uint32_t *mask_dp;
+  /** histogram for the c_values */
+  uint16_t *c_values_histograms;
+  /** filtering step buffer */
+  uint16_t *filter_mode_buffer;
+} BandingBuffers;
+
+/** Banding detection / CAMBI info */
+typedef struct {
+  /** invoke banding detection */
+  bool do_band_detection;
+  /** banding detected in the frame */
+  bool band_detected;
+  /** frame to analyze */
+  uint16_t *frame;
+  /** mask frame buffer */
+  uint16_t *mask;
+  /** stride from frame, mask and c_values buffers */
+  int stride;
+  /** frame height for 'frame', mask and c_values buffers */
+  int height;
+  /** visibility threshold for contrast */
+  uint16_t *tvi_for_diff;
+  /** weight per contrast to determine score */
+  int *diffs_weights;
+  /** weight per scale to determine score (encoder-only) */
+  int scale_weights[5];
+  /** window size over which banding is assessed */
+  uint16_t window_size;
+  /** number of pixels in the window */
+  uint16_t pixels_in_window;
+  /** ratio of worst banding pixels used to determine the score */
+  double topk;
+  /** visibility threshold */
+  double tvi_threshold;
+  /** max log 2 number of contrasts */
+  uint16_t max_log_contrast;
+  /** number of contrasts */
+  int num_diffs;
+  /** number of bins for the histogram in CAMBI */
+  int num_bins;
+  /** Buffers used in CAMBI */
+  BandingBuffers buffers;
+} BandDetectInfo;
+#endif  // CONFIG_BAND_DETECTION
+
+
 typedef struct {
   int delta_q_present_flag;
   // Resolution of delta quant
@@ -1297,6 +1349,9 @@ typedef struct SequenceHeader {
   uint8_t enable_restoration;         // To turn on/off loop restoration
   uint8_t enable_ccso;                // To turn on/off CCSO
   uint8_t ccso_unit_matches_sb_size;  // CCSO unit size matches superblock size
+#if CONFIG_BAND_DETECTION
+  uint8_t enable_band_metadata;         // To turn on/off band metadata
+#endif  // CONFIG_BAND_DETECTION
   uint8_t enable_lf_sub_pu;           // To turn on/off sub-block deblocking
   uint8_t enable_refmvbank;           // To turn on/off Ref MV Bank
   uint8_t enable_bru;          // To turn on/off backward reference updating
@@ -2725,6 +2780,13 @@ typedef struct AV2Common {
    * CCSO (Cross Component Sample Offset) parameters.
    */
   CcsoInfo ccso_info;
+
+#if CONFIG_BAND_DETECTION
+  /*!
+   * Banding detection parameters.
+   */
+  BandDetectInfo band_info;
+#endif  // CONFIG_BAND_DETECTION
 
   /*!
    * Parameters for film grain synthesis.

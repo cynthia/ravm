@@ -430,6 +430,12 @@ typedef struct cfg_options {
   /*!\brief enable loop filter on sub-block
    *
    */
+#if CONFIG_BAND_DETECTION
+  /*!\brief enable banding metadata
+   *
+   */
+  unsigned int enable_band_metadata;
+#endif  // CONFIG_BAND_DETECTION
   unsigned int enable_lf_sub_pu;
   /*!\brief enable local warped motion
    *

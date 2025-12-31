@@ -140,6 +140,9 @@ typedef struct av2_codec_arg_definitions {
   arg_def_t enable_wiener_nonsep;
   arg_def_t enable_ccso;
   arg_def_t ccso_unit_matches_sb;
+#if CONFIG_BAND_DETECTION
+  arg_def_t enable_band_metadata;
+#endif  // CONFIG_BAND_DETECTION
   arg_def_t enable_lf_sub_pu;
   arg_def_t disable_ml_partition_speed_features;
   arg_def_t erp_pruning_level;

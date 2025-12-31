@@ -166,6 +166,10 @@ set_avm_config_var(
   "Encoder only flag to configure encoder to enable mixed lossy/lossless coding"
 )
 
+set_avm_config_var(
+  CONFIG_BAND_DETECTION 1
+  "Enable banding detection for banding hints metadata.")
+
 #
 # Variables in this section control optional features of the build system.
 #

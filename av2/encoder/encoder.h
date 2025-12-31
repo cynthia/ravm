@@ -841,6 +841,10 @@ typedef struct {
   bool enable_ccso;
   // Indicates if CCSO unit size should match superblock size.
   int ccso_unit_matches_sb;
+#if CONFIG_BAND_DETECTION
+  // Indicates if banding metadata should be enabled.
+  bool enable_band_metadata;
+#endif  // CONFIG_BAND_DETECTION
   bool enable_lf_sub_pu;
   // Indicates if deblocking on sub block should be enabled.
   // Indicates if adaptive MVD resolution should be enabled.

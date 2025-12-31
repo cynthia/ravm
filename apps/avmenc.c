@@ -462,6 +462,9 @@ const arg_def_t *av2_key_val_args[] = {
   &g_av2_codec_arg_defs.enable_opfl_refine,
   &g_av2_codec_arg_defs.enable_ccso,
   &g_av2_codec_arg_defs.ccso_unit_matches_sb,
+#if CONFIG_BAND_DETECTION
+  &g_av2_codec_arg_defs.enable_band_metadata,
+#endif  // CONFIG_BAND_DETECTION
   &g_av2_codec_arg_defs.enable_lf_sub_pu,
   &g_av2_codec_arg_defs.reduced_ref_frame_mvs_mode,
   &g_av2_codec_arg_defs.enable_intrabc_ext,
@@ -662,6 +665,9 @@ static void init_config(cfg_options_t *config) {
   config->enable_wiener_nonsep = 1;
   config->enable_ccso = 1;
   config->ccso_unit_matches_sb = 0;
+#if CONFIG_BAND_DETECTION
+  config->enable_band_metadata = 1;
+#endif  // CONFIG_BAND_DETECTION
   config->enable_lf_sub_pu = 1;
   config->enable_warped_motion = 1;
   config->enable_warp_causal = 1;

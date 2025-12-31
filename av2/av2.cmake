@@ -136,6 +136,12 @@ list(APPEND AVM_AV2_COMMON_SOURCES "${AVM_ROOT}/av2/common/bru.c"
 list(APPEND AVM_AV2_COMMON_SOURCES "${AVM_ROOT}/av2/common/banding_metadata.c"
      "${AVM_ROOT}/av2/common/banding_metadata.h")
 
+if(CONFIG_BAND_DETECTION)
+  list(APPEND AVM_AV2_COMMON_SOURCES
+       "${AVM_ROOT}/av2/encoder/banding_detection.c"
+       "${AVM_ROOT}/av2/encoder/banding_detection.h")
+endif()
+
 list(APPEND AVM_AV2_ENCODER_SOURCES "${AVM_ROOT}/av2/encoder/trellis_quant.c"
      "${AVM_ROOT}/av2/encoder/trellis_quant.h")
 list(APPEND AVM_AV2_ENCODER_INTRIN_AVX2

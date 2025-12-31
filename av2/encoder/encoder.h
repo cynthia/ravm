@@ -50,6 +50,9 @@
 #include "av2/encoder/tokenize.h"
 #include "av2/encoder/tpl_model.h"
 #include "av2/encoder/av2_noise_estimate.h"
+#if CONFIG_BAND_DETECTION
+#include "av2/common/banding_metadata.h"
+#endif
 
 #if CONFIG_INTERNAL_STATS
 #include "avm_dsp/ssim.h"
@@ -3002,6 +3005,17 @@ typedef struct AV2_COMP {
    */
 
   uint8_t tier[MAX_NUM_OPERATING_POINTS];  // seq_tier in spec. One bit: 0 or 1.
+
+#if CONFIG_BAND_DETECTION
+  /*!
+   * Banding hints metadata for the current frame
+   */
+  avm_banding_hints_metadata_t band_metadata;
+  /*!
+   * Flag indicating if banding metadata is available for the current frame
+   */
+  int band_metadata_present;
+#endif  // CONFIG_BAND_DETECTION
 } AV2_COMP;
 
 /*!

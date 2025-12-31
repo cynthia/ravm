@@ -919,6 +919,23 @@ static size_t read_metadata_banding_hints(AV2Decoder *const pbi,
                        "Empty banding hints metadata payload");
   }
 
+#if CONFIG_BAND_DETECTION
+  // Decode the banding hints metadata payload
+  if (avm_decode_banding_hints_metadata(data, sz, &pbi->band_metadata) == 0) {
+    // Successfully decoded
+    pbi->band_metadata_present = 1;
+
+    printf("Decoded banding metadata: coding_banding=%d, source_banding=%d\n",
+           pbi->band_metadata.coding_banding_present_flag,
+           pbi->band_metadata.source_banding_present_flag);
+  } else {
+    // Failed to decode - mark as invalid
+    pbi->band_metadata_present = 0;
+    avm_internal_error(&cm->error, AVM_CODEC_CORRUPT_FRAME,
+                       "Failed to decode banding hints metadata");
+  }
+#endif  // CONFIG_BAND_DETECTION
+
   // Store the raw payload in the generic metadata array
   alloc_read_metadata(pbi, OBU_METADATA_TYPE_BANDING_HINTS, data, sz,
                       AVM_MIF_ANY_FRAME);
@@ -926,10 +943,78 @@ static size_t read_metadata_banding_hints(AV2Decoder *const pbi,
   return sz;
 }
 
-// Helper function to read banding hints from a bit buffer
+// Helper function to read banding hints from a bit buffer (short metadata path)
 static void read_metadata_banding_hints_from_rb(
-    AV2Decoder *const pbi, struct avm_read_bit_buffer *rb) {
-  (void)pbi;  // kept for consistency
+    AV2Decoder *const pbi, struct avm_read_bit_buffer *rb,
+    const uint8_t *data, size_t sz) {
+#if CONFIG_BAND_DETECTION
+  avm_banding_hints_metadata_t *md = &pbi->band_metadata;
+  memset(md, 0, sizeof(*md));
+
+  md->coding_banding_present_flag = avm_rb_read_bit(rb);
+  md->source_banding_present_flag = avm_rb_read_bit(rb);
+
+  if (md->coding_banding_present_flag) {
+    md->banding_hints_flag = avm_rb_read_bit(rb);
+
+    if (md->banding_hints_flag) {
+      md->three_color_components = avm_rb_read_bit(rb);
+      const int num_components = md->three_color_components ? 3 : 1;
+
+      for (int plane = 0; plane < num_components; plane++) {
+        md->banding_in_component_present_flag[plane] = avm_rb_read_bit(rb);
+        if (md->banding_in_component_present_flag[plane]) {
+          md->max_band_width_minus4[plane] = avm_rb_read_literal(rb, 6);
+          md->max_band_step_minus1[plane] = avm_rb_read_literal(rb, 4);
+        }
+      }
+
+      md->band_units_information_present_flag = avm_rb_read_bit(rb);
+      if (md->band_units_information_present_flag) {
+        md->num_band_units_rows_minus_1 = avm_rb_read_literal(rb, 5);
+        md->num_band_units_cols_minus_1 = avm_rb_read_literal(rb, 5);
+        md->varying_size_band_units_flag = avm_rb_read_bit(rb);
+
+        if (md->varying_size_band_units_flag) {
+          md->band_block_in_luma_samples = avm_rb_read_literal(rb, 3);
+
+          for (int r = 0; r <= md->num_band_units_rows_minus_1; r++) {
+            md->vert_size_in_band_blocks_minus1[r] =
+                avm_rb_read_literal(rb, 5);
+          }
+
+          for (int c = 0; c <= md->num_band_units_cols_minus_1; c++) {
+            md->horz_size_in_band_blocks_minus1[c] =
+                avm_rb_read_literal(rb, 5);
+          }
+        }
+
+        for (int r = 0; r <= md->num_band_units_rows_minus_1; r++) {
+          for (int c = 0; c <= md->num_band_units_cols_minus_1; c++) {
+            md->banding_in_band_unit_present_flag[r][c] =
+                avm_rb_read_bit(rb);
+          }
+        }
+      }
+    }
+  }
+
+  pbi->band_metadata_present = 1;
+
+  printf("Decoded banding metadata: coding_banding=%d, source_banding=%d\n",
+         md->coding_banding_present_flag, md->source_banding_present_flag);
+
+  // Re-encode to raw payload and store in metadata array
+  uint8_t payload_buf[256];
+  size_t payload_size = sizeof(payload_buf);
+  if (avm_encode_banding_hints_metadata(md, payload_buf, &payload_size) == 0) {
+    alloc_read_metadata(pbi, OBU_METADATA_TYPE_BANDING_HINTS, payload_buf,
+                        payload_size, AVM_MIF_ANY_FRAME);
+  }
+#else
+  (void)pbi;
+  (void)data;
+  (void)sz;
 
   const int coding_banding_present_flag = avm_rb_read_bit(rb);
   avm_rb_read_bit(rb);  // source_banding_present_flag
@@ -975,6 +1060,7 @@ static void read_metadata_banding_hints_from_rb(
       }
     }
   }
+#endif  // CONFIG_BAND_DETECTION
 }
 
 // On success, returns the number of bytes read from 'data'. On failure, calls
@@ -1206,6 +1292,7 @@ static size_t read_metadata_unit_payload(AV2Decoder *pbi, const uint8_t *data,
     return sz;
   } else if (metadata_type == OBU_METADATA_TYPE_BANDING_HINTS) {
     read_metadata_banding_hints(pbi, data + type_length, sz - type_length);
+    return sz;
   } else if (metadata_type == OBU_METADATA_TYPE_SCAN_TYPE) {
     struct avm_read_bit_buffer rb;
     av2_init_read_bit_buffer(pbi, &rb, data + type_length, data + sz);
@@ -1238,7 +1325,8 @@ static size_t read_metadata_unit_payload(AV2Decoder *pbi, const uint8_t *data,
       }
     } else if (metadata_type == OBU_METADATA_TYPE_BANDING_HINTS) {
       // Banding hints metadata is variable bits, not byte-aligned
-      read_metadata_banding_hints_from_rb(pbi, &rb);
+      read_metadata_banding_hints_from_rb(pbi, &rb, data + type_length,
+                                          sz - type_length);
     } else {
       assert(metadata_type == OBU_METADATA_TYPE_TIMECODE);
       read_metadata_timecode(&rb);
@@ -1562,7 +1650,18 @@ static size_t read_metadata_short(AV2Decoder *pbi, const uint8_t *data,
       }
     } else if (metadata_type == OBU_METADATA_TYPE_BANDING_HINTS) {
       // Banding hints metadata is variable bits, not byte-aligned
-      read_metadata_banding_hints_from_rb(pbi, &rb);
+      // Find and validate trailing 0x80 byte, strip it from payload size
+      const int last_nonzero_idx =
+          get_last_nonzero_byte_index(data + type_length, sz - type_length);
+      if (last_nonzero_idx < 0 ||
+          data[type_length + last_nonzero_idx] != 0x80) {
+        cm->error.error_code = AVM_CODEC_CORRUPT_FRAME;
+        return 0;
+      }
+      const size_t banding_payload_size = last_nonzero_idx;
+      read_metadata_banding_hints_from_rb(pbi, &rb, data + type_length,
+                                          banding_payload_size);
+      return sz;
     } else if (metadata_type == OBU_METADATA_TYPE_ICC_PROFILE) {
       // ICC profile is byte-aligned binary data
       // Find the last nonzero byte (should be 0x80 trailing byte)

@@ -12,10 +12,10 @@
 #ifndef AVM_AV2_COMMON_BANDING_DETECTION_H_
 #define AVM_AV2_COMMON_BANDING_DETECTION_H_
 
-#include "config/aom_config.h"
 #include "avm/avm_integer.h"
 #include "av2/common/av2_common_int.h"
 #include "av2/common/reconinter.h"
+#include "av2/common/banding_metadata.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -65,7 +65,8 @@ void avm_band_detection_close(BandDetectInfo *const dbi);
 
 void avm_band_detection(const YV12_BUFFER_CONFIG *frame,
                         const YV12_BUFFER_CONFIG *ref, AV2_COMMON *cm,
-                        MACROBLOCKD *xd);
+                        MACROBLOCKD *xd,
+                        avm_banding_hints_metadata_t *band_metadata);
 
 #ifdef __cplusplus
 }  // extern "C"

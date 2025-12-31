@@ -666,12 +666,15 @@ void avm_band_detection_close(BandDetectInfo *const dbi) {
  * \param[in]      ref          Source frame buffer
  * \param[in,out]  cm           Pointer to top level common structure
  * \param[in]      xd           Pointer to common current coding block structure
+ * \param[out]     band_metadata   Banding hints metadata structure to be filled
+
  *
  * \return Nothing is returned. Instead, presence of banding is stored
  */
 void avm_band_detection(const YV12_BUFFER_CONFIG *frame,
                         const YV12_BUFFER_CONFIG *ref, AV2_COMMON *cm,
-                        MACROBLOCKD *xd) {
+                        MACROBLOCKD *xd,
+                        avm_banding_hints_metadata_t *band_metadata) {
   BandDetectInfo *const dbi = &cm->band_info;
   double cambi_ref = avm_compute_cambi(ref, dbi, xd);
   double cambi_enc = avm_compute_cambi(frame, dbi, xd);
@@ -682,9 +685,18 @@ void avm_band_detection(const YV12_BUFFER_CONFIG *frame,
 
   dbi->band_detected = (cambi_enc - cambi_ref >= diff_threshold);
 
-  // double src_threshold = bit_depth==8 ? CAMBI_SOURCE_THRESHOLD_8b
-  //                                     : CAMBI_SOURCE_THRESHOLD_10b;
-  // dbi->band_detected &= (cambi_ref < src_threshold);
+  double src_threshold = bit_depth==8 ? CAMBI_SOURCE_THRESHOLD_8b
+                                      : CAMBI_SOURCE_THRESHOLD_10b;
+
+  // Initialize and populate the band metadata structure
+  if (band_metadata) {
+    memset(band_metadata, 0, sizeof(avm_banding_hints_metadata_t));
+    band_metadata->coding_banding_present_flag = dbi->band_detected;
+    band_metadata->source_banding_present_flag = (cambi_ref < src_threshold);
+    // For now, set banding_hints_flag to 0 (no detailed hints)
+    // This can be extended in the future to include more detailed information
+    band_metadata->banding_hints_flag = 0;
+  }
 
   printf("CAMBI ref: %f  CAMBI enc: %f, detection: %d\n",
          cambi_ref, cambi_enc, dbi->band_detected);

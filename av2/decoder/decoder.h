@@ -33,6 +33,9 @@
 #if CONFIG_ANNEXF
 #include "av2/decoder/annexF.h"
 #endif
+#if CONFIG_BAND_DETECTION
+#include "av2/common/banding_metadata.h"
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -654,6 +657,16 @@ typedef struct AV2Decoder {
    * Map to indicate which mlayer is present in the current CVS.
    */
   int mlayer_id_map[AVM_MAX_NUM_STREAMS][MAX_NUM_MLAYERS];
+#if CONFIG_BAND_DETECTION
+  /*!
+   * Banding hints metadata for the current frame
+   */
+  avm_banding_hints_metadata_t band_metadata;
+  /*!
+   * Flag indicating if banding metadata is available for the current frame
+   */
+  int band_metadata_present;
+#endif  // CONFIG_BAND_DETECTION
 } AV2Decoder;
 
 // Returns 0 on success. Sets pbi->common.error.error_code to a nonzero error

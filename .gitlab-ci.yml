@@ -202,6 +202,7 @@ Test Data Check:
           - no-thread
           - no-webm
           - inspection-accounting
+          - extract-proto
           - nasm
           - no-examples
           - debug
@@ -235,6 +236,9 @@ Test Data Check:
           ;;
         inspection-accounting)
           CMAKE_FLAGS="$CMAKE_FLAGS -DCONFIG_INSPECTION=1 -DCONFIG_ACCOUNTING=1"
+          ;;
+        extract-proto)
+          CMAKE_FLAGS="$CMAKE_FLAGS -DCONFIG_INSPECTION=1 -DCONFIG_ACCOUNTING=1 -DCONFIG_EXTRACT_PROTO=1 -DCONFIG_MULTITHREAD=0"
           ;;
         entropy-stats)
           CMAKE_FLAGS="$CMAKE_FLAGS -DCONFIG_ENTROPY_STATS=1"
@@ -357,6 +361,7 @@ Build (aarch64-linux-gcc):
           - no-thread
           - no-webm
           - inspection-accounting
+          - extract-proto
           - no-examples
   variables:
     # Overwriting the default flags to disalbe Werror

@@ -11,6 +11,7 @@
  */
 
 #include "av2/common/timing.h"
+#include "av2/common/blockd.h"
 
 /* Tables for AV2 max bitrates for different levels of main and high tier.
  * The tables are in Kbps instead of Mbps in the specification.
@@ -47,18 +48,30 @@ static int32_t high_kbps[1 << LEVEL_BITS] = {
 };
 
 /* BitrateProfileFactor */
-static int bitrate_profile_factor[1 << PROFILE_BITS] = {
-  1, 2, 3, 0, 0, 0, 0, 0
-};
+static int bitrate_factor[3] = { 1, 2, 3 };
 
-int64_t av2_max_level_bitrate(BITSTREAM_PROFILE seq_profile, int seq_level_idx,
-                              int seq_tier) {
+static int get_bitrate_scaling_factor(const int seq_chroma_format_idc) {
+  int bitrate_scaling_factor = 0;
+  if (seq_chroma_format_idc == CHROMA_FORMAT_400 ||
+      seq_chroma_format_idc == CHROMA_FORMAT_420) {
+    bitrate_scaling_factor = 0;
+  } else if (seq_chroma_format_idc == CHROMA_FORMAT_422) {
+    bitrate_scaling_factor = 1;
+  } else if (seq_chroma_format_idc == CHROMA_FORMAT_444) {
+    bitrate_scaling_factor = 2;
+  }
+  return bitrate_factor[bitrate_scaling_factor];
+}
+
+int64_t av2_max_level_bitrate(const int seq_level_idx, int seq_tier,
+                              const int seq_chroma_format_idc) {
   int64_t bitrate;
-
+  int bitrate_scaling_factor =
+      get_bitrate_scaling_factor(seq_chroma_format_idc);
   if (seq_tier) {
-    bitrate = high_kbps[seq_level_idx] * bitrate_profile_factor[seq_profile];
+    bitrate = high_kbps[seq_level_idx] * bitrate_scaling_factor;
   } else {
-    bitrate = main_kbps[seq_level_idx] * bitrate_profile_factor[seq_profile];
+    bitrate = main_kbps[seq_level_idx] * bitrate_scaling_factor;
   }
 
   return bitrate * 1000;

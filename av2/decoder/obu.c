@@ -298,9 +298,15 @@ static uint32_t read_sequence_header_obu(AV2Decoder *pbi,
       seq_params->seq_max_low_delay_mode_flag = 0;
     }
     // TODO: May need additional modifications with decoder model
-    int64_t seq_bitrate = av2_max_level_bitrate(seq_params->profile,
-                                                seq_params->seq_max_level_idx,
-                                                seq_params->seq_tier);
+    uint32_t seq_chroma_format_idc = CHROMA_FORMAT_420;
+    avm_codec_err_t err =
+        av2_get_chroma_format_idc(seq_params, &seq_chroma_format_idc);
+
+    int64_t seq_bitrate =
+        err != AVM_CODEC_OK ? 0
+                            : av2_max_level_bitrate(
+                                  seq_params->seq_max_level_idx,
+                                  seq_params->seq_tier, seq_chroma_format_idc);
     if (seq_bitrate == 0)
       avm_internal_error(&cm->error, AVM_CODEC_UNSUP_BITSTREAM,
                          "AV2 does not support this combination of "

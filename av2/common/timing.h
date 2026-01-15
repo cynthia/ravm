@@ -47,7 +47,7 @@ void av2_set_dec_model_op_parameters(avm_dec_model_op_parameters_t *op_params);
 void av2_set_resource_availability_parameters(
     avm_dec_model_op_parameters_t *op_params);
 
-int64_t av2_max_level_bitrate(BITSTREAM_PROFILE seq_profile, int seq_level_idx,
-                              int seq_tier);
+int64_t av2_max_level_bitrate(int seq_level_idx, int seq_tier,
+                              int seq_chroma_format_idc);
 
 #endif  // AVM_AV2_COMMON_TIMING_H_

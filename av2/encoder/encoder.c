@@ -327,8 +327,14 @@ static void set_bitstream_level_tier(AV2_COMP *cpi, AV2_COMMON *cm, int width,
     cpi->level_idx[i] = level;
     // Set the maximum parameters for bitrate and buffer size for this profile,
     // level, and tier
-    seq_params->op_params[i].bitrate = av2_max_level_bitrate(
-        cm->seq_params.profile, cpi->level_idx[i], cpi->tier[i]);
+    uint32_t seq_chroma_format_idc = CHROMA_FORMAT_420;
+    avm_codec_err_t err =
+        av2_get_chroma_format_idc(seq_params, &seq_chroma_format_idc);
+    seq_params->op_params[i].bitrate =
+        err != AVM_CODEC_OK
+            ? 0
+            : av2_max_level_bitrate(cpi->level_idx[i], cpi->tier[i],
+                                    seq_chroma_format_idc);
 
     // Level with seq_level_idx = 31 returns a high "dummy" bitrate to pass the
     // check

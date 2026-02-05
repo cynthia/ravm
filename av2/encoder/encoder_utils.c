@@ -776,10 +776,6 @@ void av2_determine_sc_tools_with_encoding(AV2_COMP *cpi, const int q_orig) {
       !is_key_frame) {
     return;
   }
-  if (oxcf->kf_cfg.fwd_kf_enabled || is_screen_content_type_orig_decision ||
-      !is_key_frame) {
-    return;
-  }
 
   // TODO(chengchen): multiple encoding for the lossless mode is time consuming.
   // Find a better way to determine whether screen content tools should be used

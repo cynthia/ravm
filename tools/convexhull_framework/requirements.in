@@ -1,0 +1,30 @@
+# AVM CTC Framework - Python Dependencies
+#
+# This file lists all Python packages required by the AVM CTC testing framework.
+#
+# Installation:
+#   1. Create a virtual environment: python3 -m venv venv
+#   2. Activate it: source venv/bin/activate (Linux/macOS) or venv\Scripts\activate (Windows)
+#   3. Install dependencies: pip install -r requirements.txt
+#
+# For development, you may also want to install:
+#   pip install -r requirements-dev.txt (if available)
+
+# Data processing and numerical computing
+numpy>=1.20.0
+pandas>=1.3.0
+scipy>=1.7.0
+
+# Excel file handling
+openpyxl>=3.0.0      # Read/write Excel 2010+ xlsx/xlsm files
+xlrd>=2.0.0          # Read Excel files (xls format)
+xlsxwriter>=3.0.0    # Write Excel xlsx files
+
+# Visualization
+matplotlib>=3.4.0
+
+# Configuration file parsing
+PyYAML>=6.0
+
+# Table formatting for terminal output
+tabulate>=0.8.0

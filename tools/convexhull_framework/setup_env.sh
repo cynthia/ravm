@@ -90,14 +90,11 @@ install_dependencies() {
     echo -e "\n${YELLOW}Activating virtual environment...${NC}"
     source "$VENV_PATH/bin/activate"
     
-    echo -e "\n${YELLOW}Upgrading pip...${NC}"
-    pip install --upgrade pip
-    
     echo -e "\n${YELLOW}Installing dependencies from requirements.txt...${NC}"
     REQUIREMENTS_FILE="$SCRIPT_DIR/requirements.txt"
     
     if [ -f "$REQUIREMENTS_FILE" ]; then
-        pip install -r "$REQUIREMENTS_FILE"
+        pip install --require-hashes -r "$REQUIREMENTS_FILE"
         
         if [ $? -eq 0 ]; then
             echo -e "${GREEN}All dependencies installed successfully.${NC}"

@@ -31,7 +31,7 @@ TEST_CONFIGURATIONS = ["AI", "LD", "RA", "AS", "STILL"]
 def submit_job(job_file_path):
     """Submit a single job to the compute cluster"""
     # need to be implemented based on the inteface of the cluster
-    print("submitting job %" % job_file_path)
+    print("submitting job %s" % job_file_path)
 
 
 def find_testcmd_log(work_path):

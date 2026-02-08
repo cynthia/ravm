@@ -22,7 +22,6 @@ import numpy as np
 import openpyxl
 import pandas as pd
 import Utils
-import xlsxwriter
 from CalcBDRate import BD_RATE
 from Config import (
     CTC_ASXLSTemplate,
@@ -152,6 +151,13 @@ csv_paths = {
         "0",
         os.path.join(CTC_RESULT_PATH, "AV2-CTC-v11.0.0"),
     ],
+    "v12.0.0": [
+        "v12.0.0",
+        "av2",
+        "aom",
+        "0",
+        os.path.join(CTC_RESULT_PATH, "AV2-CTC-v12.0.0"),
+    ],
 }
 
 CONFIG = ["AI", "LD", "RA", "Still", "AS"]
@@ -178,6 +184,7 @@ formats = {
     "v09.0.0": ["b", "-.", "^"],
     "v10.0.0": ["c", "-.", "+"],
     "v11.0.0": ["m", "-.", "o"],
+    "v12.0.0": ["r", ":", "x"],
 }
 
 dates = {
@@ -192,6 +199,7 @@ dates = {
     "v09.0.0": "01/24/2025",
     "v10.0.0": "06/02/2025",
     "v11.0.0": "08/29/2025",
+    "v12.0.0": "10/27/2025",
 }
 
 AS_formats = {
@@ -424,7 +432,7 @@ def DrawIndividualRDCurve(records, anchor, pdf):
                     plt.close()
 
 
-def DrawCombinedRDCurve(records, pdf):
+def DrawCombinedRDCurve(csv_files, records, pdf):
     with PdfPages(pdf) as export_pdf:
         for tag in csv_files.keys():
             for cfg in csv_files[tag].keys():
@@ -501,7 +509,7 @@ def DrawCombinedRDCurve(records, pdf):
                 plt.close()
 
 
-def DrawCombinedRuntime(records, pdf):
+def DrawCombinedRuntime(csv_files, records, pdf):
     with PdfPages(pdf) as export_pdf:
         for tag in csv_files.keys():
             for cfg in csv_files[tag].keys():
@@ -691,7 +699,7 @@ def CalcASBDRate(tag, cfg, cls, video, anchor, test):
     return bdrate
 
 
-def CalcFullBDRate(anchor):
+def CalcFullBDRate(anchor, csv_files, records):
     bdrate = []
     seq_time = []
     for cfg in csv_files[anchor].keys():
@@ -978,12 +986,12 @@ if __name__ == "__main__":
 
     FillXlsFile(csv_files)
 
-    DrawCombinedRDCurve(records, combined_rd_curve_pdf)
-    DrawCombinedRuntime(records, combined_runtime_pdf)
+    DrawCombinedRDCurve(csv_files, records, combined_rd_curve_pdf)
+    DrawCombinedRuntime(csv_files, records, combined_runtime_pdf)
     DrawIndividualRDCurve(records, anchor, rd_curve_pdf)
 
     # Calculate BDRate and collect total time
-    (bdrate, seq_time) = CalcFullBDRate(anchor)
+    (bdrate, seq_time) = CalcFullBDRate(anchor, csv_files, records)
 
     write_bdrate(bdrate, bdrate_summary)
 

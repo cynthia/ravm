@@ -14,7 +14,7 @@ ctc_version: "8.0"
 # =============================================================================
 paths:
   # Root path relative to the src directory (or use absolute path)
-  root: ".."
+  root: "/home/ryanlei/NCTests/AVM/AVM-CTC/avm-ctc/tools/convexhull_framework/"
   # Path to video content for testing
   content: "<...>"
   # Path to subjective test content (used when enable_subjective_test is true)
@@ -27,8 +27,8 @@ executables:
   # FFmpeg for various video operations
   ffmpeg: "ffmpeg"
   # AVM encoder and decoder
-  aomenc: "avmenc-v13.0.0"
-  aomdec: "avmdec-v13.0.0"
+  aomenc: "avmenc-v12.0.0"
+  aomdec: "avmdec-v12.0.0"
   # SVT-AV1 encoder
   svtav1: "SvtAv1EncApp"
   # AV1 encoder and decoder

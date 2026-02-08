@@ -77,6 +77,7 @@ from VideoScaler import DownScaling, GetDownScaledOutFile, UpScaling
 ###############################################################################
 ##### Helper Functions ########################################################
 
+
 def StartJobScript(test_cfg, job_name):
     """Create and open a new shell script file for an individual job"""
     global Path_CmdLog
@@ -84,8 +85,9 @@ def StartJobScript(test_cfg, job_name):
     if not os.path.exists(job_file_folder):
         os.makedirs(job_file_folder)
     Utils.CurrentJobFileName = os.path.join(job_file_folder, job_name + ".sh")
-    Utils.CurrentJobFile = open(Utils.CurrentJobFileName, 'wt')
+    Utils.CurrentJobFile = open(Utils.CurrentJobFileName, "wt")
     Utils.CurrentJobFile.write("#!/bin/bash\n\n")
+
 
 def EndJobScript():
     """Close the current job shell script and make it executable"""
@@ -94,6 +96,7 @@ def EndJobScript():
         os.chmod(Utils.CurrentJobFileName, 0o755)
         Utils.CurrentJobFile = None
         Utils.CurrentJobFileName = None
+
 
 def setupWorkFolderStructure():
     global Path_Bitstreams, Path_DecodedYuv, Path_UpScaleYuv, Path_DnScaleYuv, Path_QualityLog, Path_TestLog, Path_CfgFiles, Path_DecUpScaleYuv, Path_PerfLog, Path_EncLog, Path_DecLog, Path_VmafLog, Path_CmdLog
@@ -402,7 +405,7 @@ def Run_Parallel_ConvexHull_Test(
 
 
 def SaveConvexHullResults(
-    content,
+    clip,
     ScaleMethod,
     dnScAlgos,
     upScAlgos,

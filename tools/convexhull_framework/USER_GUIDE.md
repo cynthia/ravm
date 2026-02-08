@@ -24,7 +24,7 @@ This guide provides instructions for running AV2 Common Test Conditions (CTC) (h
 
 The AVM CTC Testing Framework is a Python-based test harness for evaluating video codec performance according to the Alliance for Open Media (AOM) Common Test Conditions. It supports:
 
-- **Multiple test configurations**: LD (Low Delay), RA (Random Access), AI (All Intra), AS (Adaptive Streaming), STILL
+- **Multiple test configurations**: LD (Low Delay), RA (Random Access), AI (All Intra), AS (Adaptive Streaming), STILL (Still Images)
 - **Multiple codecs**: AV1, AV2, HEVC
 - **Multiple encoders**: aomenc/avmenc, SVT-AV1, HM (HEVC)
 - **Quality metrics**: PSNR, SSIM, MS-SSIM, VMAF, PSNR-HVS, CIEDE2000, CAMBI
@@ -51,7 +51,7 @@ The AVM CTC Testing Framework is a Python-based test harness for evaluating vide
 - **Video encoder binaries** (one or more):
   - `avmenc` / `aomenc` - AVM/AOM encoder ([libavm](https://gitlab.com/AOMediaCodec/avm))
   - `avmdec` / `aomdec` - AVM/AOM decoder
-  - `SvtAv1EncApp` - SVT-AV1/AV2 encoder ([SVT-AV2](https://github.com/OpenVisualCloud/SVT-AV2))
+  - `SvtAv1EncApp` - SVT-AV1 encoder ([SVT-AV1](https://github.com/OpenVisualCloud/SVT-AV1))
   - `TAppEncoderStatic` - HM (HEVC) encoder
 - **Quality tools**:
   - `vmaf` (v2.1.1+) - VMAF quality metric tool ([VMAF releases](https://github.com/Netflix/vmaf/releases))
@@ -70,7 +70,7 @@ The following files are required in the `./bin` directory:
 |------|---------|
 | `HDRConvScalerY4MFile.cfg` | Template config file for HDRConvert scaling operations |
 | `vbaProject-AV2.bin` | VBA macro binary for BD-Rate calculation in Excel files |
-| `AV2Template_Vx.xlsm` | Excel template for CTC BD-Rate calculation |
+| `AVM_CWG_xxx.xlsm` | Excel template for CTC BD-Rate calculation |
 
 ### VMAF Quality Metrics
 
@@ -294,8 +294,8 @@ paths:
 
 ```yaml
 executables:
-  aomenc: "avmenc-v8.0.0"    # Encoder binary name
-  aomdec: "avmdec-v8.0.0"    # Decoder binary name
+  aomenc: "avmenc-v13.0.0"    # Encoder binary name
+  aomdec: "avmdec-v13.0.0"    # Decoder binary name
   ffmpeg: "ffmpeg"
   vmaf: "vmaf"
 ```
@@ -423,17 +423,89 @@ For LD, RA, AI, and STILL configurations.
 ```bash
 cd src
 
-# Run encoding test (runs all configurations defined in config.yaml)
-python AV2CTCTest.py -f encode -p 0 -c av2 -m aom -l 4
+# When enable_parallel_gop_encoding is set to false (default), the following
+# command will run all configurations defined in config.yaml
 
-# Run decoding test (after encoding)
-python AV2CTCTest.py -f decode -p 0 -c av2 -m aom -l 4
+# Run encoding test (runs all configurations defined in config.yaml) and generate
+# command log file (AV2CTC_TestCmd.log) to the test directory.
+python AV2CTCTest.py -f encode -c av2 -m aom -p 0 --LogCmdOnly 1
 
-# Generate summary/quality results (after decoding)
-python AV2CTCTest.py -f summary -p 0 -c av2 -m aom -l 4
+# Launch encoding jobs to the compute cluster
+python Launch.py AV2CTC_TestCmd.log
+
+# Generate summary/quality results (after all encoding jobs are done)
+python AV2CTCTest.py -f summary -c av2 -m aom -p 0
+
+# For RA configuration, when enable_parallel_gop_encoding is set to true,
+# The following commands should be run
+
+# Generate the encoding command that encode each GOP (65 frames) of the
+# input sequence into two separated OBU files in parallel.
+python AV2CTCTest.py -f encode -c av2 -m aom -p 0 --LogCmdOnly 1
+
+# Launch encoding jobs to the compute cluster
+python Launch.py AV2CTC_TestCmd.log
+
+# Concatenate the two OBU files into a single OBU file after all encoding jobs are done.
+python AV2CTCTest.py -f concatenate -c av2 -m aom -p 0
+
+# Generate command that decode and calculate quality metrics.
+python AV2CTCTest.py -f decode -c av2 -m aom -p 0 --LogCmdOnly 1
+
+# Launch decoding jobs to the compute cluster
+python Launch.py AV2CTC_TestCmd.log
+
+# Generate summary/quality results (after all decoding jobs are done)
+python AV2CTCTest.py -f summary -c av2 -m aom -p 0
 ```
 
 > **Note**: The test configurations (LD, RA, AI, STILL) are defined in `config.yaml` under `test.configurations`. The script will run tests for all configurations listed there.
+
+### Adaptive Streaming CTC Tests (ConvexHullTest.py)
+
+For AS configurations.
+
+#### Basic Usage
+
+```bash
+cd src
+
+# When enable_parallel_gop_encoding is set to false (default), the following
+# command will run adaptive streaming configurations defined in config.yaml
+
+# Run encoding test (runs all configurations defined in config.yaml) and generate
+# command log file (AV2CTC_TestCmd.log) to the test directory.
+python ConvexHullTest.py -f encode -c av2 -m aom -p 0 -t hdrtool --LogCmdOnly 1
+
+# Launch encoding jobs to the compute cluster
+python Launch.py AV2CTC_TestCmd.log
+
+# Generate summary/quality results (after all encoding jobs are done)
+python ConvexHullTest.py -f convexhull -c av2 -m aom -p 0 -t hdrtool
+
+# For AS configuration, when enable_parallel_gop_encoding is set to true,
+# The following commands should be run
+
+# Generate the encoding command that encode each GOP (65 frames) of the
+# input sequence into two separated OBU files in parallel.
+python ConvexHullTest.py -f encode -c av2 -m aom -p 0 -t hdrtool --LogCmdOnly 1
+
+# Launch encoding jobs to the compute cluster
+python Launch.py AV2CTC_TestCmd.log
+
+# Concatenate the two OBU files into a single OBU file after all encoding jobs are done.
+python ConvexHullTest.py -f concatenate -c av2 -m aom -p 0 -t hdrtool
+
+# Generate command that decode and calculate quality metrics.
+python ConvexHullTest.py -f decode -c av2 -m aom -p 0 -t hdrtool --LogCmdOnly 1
+
+# Launch decoding jobs to the compute cluster
+python Launch.py AV2CTC_TestCmd.log
+
+# Generate summary/quality results (after all decoding jobs are done)
+python ConvexHullTest.py -f convexhull -c av2 -m aom -p 0
+```
+
 
 #### Specifying Test Configurations
 
@@ -475,10 +547,7 @@ python AV2CTCTest.py -f clean
 # Step 3: Run encoding
 python AV2CTCTest.py -f encode -p 0 -c av2 -m aom -l 4
 
-# Step 4: Run decoding
-python AV2CTCTest.py -f decode -p 0 -c av2 -m aom -l 4
-
-# Step 5: Generate summary/quality results
+# Step 4: Generate summary/quality results
 python AV2CTCTest.py -f summary -p 0 -c av2 -m aom -l 4
 ```
 
@@ -492,13 +561,13 @@ For AS (Adaptive Streaming) configuration with downscale/upscale pipeline.
 cd src
 
 # Run convex hull test (encode + decode + upscale + quality) with hdrtool (default)
-python ConvexHullTest.py -f convexhull -p 0 -c av2 -m aom -l 4
+python ConvexHullTest.py -f encode -p 0 -c av2 -m aom -t hdrtool -l 4
 
 # Run convex hull test with ffmpeg scaler
-python ConvexHullTest.py -f convexhull -p 0 -c av2 -m aom -t ffmpeg -l 4
+python ConvexHullTest.py -f encode -p 0 -c av2 -m aom -t ffmpeg -l 4
 
 # Run convex hull test with AOM scaler
-python ConvexHullTest.py -f convexhull -p 0 -c av2 -m aom -t aom -l 4
+python ConvexHullTest.py -f encode -p 0 -c av2 -m aom -t aom -l 4
 ```
 
 #### Parallel GOP Encoding Workflow
@@ -516,7 +585,7 @@ python ConvexHullTest.py -f concatnate -p 0 -c av2 -m aom -t hdrtool -l 4
 python ConvexHullTest.py -f decode -p 0 -c av2 -m aom -t hdrtool -l 4
 
 # Step 4: Generate summary
-python ConvexHullTest.py -f summary -p 0 -c av2 -m aom -t hdrtool -l 4
+python ConvexHullTest.py -f convexhull -p 0 -c av2 -m aom -t hdrtool -l 4
 ```
 
 #### Command-line Options
@@ -644,10 +713,7 @@ python Launch.py AV2CTC_TestCmd.log
 
 # Step 4: Wait for cluster jobs to complete...
 
-# Step 5: Run decoding (after encoding jobs complete)
-python AV2CTCTest.py -f decode -p 0 -c av2 -m aom --LogCmdOnly 0
-
-# Step 6: Generate summary
+# Step 5: Generate summary
 python AV2CTCTest.py -f summary -p 0 -c av2 -m aom
 ```
 
@@ -678,7 +744,7 @@ The `AV2CTCProgress.py` script analyzes and compares CTC test results across mul
 
 ### Purpose
 
-- **Track AVM Progress**: Compare codec efficiency across releases (v1.0.0 through v11.0.0)
+- **Track AVM Progress**: Compare codec efficiency across releases (v1.0.0 through v12.0.0)
 - **Calculate BD-Rate**: Compute Bjøntegaard Delta Rate for quality metrics
 - **Generate RD Curves**: Visualize rate-distortion performance
 - **Produce Excel Reports**: Fill CTC template spreadsheets with test data
@@ -857,7 +923,7 @@ formats = {
 ```python
 dates = {
     # ... existing entries ...
-    "v12.0.0": "12/15/2025",
+    "v12.0.0": "10/27/2025",
 }
 ```
 
@@ -988,7 +1054,6 @@ source ../venv/bin/activate
 
 # Run complete RA test
 python AV2CTCTest.py -f encode -p 0 -c av2 -m aom -l 4
-python AV2CTCTest.py -f decode -p 0 -c av2 -m aom -l 4
 python AV2CTCTest.py -f summary -p 0 -c av2 -m aom -l 4
 ```
 
@@ -1008,8 +1073,8 @@ python Launch.py AV2CTC_TestCmd.log
 
 # Step 3: Wait for jobs to complete on the cluster...
 
-# Step 4: Run decoding locally (or generate more commands)
-python AV2CTCTest.py -f decode -p 0 -c av2 -m aom --LogCmdOnly 0
+# Step 4: Run summary
+python AV2CTCTest.py -f summary -p 0 -c av2 -m aom
 ```
 
 ### Workflow 3: Adaptive Streaming with Parallel Encoding
@@ -1027,7 +1092,7 @@ python ConvexHullTest.py -f concatnate -p 0 -c av2 -m aom -t hdrtool -l 4
 python ConvexHullTest.py -f decode -p 0 -c av2 -m aom -t hdrtool -l 4
 
 # Generate results
-python ConvexHullTest.py -f summary -p 0 -c av2 -m aom -t hdrtool -l 4
+python ConvexHullTest.py -f convexhull -p 0 -c av2 -m aom -t hdrtool -l 4
 ```
 
 ### Workflow 4: Adaptive Streaming with Cluster Execution
@@ -1049,31 +1114,19 @@ python Launch.py AV2CTC_TestCmd.log
 # Step 4: Concatenate chunks (after encoding jobs complete)
 python ConvexHullTest.py -f concatnate -p 0 -c av2 -m aom -t hdrtool --LogCmdOnly 0
 
-# Step 5: Decode and calculate quality
-python ConvexHullTest.py -f decode -p 0 -c av2 -m aom -t hdrtool --LogCmdOnly 0
+# Step 5: Generate Decode and calculate quality commands
+python ConvexHullTest.py -f decode -p 0 -c av2 -m aom -t hdrtool --LogCmdOnly 1
 
-# Step 6: Generate results
-python ConvexHullTest.py -f summary -p 0 -c av2 -m aom -t hdrtool
-```
+# Commands are saved to: test/AV2CTC_TestCmd.log
+# Shell scripts are saved to: test/cmdLogs/AS/
 
-### Workflow 5: Compare Two Codecs
+# Step 6: Submit jobs to compute cluster
+python Launch.py AV2CTC_TestCmd.log
 
-```bash
-# Edit config.yaml to run RA tests
-# test:
-#   configurations: ["RA"]
+# Step 7: Wait for cluster jobs to complete...
 
-# Test with AV2
-python AV2CTCTest.py -f encode -p 0 -c av2 -m aom -l 4
-python AV2CTCTest.py -f decode -p 0 -c av2 -m aom -l 4
-python AV2CTCTest.py -f summary -p 0 -c av2 -m aom -l 4
-
-# Test with AV1
-python AV2CTCTest.py -f encode -p 0 -c av1 -m aom -l 4
-python AV2CTCTest.py -f decode -p 0 -c av1 -m aom -l 4
-python AV2CTCTest.py -f summary -p 0 -c av1 -m aom -l 4
-
-# Results will be in analysis/rdresult/ for BD-rate comparison
+# Step 8: Generate results
+python ConvexHullTest.py -f convexhull -p 0 -c av2 -m aom -t hdrtool
 ```
 
 ---

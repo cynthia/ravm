@@ -1909,6 +1909,7 @@ static void check_valid_layer_id(ObuHeader obu_header, AV2_COMMON *const cm) {
   }
 }
 
+#if CONFIG_AV2_PROFILES
 static BITSTREAM_PROFILE get_msdo_profile(struct AV2Decoder *pbi) {
   return pbi->common.msdo_params.multistream_profile_idc;
 }
@@ -1960,6 +1961,8 @@ bool conformance_check_msdo_lcr(struct AV2Decoder *pbi, int num_extended_layers,
   }
   return false;
 }
+#endif  // CONFIG_AV2_PROFILES
+
 // On success, sets *p_data_end and returns a boolean that indicates whether
 // the decoding of the current frame is finished. On failure, sets
 // cm->error.error_code and returns -1.
@@ -2029,6 +2032,7 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
     else
       cm->is_leading_picture = -1;
     if (pbi->random_accessed) {
+#if CONFIG_AV2_PROFILES
       int num_xlayers = 0;
       int num_mlayers = 0;
       for (int i = 0; i < AVM_MAX_NUM_STREAMS - 1; i++) {
@@ -2046,6 +2050,7 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
             "An MSDO or LCR OBU in the current CVS violates the requirements "
             "of bitstream conformance for MSDO and LCR");
       }
+#endif  // CONFIG_AV2_PROFILES
 
       if (pbi->msdo_is_present_in_tu)
         pbi->multi_stream_mode = 1;

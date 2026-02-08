@@ -787,6 +787,7 @@ static avm_codec_err_t decoder_decode(avm_codec_alg_priv_t *ctx,
   /* Sanity checks */
   /* NULL data ptr allowed if data_sz is 0 too */
   if (data == NULL && data_sz == 0) {
+#if CONFIG_AV2_PROFILES
     if (ctx->frame_worker) {
       AVxWorker *const worker = ctx->frame_worker;
       FrameWorkerData *const frame_worker_data =
@@ -813,6 +814,7 @@ static avm_codec_err_t decoder_decode(avm_codec_alg_priv_t *ctx,
         }
       }
     }
+#endif  // CONFIG_AV2_PROFILES
     ctx->flushed = 1;
     return AVM_CODEC_OK;
   }

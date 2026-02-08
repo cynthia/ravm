@@ -70,6 +70,8 @@ int64_t av2_max_level_bitrate(BITSTREAM_PROFILE seq_profile, int seq_level_idx,
                             &chroma_format_idc);
   int profile_scaling_factor =
       get_profile_scaling_factor(seq_profile, chroma_format_idc);
+#else
+  int profile_scaling_factor = seq_profile;
 #endif  // CONFIG_AV2_PROFILES
 
   if (seq_tier) {

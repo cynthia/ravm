@@ -5095,7 +5095,7 @@ int av2_receive_raw_frame(AV2_COMP *cpi, avm_enc_frame_flags_t frame_flags,
     res = -1;
   }
 #else
-  if ((seq_params->profile == PROFILE_0) && !seq_params->monochrome &&
+  if ((seq_params->seq_profile_idc == PROFILE_0) && !seq_params->monochrome &&
       (subsampling_x != 1 || subsampling_y != 1)) {
     avm_internal_error(&cm->error, AVM_CODEC_INVALID_PARAM,
                        "Non-4:2:0 color format requires profile 1 or 2");

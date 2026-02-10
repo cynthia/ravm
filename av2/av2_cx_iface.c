@@ -237,6 +237,8 @@ struct av2_extracfg {
   unsigned int enable_mfh_obu_signaling;
   int operating_points_count;
   unsigned int cross_frame_cdf_init_mode;
+  int use_buffer_refresh_multi_layers_test;
+  int buffer_refresh_multi_layers_test[REF_FRAMES];
 };
 
 // Example subgop configs. Currently not used by default.
@@ -558,7 +560,9 @@ static struct av2_extracfg default_extra_cfg = {
   0,
   0,  // enable_mfh_obu_signaling
   1,
-  1                            // cross frame CDF init mode
+  1,                            // cross frame CDF init mode
+  0,  // use_buffer_refresh_multi_layers_test
+  { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } // buffer_refresh_multi_layers_test
 };
 // clang-format on
 
@@ -1713,6 +1717,12 @@ static avm_codec_err_t set_encoder_config(AV2EncoderConfig *oxcf,
   oxcf->unit_test_cfg.sef_with_order_hint_test =
       extra_cfg->sef_with_order_hint_test;
   oxcf->unit_test_cfg.multi_seq_header_test = extra_cfg->multi_seq_header_test;
+  oxcf->unit_test_cfg.use_buffer_refresh_multi_layers_test =
+      extra_cfg->use_buffer_refresh_multi_layers_test;
+  for (int i = 0; i < REF_FRAMES; i++) {
+    oxcf->unit_test_cfg.buffer_refresh_multi_layers_test[i] =
+        extra_cfg->buffer_refresh_multi_layers_test[i];
+  }
   oxcf->border_in_pixels =
       resize_cfg->resize_mode ? AVM_BORDER_IN_PIXELS : AVM_ENC_NO_SCALE_BORDER;
   memcpy(oxcf->target_seq_level_idx, extra_cfg->target_seq_level_idx,
@@ -2684,6 +2694,19 @@ static avm_codec_err_t ctrl_set_enable_explict_ref_frame_map(
   struct av2_extracfg extra_cfg = ctx->extra_cfg;
   extra_cfg.explicit_ref_frame_map =
       CAST(AV2E_SET_ENABLE_EXPLICIT_REF_FRAME_MAP, args);
+  return update_extra_cfg(ctx, &extra_cfg);
+}
+
+static avm_codec_err_t ctrl_set_enable_buffer_refresh_test(
+    avm_codec_alg_priv_t *ctx, va_list args) {
+  struct av2_extracfg extra_cfg = ctx->extra_cfg;
+  avm_buffer_refresh_test_t *const data =
+      CAST(AV2E_SET_ENABLE_BUFFER_REFRESH_TEST, args);
+  extra_cfg.use_buffer_refresh_multi_layers_test = 1;
+  for (int i = 0; i < REF_FRAMES; ++i) {
+    extra_cfg.buffer_refresh_multi_layers_test[i] =
+        data->buffer_refresh_test[i];
+  }
   return update_extra_cfg(ctx, &extra_cfg);
 }
 
@@ -4488,6 +4511,7 @@ static avm_codec_ctrl_fn_map_t encoder_ctrl_maps[] = {
   { AV2E_GET_ENABLE_BRU, ctrl_get_enable_bru },
   { AV2E_SET_ENABLE_EXPLICIT_REF_FRAME_MAP,
     ctrl_set_enable_explict_ref_frame_map },
+  { AV2E_SET_ENABLE_BUFFER_REFRESH_TEST, ctrl_set_enable_buffer_refresh_test },
   // Getters
   { AVME_GET_LAST_QUANTIZER, ctrl_get_quantizer },
   { AV2_GET_REFERENCE, ctrl_get_reference },

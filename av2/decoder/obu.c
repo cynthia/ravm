@@ -2088,6 +2088,15 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
       return -1;
     }
 
+    // Note: avm_read_obu_header_and_size() takes care of checking that this
+    // doesn't cause 'data' to advance past 'data_end'.
+    data += bytes_read;
+
+    if ((size_t)(data_end - data) < payload_size) {
+      cm->error.error_code = AVM_CODEC_CORRUPT_FRAME;
+      return -1;
+    }
+
     // Skip all obus till the random_accessed-th random access point
     // Remove all leading_vcl obus
     if (is_leading_vcl_obu(obu_header.type))
@@ -2147,6 +2156,10 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
     int metadata_is_suffix = -1;  // -1 means not applicable
     if (obu_header.type == OBU_METADATA_SHORT ||
         obu_header.type == OBU_METADATA_GROUP) {
+      if (payload_size == 0) {
+        avm_internal_error(&cm->error, AVM_CODEC_CORRUPT_FRAME,
+                           "OBU_METADATA_x has an empty payload");
+      }
       // data has been advanced by bytes_read, so data[0] is first payload byte
       metadata_is_suffix = (data[0] & 0x80) >> 7;
     }
@@ -2169,15 +2182,6 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
     check_valid_layer_id(obu_header, cm);
 
     pbi->obu_type = obu_header.type;
-
-    // Note: avm_read_obu_header_and_size() takes care of checking that this
-    // doesn't cause 'data' to advance past 'data_end'.
-    data += bytes_read;
-
-    if ((size_t)(data_end - data) < payload_size) {
-      cm->error.error_code = AVM_CODEC_CORRUPT_FRAME;
-      return -1;
-    }
 
     cm->tlayer_id = obu_header.obu_tlayer_id;
     cm->mlayer_id = obu_header.obu_mlayer_id;
@@ -2410,23 +2414,32 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
     }
 
     // Accept both OBU_METADATA_SHORT and OBU_METADATA_GROUP for suffix metadata
-    if (!(is_metadata_obu(obu_header.type) ||
-          (obu_header.type == OBU_PADDING)) ||
-        data + bytes_read > data_end)
+    if (!(is_metadata_obu(obu_header.type) || (obu_header.type == OBU_PADDING)))
       break;
 
+    // Note: avm_read_obu_header_and_size() takes care of checking that this
+    // doesn't cause 'data' to advance past 'data_end'.
+    data += bytes_read;
+
+    if ((size_t)(data_end - data) < payload_size) {
+      cm->error.error_code = AVM_CODEC_CORRUPT_FRAME;
+      return -1;
+    }
+
     if (obu_header.type == OBU_PADDING) {
-      data += bytes_read;
       decoded_payload_size = read_padding(cm, data, payload_size);
       if (cm->error.error_code != AVM_CODEC_OK) return -1;
     } else if (is_metadata_obu(obu_header.type)) {
       // check whether it is a suffix metadata OBU
-      if (!(data[bytes_read] & 0x80)) {
+      if (payload_size == 0) {
+        avm_internal_error(&cm->error, AVM_CODEC_CORRUPT_FRAME,
+                           "OBU_METADATA_x has an empty payload");
+      }
+      if (!(data[0] & 0x80)) {
         avm_internal_error(&cm->error, AVM_CODEC_UNSUP_BITSTREAM,
                            "OBU order violation: OBU_METADATA_x(prefix) cannot "
                            "be present after a coded frame");
       }
-      data += bytes_read;
 
       // Call the appropriate read function based on OBU type
       if (obu_header.type == OBU_METADATA_GROUP) {

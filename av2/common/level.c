@@ -1113,7 +1113,7 @@ static TARGET_LEVEL_FAIL_ID check_level_constraints(
         const int scaling_factor =
             av2_tile_area_scaling_factor[tier_idx][level_idx];
         const uint64_t max_tile_size_header_rate =
-            (scaling_factor * MAX_TILE_SIZE_HEADER_RATE_PRODUCT) >> 2;
+            ((uint64_t)scaling_factor * MAX_TILE_SIZE_HEADER_RATE_PRODUCT) >> 2;
         if ((uint64_t)val > max_tile_size_header_rate) {
           fail_id = TILE_SIZE_HEADER_RATE_TOO_HIGH;
           break;

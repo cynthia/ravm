@@ -70,3 +70,4 @@ function:*/pthreadpool/*
 
 # Others
 unsigned-integer-overflow:*/basic_string.h
+unsigned-integer-overflow:*/stl_uninitialized.h

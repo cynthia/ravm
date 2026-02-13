@@ -132,14 +132,14 @@ void av2_read_color_info(int *color_description_idc, int *color_primaries,
   // color_description_idc: indicates the combination of color primaries,
   // transfer characteristics and matrix coefficients as defined in Section
   // 6.10.4 (Operating point set color info semantics) in the spec.
-  // The value of color_description_idc shall be in the range of 0 to 15,
+  // The value of color_description_idc shall be in the range of 0 to 127,
   // inclusive. Values larger than 5 are reserved for future use by AOMedia and
   // should be ignored by decoders conforming to this version of this
   // specification.
   *color_description_idc = avm_rb_read_rice_golomb(rb, 2);
-  if (*color_description_idc > 15) {
+  if (*color_description_idc > 127) {
     rb->error_handler(rb->error_handler_data, AVM_CODEC_UNSUP_BITSTREAM,
-                      "color_description_idc is greater than 15");
+                      "color_description_idc is not in the range of 0 to 127");
   }
   switch (*color_description_idc) {
     case AVM_COLOR_DESC_IDC_EXPLICIT:  // 0
@@ -173,6 +173,8 @@ void av2_read_color_info(int *color_description_idc, int *color_primaries,
       *matrix_coefficients = AVM_CICP_MC_BT_470_B_G;  // 5
       break;
     default:
+      // Values larger than 5 are reserved for future use by AOMedia and should
+      // be ignored by decoders.
       *color_primaries = AVM_CICP_CP_UNSPECIFIED;
       *transfer_characteristics = AVM_CICP_TC_UNSPECIFIED;
       *matrix_coefficients = AVM_CICP_MC_UNSPECIFIED;

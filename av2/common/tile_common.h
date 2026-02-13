@@ -62,7 +62,7 @@ AV2PixelRect av2_get_tile_rect(const TileInfo *tile_info,
 
 #if CONFIG_G018
 // Tile width scaling factors for different levels and tiers
-// [tier][lev] - values are multiplexed by MAX_TILE_WIDTH and divided by 4
+// [tier][lev] - values are multiplied by MAX_TILE_WIDTH and divided by 4
 static const int av2_tile_width_scaling_factor[2][SEQ_LEVEL_MAX] = {
   // Tier 0
   { 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
@@ -73,7 +73,7 @@ static const int av2_tile_width_scaling_factor[2][SEQ_LEVEL_MAX] = {
 };
 
 // Tile area scaling factors for different levels and tiers
-// [tier][lev] - values are multiplexed by MAX_TILE_WIDTH and divided by 4
+// [tier][lev] - values are multiplied by MAX_TILE_AREA and divided by 4
 static const int av2_tile_area_scaling_factor[2][SEQ_LEVEL_MAX] = {
   // Tier 0
   { 4, 4, 4, 4, 4, 4, 4, 4, 4,  4,  4,  4,  4, 4, 4, 4,

@@ -4554,6 +4554,7 @@ static int encode_frame_to_data_rate(AV2_COMP *cpi, size_t *size,
         }
       }
       cpi->is_olk_overlay = 1;
+      cpi->olk_encountered = 0;
     } else {
       cpi->is_olk_overlay = 0;
     }
@@ -4594,6 +4595,7 @@ static int encode_frame_to_data_rate(AV2_COMP *cpi, size_t *size,
         }
       }
       cpi->is_olk_overlay = 1;
+      cpi->olk_encountered = 0;
     } else {
       cpi->is_olk_overlay = 0;
     }

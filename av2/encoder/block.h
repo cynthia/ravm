@@ -1107,9 +1107,9 @@ typedef struct {
   //! bawp flag cost
   int bawp_flg_cost[2][2];
   //! Bawp type flag cost
-  int explict_bawp_cost[BAWP_SCALES_CTX_COUNT][2];
+  int explicit_bawp_cost[BAWP_SCALES_CTX_COUNT][2];
   //! Explicit bawp scaling factor cost
-  int explict_bawp_scale_cost[EXPLICIT_BAWP_SCALE_CNT];
+  int explicit_bawp_scale_cost[EXPLICIT_BAWP_SCALE_CNT];
   //! switchable_interp_costs
   int switchable_interp_costs[SWITCHABLE_FILTER_CONTEXTS][SWITCHABLE_FILTERS];
   /**@}*/

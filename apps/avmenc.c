@@ -2186,7 +2186,7 @@ int main(int argc, const char **argv_) {
                 input.fmt == AVM_IMG_FMT_I44416) {
               if (!stream->config.cfg.monochrome) {
                 stream->config.cfg.g_profile =
-                    MAIN_444_10;  // upgrate to MAIN_444_10
+                    MAIN_444_10;  // upgrade to MAIN_444_10
                 profile_updated = 1;
               }
             } else if (input.fmt == AVM_IMG_FMT_I422 ||
@@ -2196,7 +2196,7 @@ int main(int argc, const char **argv_) {
             }
             break;
           case MAIN_422_10:
-            // Profile 4 is 422 profile -- upgrate to 444 if needed
+            // Profile 4 is 422 profile -- upgrade to 444 if needed
             if (input.fmt == AVM_IMG_FMT_I444 ||
                 input.fmt == AVM_IMG_FMT_I44416) {
               if (!stream->config.cfg.monochrome) {

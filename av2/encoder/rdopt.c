@@ -2970,10 +2970,11 @@ static int64_t motion_mode_rd(
               if (mbmi->bawp_flag[0] > 0 && av2_allow_explicit_bawp(mbmi))
                 rd_stats->rate +=
                     mode_costs
-                        ->explict_bawp_cost[ctx_index][mbmi->bawp_flag[0] > 1];
+                        ->explicit_bawp_cost[ctx_index][mbmi->bawp_flag[0] > 1];
               if (mbmi->bawp_flag[0] > 1)
                 rd_stats->rate +=
-                    mode_costs->explict_bawp_scale_cost[mbmi->bawp_flag[0] - 2];
+                    mode_costs
+                        ->explicit_bawp_scale_cost[mbmi->bawp_flag[0] - 2];
             }
             if (!cm->seq_params.monochrome && xd->is_chroma_ref &&
                 mbmi->bawp_flag[0]) {

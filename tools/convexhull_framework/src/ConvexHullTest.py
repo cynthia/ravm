@@ -236,7 +236,7 @@ def Run_ConvexHull_Test(clip, dnScalAlgo, upScalAlgo, ScaleMethod, LogCmdOnly=Fa
                 SaveMemory,
                 LogCmdOnly,
             )
-            # calcualte quality distortion
+            # calculate quality distortion
             Utils.Logger.info("start quality metric calculation")
             CalculateQualityMetric(
                 clip.file_path,
@@ -795,7 +795,7 @@ def Run_AS_Decode_Test(
                 if SaveMemory and decodedYUV != upscaledYUV:
                     DeleteFile(decodedYUV, LogCmdOnly)
 
-                # calcualte quality distortion
+                # calculate quality distortion
                 Utils.Logger.info("start quality metric calculation")
                 CalculateQualityMetric(
                     clip.file_path,

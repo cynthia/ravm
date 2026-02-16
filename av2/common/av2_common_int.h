@@ -2596,7 +2596,7 @@ typedef struct AV2Common {
   int8_t tip_global_wtd_index;
 
   /*!
-   * Elements part of the muti-stream decoder operation
+   * Elements part of the multi-stream decoder operation
    */
   MultistreamDecoderOperation msdo_params;
 

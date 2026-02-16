@@ -219,7 +219,7 @@ def Run_Encode_Test(test_cfg, clip, codec, method, preset, LogCmdOnly=False):
             path_dec_log,
             LogCmdOnly,
         )
-        # calcualte quality distortion
+        # calculate quality distortion
         Utils.Logger.info("start quality metric calculation")
         CalculateQualityMetric(
             clip.file_path,
@@ -385,7 +385,7 @@ def Run_Decode_Test(test_cfg, clip, codec, method, preset, LogCmdOnly=False):
                 path_dec_log,
                 LogCmdOnly,
             )
-            # calcualte quality distortion
+            # calculate quality distortion
             Utils.Logger.info("start quality metric calculation")
             CalculateQualityMetric(
                 clip.file_path,

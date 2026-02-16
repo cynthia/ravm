@@ -585,10 +585,10 @@ void av2_fill_mode_rates(AV2_COMMON *const cm, ModeCosts *mode_costs,
     av2_cost_tokens_from_cdf(mode_costs->bawp_flg_cost[1], fc->bawp_cdf[1], 2,
                              NULL);
     for (i = 0; i < BAWP_SCALES_CTX_COUNT; ++i) {
-      av2_cost_tokens_from_cdf(mode_costs->explict_bawp_cost[i],
+      av2_cost_tokens_from_cdf(mode_costs->explicit_bawp_cost[i],
                                fc->explicit_bawp_cdf[i], 2, NULL);
     }
-    av2_cost_tokens_from_cdf(mode_costs->explict_bawp_scale_cost,
+    av2_cost_tokens_from_cdf(mode_costs->explicit_bawp_scale_cost,
                              fc->explicit_bawp_scale_cdf,
                              EXPLICIT_BAWP_SCALE_CNT, NULL);
 

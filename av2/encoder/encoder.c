@@ -283,7 +283,7 @@ static INLINE int does_level_match(int width, int height, double fps,
 static INLINE int check_tile_constraints(int width, int height,
                                          const TileConfig *tile_cfg, int level,
                                          int tier) {
-  // The unrestricted level (31), all tile configuratins are allowed
+  // The unrestricted level (31), all tile configurations are allowed
   if (level == SEQ_LEVEL_MAX) return 1;
 
   // Get scaling factor

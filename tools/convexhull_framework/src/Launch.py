@@ -30,7 +30,7 @@ TEST_CONFIGURATIONS = ["AI", "LD", "RA", "AS", "STILL"]
 
 def submit_job(job_file_path):
     """Submit a single job to the compute cluster"""
-    # need to be implemented based on the inteface of the cluster
+    # need to be implemented based on the interface of the cluster
     print("submitting job %s" % job_file_path)
 
 

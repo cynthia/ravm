@@ -80,7 +80,7 @@ encode_bitstream_1() {
 
 # Encode first bitstream for multi_layer encoder.
 ml_encode_bitstream_0() {
-  local encoder="$(avm_tool_path examples/scalable_encoder)"
+  local encoder="$(avm_tool_path scalable_encoder)"
 
   eval "${encoder}" \
       352 288 \
@@ -100,7 +100,7 @@ ml_encode_bitstream_0() {
 
 # Encode second bitstream for multi_layer encoder.
 ml_encode_bitstream_1() {
-  local encoder="$(avm_tool_path examples/scalable_encoder)"
+  local encoder="$(avm_tool_path scalable_encoder)"
 
  eval "${encoder}" \
       352 288 \

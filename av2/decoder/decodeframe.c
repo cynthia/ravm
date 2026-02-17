@@ -8337,10 +8337,8 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
           !cm->bridge_frame_info.is_bridge_frame &&
           !cm->bru.frame_inactive_flag) {
         read_screen_content_params(cm, rb);
-
-        read_frame_max_drl_bits(cm, rb);
         read_intrabc_params(cm, rb);
-
+        read_frame_max_drl_bits(cm, rb);
         if (features->cur_frame_force_integer_mv) {
           features->fr_mv_precision = MV_PRECISION_ONE_PEL;
         } else {

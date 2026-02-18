@@ -448,12 +448,16 @@ uint32_t av2_write_operating_point_set_obu(AV2_COMP *cpi, int obu_xlayer_id,
 #endif  // !CONFIG_CWG_G010
     if (obu_xlayer_id == GLOBAL_XLAYER_ID) {
       avm_wb_write_literal(&wb, ops->ops_mlayer_info_idc, 2);
+#if !CONFIG_CWG_G010
       avm_wb_write_literal(&wb, 0, 7);
+#endif  // !CONFIG_CWG_G010
     } else {
+#if CONFIG_CWG_G010
+      avm_wb_write_literal(&wb, 0, 2);
+#else
       avm_wb_write_literal(&wb, 0, 9);
+#endif  // CONFIG_CWG_G010
     }
-    // Byte alignment before writing operating point data
-    avm_wb_write_literal(&wb, 0, (8 - wb.bit_offset % 8) % 8);
   }
 
   for (int i = 0; i < ops->ops_cnt; i++) {

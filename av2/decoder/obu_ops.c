@@ -158,18 +158,16 @@ uint32_t av2_read_operating_point_set_obu(struct AV2Decoder *pbi,
             &pbi->common.error, AVM_CODEC_UNSUP_BITSTREAM,
             "value of ops_mlayer_info_idc should be smaller than 3.");
       }
+#if !CONFIG_CWG_G010
       (void)avm_rb_read_literal(rb, 7);  // ops_reserved_7bits
+#endif                                   // !CONFIG_CWG_G010
     } else {
       ops->ops_mlayer_info_idc = 1;
+#if CONFIG_CWG_G010
+      (void)avm_rb_read_literal(rb, 2);  // ops_reserved_2bits
+#else
       (void)avm_rb_read_literal(rb, 9);  // ops_reserved_9bits
-    }
-
-    // Byte alignment before reading operating point data because
-    // uleb reads bytes.
-    if (av2_check_byte_alignment(&pbi->common, rb) != 0) {
-      avm_internal_error(
-          &pbi->common.error, AVM_CODEC_CORRUPT_FRAME,
-          "Byte alignment error in av2_read_operating_point_set_obu()");
+#endif  // CONFIG_CWG_G010
     }
 
     for (int i = 0; i < ops->ops_cnt; i++) {

@@ -1626,14 +1626,13 @@ static int is_coded_frame(OBU_TYPE obu_type) {
 }
 // Validates OBU order within a Temporal Unit with state machine.
 // Returns 1 if OBU is valid for the current state, 0 if it violates rules.
+// Note: The caller is responsible for filtering out padding OBUs and reserved
+// OBUs before calling this function.
 int check_temporal_unit_structure(temporal_unit_state_t *state, int obu_type,
                                   int xlayer_id, int metadata_is_suffix,
                                   int prev_obu_type) {
   // Validate input parameters
   if (!state) return 0;
-
-  // One or more padding OBUs may appear in any order within an OBU sequence.
-  if (obu_type == OBU_PADDING) return 1;
 
   switch (*state) {
     case TU_STATE_START:
@@ -1944,6 +1943,9 @@ static void check_layerid_showable_frame_units(
 // Check xlayer_id, mlayer_id, and tlayer_id of the obu is valid for the
 // obu_type. Reports with avm_internal_error.
 static void check_valid_layer_id(ObuHeader obu_header, AV2_COMMON *const cm) {
+  // Ignore reserved OBUs.
+  if (!avm_obu_type_is_valid(obu_header.type)) return;
+
   if (obu_header.type == OBU_MSDO) {
     if (obu_header.obu_tlayer_id != 0)
       avm_internal_error(&cm->error, AVM_CODEC_UNSUP_BITSTREAM,
@@ -2187,20 +2189,24 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
       metadata_is_suffix = (data[0] & 0x80) >> 7;
     }
 
-    // Validate OBU ordering within temporal units
-    if (!check_temporal_unit_structure(&tu_validation_state, obu_header.type,
-                                       obu_header.obu_xlayer_id,
-                                       metadata_is_suffix, prev_obu_type)) {
-      avm_internal_error(
-          &cm->error, AVM_CODEC_UNSUP_BITSTREAM,
-          "OBU order violation: current OBU %s with xlayer_id %d mlayer_id %d "
-          "previous OBU %s(xlayer_id=%d) invalid in current state",
-          avm_obu_type_to_string(obu_header.type), obu_header.obu_xlayer_id,
-          obu_header.obu_mlayer_id, avm_obu_type_to_string(prev_obu_type),
-          prev_xlayer_id);
+    // Validate OBU ordering within temporal units. Ignore padding OBUs and
+    // reserved OBUs in this check.
+    if (avm_obu_type_is_valid(obu_header.type) &&
+        obu_header.type != OBU_PADDING) {
+      if (!check_temporal_unit_structure(&tu_validation_state, obu_header.type,
+                                         obu_header.obu_xlayer_id,
+                                         metadata_is_suffix, prev_obu_type)) {
+        avm_internal_error(
+            &cm->error, AVM_CODEC_UNSUP_BITSTREAM,
+            "OBU order violation: current OBU %s with xlayer_id %d mlayer_id "
+            "%d previous OBU %s(xlayer_id=%d) invalid in current state",
+            avm_obu_type_to_string(obu_header.type), obu_header.obu_xlayer_id,
+            obu_header.obu_mlayer_id, avm_obu_type_to_string(prev_obu_type),
+            prev_xlayer_id);
+      }
+      prev_obu_type = obu_header.type;
+      prev_xlayer_id = obu_header.obu_xlayer_id;
     }
-    prev_obu_type = obu_header.type;
-    prev_xlayer_id = obu_header.obu_xlayer_id;
 
     check_valid_layer_id(obu_header, cm);
 

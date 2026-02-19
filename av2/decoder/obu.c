@@ -1946,10 +1946,11 @@ static void check_valid_layer_id(ObuHeader obu_header, AV2_COMMON *const cm) {
                          obu_header.obu_tlayer_id, obu_header.obu_mlayer_id);
   }
 
-  // MSDO, LCR, OPS, Atlas, Metadata Group OBU, Padding, and Temporal Delimiter.
-  // Buffer removal timing (G010)
+  // MSDO, LCR, OPS, Atlas, Short Metadata OBU, Metadata Group OBU, Padding,
+  // Temporal Delimiter, and Buffer removal timing.
   if (obu_header.obu_xlayer_id == GLOBAL_XLAYER_ID &&
       !(obu_header.type == OBU_TEMPORAL_DELIMITER ||
+        obu_header.type == OBU_METADATA_SHORT ||
         obu_header.type == OBU_METADATA_GROUP ||
         obu_header.type == OBU_BUFFER_REMOVAL_TIMING ||
         obu_header.type == OBU_LAYER_CONFIGURATION_RECORD ||

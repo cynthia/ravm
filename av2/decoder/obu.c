@@ -2491,6 +2491,11 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
     }
     if (is_multi_tile_vcl_obu(this_obu->obu_type) &&
         this_obu->first_tile_group == 0) {
+      if (obu_idx == 0) {
+        avm_internal_error(&cm->error, AVM_CODEC_UNSUP_BITSTREAM,
+                           "The first OBU in a frame unit cannot be a tile "
+                           "group with is_first_tile_group == 0");
+      }
       check_tilegroup_obus_in_a_frame_unit(cm, this_obu,
                                            &obu_list[obu_idx - 1]);
     }

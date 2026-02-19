@@ -613,6 +613,12 @@ typedef enum {
  */
 const char *avm_obu_type_to_string(OBU_TYPE type);
 
+/*!\brief Returns 1 if obu_type is a valid OBU type, 0 otherwise.
+ *
+ * \param[in]     obu_type        The OBU type
+ */
+int avm_obu_type_is_valid(int obu_type);
+
 /*!@} - end defgroup codec*/
 #ifdef __cplusplus
 }

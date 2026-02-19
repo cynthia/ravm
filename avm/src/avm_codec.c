@@ -185,3 +185,34 @@ const char *avm_obu_type_to_string(OBU_TYPE type) {
   }
   return "<Invalid OBU Type>";
 }
+
+int avm_obu_type_is_valid(int obu_type) {
+  switch (obu_type) {
+    case OBU_SEQUENCE_HEADER:
+    case OBU_TEMPORAL_DELIMITER:
+    case OBU_MULTI_FRAME_HEADER:
+    case OBU_CLK:
+    case OBU_OLK:
+    case OBU_LEADING_TILE_GROUP:
+    case OBU_REGULAR_TILE_GROUP:
+    case OBU_METADATA_SHORT:
+    case OBU_METADATA_GROUP:
+    case OBU_SWITCH:
+    case OBU_LEADING_SEF:
+    case OBU_REGULAR_SEF:
+    case OBU_LEADING_TIP:
+    case OBU_REGULAR_TIP:
+    case OBU_BUFFER_REMOVAL_TIMING:
+    case OBU_LAYER_CONFIGURATION_RECORD:
+    case OBU_ATLAS_SEGMENT:
+    case OBU_OPERATING_POINT_SET:
+    case OBU_BRIDGE_FRAME:
+    case OBU_MSDO:
+    case OBU_RAS_FRAME:
+    case OBU_QM:
+    case OBU_FGM:
+    case OBU_CONTENT_INTERPRETATION:
+    case OBU_PADDING: return 1;
+  }
+  return 0;
+}

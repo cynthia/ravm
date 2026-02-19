@@ -128,32 +128,6 @@ bool ReadTemporalUnit(InputContext *ctx, size_t *unit_size) {
   return true;
 }
 
-bool ValidObuType(int obu_type) {
-  switch (obu_type) {
-    case OBU_SEQUENCE_HEADER:
-    case OBU_TEMPORAL_DELIMITER:
-    case OBU_MULTI_FRAME_HEADER:
-    case OBU_CLK:
-    case OBU_OLK:
-    case OBU_SWITCH:
-    case OBU_LEADING_SEF:
-    case OBU_REGULAR_SEF:
-    case OBU_LEADING_TIP:
-    case OBU_REGULAR_TIP:
-    case OBU_LEADING_TILE_GROUP:
-    case OBU_REGULAR_TILE_GROUP:
-    case OBU_METADATA_SHORT:
-    case OBU_METADATA_GROUP:
-    case OBU_LAYER_CONFIGURATION_RECORD:
-    case OBU_ATLAS_SEGMENT:
-    case OBU_OPERATING_POINT_SET:
-    case OBU_MSDO:
-    case OBU_CONTENT_INTERPRETATION:
-    case OBU_PADDING: return true;
-  }
-  return false;
-}
-
 void PrintObuHeader(const ObuHeader *header) {
   printf(
       "      OBU type:  %s\n"
@@ -179,7 +153,7 @@ struct avm_read_bit_buffer *init_read_bit_buffer(struct avm_read_bit_buffer *rb,
 bool ParseAV2ObuHeader(uint8_t obu_header_byte, ObuHeader *obu_header) {
   obu_header->type = static_cast<OBU_TYPE>(
       (obu_header_byte >> kObuTypeBitsShift) & kObuTypeBitsMask);
-  if (!ValidObuType(obu_header->type)) {
+  if (!avm_obu_type_is_valid(obu_header->type)) {
     fprintf(stderr, "Invalid OBU type: %d.\n", obu_header->type);
     return false;
   }

@@ -4,10 +4,10 @@
  * This source code is subject to the terms of the BSD 3-Clause Clear License
  * and the Alliance for Open Media Patent License 1.0. If the BSD 3-Clause Clear
  * License was not distributed with this source code in the LICENSE file, you
- * can obtain it at avmedia.org/license/software-license/bsd-3-c-c/.  If the
+ * can obtain it at aomedia.org/license/software-license/bsd-3-c-c/.  If the
  * Alliance for Open Media Patent License 1.0 was not distributed with this
  * source code in the PATENTS file, you can obtain it at
- * avmedia.org/license/patent-license/.
+ * aomedia.org/license/patent-license/.
  */
 
 #ifndef AVM_AVM_DSP_VMAF_H_

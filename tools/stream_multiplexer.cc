@@ -187,13 +187,7 @@ std::vector<uint8_t> WriteTU(const uint8_t *data, int length,
       if (length_field_size != coded_obu_size)
         fprintf(stderr, "\nError: length_field_size != coded_obu_size\n");
       tu_obus.insert(tu_obus.end(), obu_size_data.begin(), obu_size_data.end());
-      std::vector<uint8_t> obu_header_data(2);
-      write_obu_header_with_stream_id(obu_header_data.data(), &obu_header,
-                                      (num_streams > 1) ? 31 : 0);
-      tu_obus.insert(tu_obus.end(), obu_header_data.begin(),
-                     obu_header_data.end());
-      tu_obus.insert(tu_obus.end(), obu_tmp.begin() + obu_header_size,
-                     obu_tmp.end());
+      tu_obus.insert(tu_obus.end(), obu_tmp.begin(), obu_tmp.end());
     }
     if (obu_header.type != OBU_TEMPORAL_DELIMITER) {
       std::vector<uint8_t> obu_size_data(length_field_size + 1);

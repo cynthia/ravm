@@ -983,7 +983,7 @@ void av2_decoder_model_process_frame(const AV2_COMP *const cpi,
     const double dt = is_global_intrabc_inloop_filtered_frame
                           ? 0.5 * (removal_time - previous_removal_time)
                           : (removal_time - previous_removal_time);
-    const double this_decode_rate = previous_decode_samples / dt;
+    const int64_t this_decode_rate = (int64_t)(previous_decode_samples / dt);
 
     decoder_model->max_decode_rate =
         AVMMAX(decoder_model->max_decode_rate, this_decode_rate);
@@ -1141,9 +1141,9 @@ void av2_decoder_model_process_frame(const AV2_COMP *const cpi,
     decoder_model->presentation_time = presentation_time;
     if (presentation_time >= 0.0 && previous_presentation_time >= 0.0) {
       assert(previous_presentation_time < presentation_time);
-      const double this_display_rate =
-          previous_display_samples /
-          (presentation_time - previous_presentation_time);
+      const int64_t this_display_rate =
+          (int64_t)(previous_display_samples /
+                    (presentation_time - previous_presentation_time));
       decoder_model->max_display_rate =
           AVMMAX(decoder_model->max_display_rate, this_display_rate);
     }

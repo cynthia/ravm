@@ -159,8 +159,8 @@ typedef struct {
   int decode_samples;
   int display_samples;
 
-  double max_display_rate;
-  double max_decode_rate;
+  int64_t max_display_rate;
+  int64_t max_decode_rate;
   bool max_tile_rate_satisfy;
   bool compressed_size_satisfy;
   bool frame_symbol_count_satisfy;

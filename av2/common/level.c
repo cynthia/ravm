@@ -534,6 +534,7 @@ static double get_max_bitrate(const AV2LevelSpec *const level_spec, int tier,
   return bitrate_basis * bitrate_profile_factor;
 }
 
+// Returns maximum allowed compressed size in bytes.
 static double get_max_compressed_size(const AV2LevelSpec *const level_spec,
                                       int tier, BITSTREAM_PROFILE profile,
                                       int luma_sample_count,

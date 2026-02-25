@@ -1762,7 +1762,6 @@ static AVM_INLINE void set_rel_frame_dist(
   for (ref_frame = 0; ref_frame < INTER_REFS_PER_FRAME; ++ref_frame) {
     ref_frame_dist_info->ref_relative_dist[ref_frame] = 0;
     if (ref_frame_flags & (1 << ref_frame)) {
-      if (cm->ref_frame_map[ref_frame]->is_restricted) continue;
       if (cm->cur_frame->refs_restricted_status[ref_frame]) continue;
       int dist = av2_encoder_get_relative_dist(
           cm->cur_frame->ref_display_order_hint[ref_frame],

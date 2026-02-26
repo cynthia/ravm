@@ -2503,7 +2503,7 @@ avm_codec_err_t parse_to_order_hint_for_vcl_obu(
     // This functions(parse_to_order_hint_for_vcl_obu) is called before
     // store_xlayer_context(). but this particular block is called only after at
     // least one round of avm_decode_frame_from_obus()
-    int stream_idx = get_stream_index(&pbi->common, xlayer_id);
+    const int stream_idx = av2_get_stream_index(&pbi->common, xlayer_id);
     RefCntBuffer **ref_frame_map =
         (stream_idx >= 0) ? pbi->stream_info[stream_idx].ref_frame_map_buf
                           : pbi->common.ref_frame_map;

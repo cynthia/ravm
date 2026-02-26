@@ -199,9 +199,17 @@ av2_encode_available() {
 
 # Echoes "fast" encode params for use with avmenc.
 avmenc_encode_test_fast_params() {
-  echo "--cpu-used=2
+  echo "--cpu-used=5
         --limit=${AV2_ENCODE_TEST_FRAME_LIMIT}
         --lag-in-frames=0
+        --test-decode=fatal"
+}
+
+# Echoes "fast" encode params for use with avmenc, with nonzero lag
+avmenc_encode_test_fast_params_lag() {
+  echo "--cpu-used=5
+        --limit=${AV2_ENCODE_TEST_FRAME_LIMIT}
+        --lag-in-frames=10
         --test-decode=fatal"
 }
 

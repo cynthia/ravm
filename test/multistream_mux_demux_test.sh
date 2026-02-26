@@ -82,6 +82,44 @@ encode_bitstream_1() {
   echo "Successfully encoded bitstream_1.bin"
 }
 
+# Encode first bitstream
+encode_lag_bitstream_0() {
+  local encoder="$(avm_tool_path avmenc)"
+
+  eval "${encoder}" \
+    $(avmenc_encode_test_fast_params_lag) \
+    $(yuv_raw_input) \
+    --obu \
+    --output=${BITSTREAM_0} \
+    ${devnull} || return 1
+
+  if [ ! -e "${BITSTREAM_0}" ]; then
+    elog "Encoding bitstream_0 failed."
+    return 1
+  fi
+
+  echo "Successfully encoded bitstream_0.bin"
+}
+
+# Encode second bitstream
+encode_lag_bitstream_1() {
+  local encoder="$(avm_tool_path avmenc)"
+
+  eval "${encoder}" \
+    $(avmenc_encode_test_fast_params_lag) \
+    $(yuv_raw_input) \
+    --obu \
+    --output=${BITSTREAM_1} \
+    ${devnull} || return 1
+
+  if [ ! -e "${BITSTREAM_1}" ]; then
+    elog "Encoding bitstream_1 failed."
+    return 1
+  fi
+
+  echo "Successfully encoded bitstream_1.bin"
+}
+
 # Encode first bitstream for multi_layer encoder.
 ml_encode_bitstream_0() {
   local encoder="$(avm_tool_path examples/scalable_encoder)"
@@ -528,8 +566,9 @@ compare_md5_4() {
 # Run complete encode, mux, and demux pipeline
 run_encode_mux_demux() {
 
-  echo "Start single layer stream"
+  echo "Start single layer streams"
 
+  echo "avmenc with lag = 0"
   encode_bitstream_0 || return 1
   encode_bitstream_1 || return 1
   decode_bitstream_0 || return 1
@@ -540,7 +579,18 @@ run_encode_mux_demux() {
   decode_muxed_bitstream || return 1
   compare_md5 || return 1
 
-  echo "Done avmenc single layer stream"
+  echo "avmenc with nonzero lag"
+  encode_lag_bitstream_0 || return 1
+  encode_lag_bitstream_1 || return 1
+  decode_bitstream_0 || return 1
+  decode_bitstream_1 || return 1
+  mux_bitstreams || return 1
+  demux_bitstream || return 1
+  compare_bitstreams || return 1
+  decode_muxed_bitstream || return 1
+  compare_md5 || return 1
+
+  echo "Done avmenc single layer streams"
 
   echo "Start multi layer streams"
 

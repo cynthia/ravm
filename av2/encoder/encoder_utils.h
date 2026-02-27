@@ -884,16 +884,16 @@ static AVM_INLINE void refresh_reference_frames(AV2_COMP *cpi) {
   AV2_COMMON *const cm = &cpi->common;
   cm->cur_frame->is_restricted = false;
   if (!cm->bru.enabled) {
-    // All buffers are refreshed for shown keyframes and S-frames.
+    int first_ref_index;
+    const bool clear_multiple_insert_in_one =
+        av2_frame_clears_multiple_inserted_in_one(
+            cm->current_frame.refresh_frame_flags, cm->current_frame.frame_type,
+            cm->seq_params.max_mlayer_id, &first_ref_index);
     for (int ref_frame = 0; ref_frame < cm->seq_params.ref_frames;
          ref_frame++) {
       if (((cm->current_frame.refresh_frame_flags >> ref_frame) & 1) == 1) {
-        if (cm->cur_frame->frame_type == KEY_FRAME &&
-            cm->immediate_output_picture == 1 &&
-            cm->seq_params.max_mlayer_id == 0 && ref_frame > 0) {
-          // NOTE: if a keyframe has refresh_idx!=0, this process doesnot add
-          // the keyframe to the reference list. for example, mlayer_id=1,
-          // refresh_frame_flags=64
+        if (av2_skip_reference_buffer_update(clear_multiple_insert_in_one,
+                                             ref_frame, first_ref_index)) {
           if (cm->ref_frame_map[ref_frame] != NULL) {
             --cm->ref_frame_map[ref_frame]->ref_count;
             cm->ref_frame_map[ref_frame] = NULL;

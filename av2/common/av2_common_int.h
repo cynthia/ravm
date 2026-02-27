@@ -6122,6 +6122,52 @@ static INLINE void av2_initialize_ci_params(ContentInterpretation *ci_params) {
   ci_params->ci_timing_info_present_flag = 0;
   ci_params->ci_extension_present_flag = 0;
 }
+
+// Returns true if this frame qualifies for the following special case:
+// - Frame will clear multiple DPB slots, as more than one bits are set in
+// `refresh_frame_flags`
+// - Some other constraints for frame_type and max_mlayer_id are also satisfied.
+// In this case, the frame clear multiple DBP slots but will be inserted into
+// only one DPB slot.
+// Otherwise, returns false.
+// `first_ref_index` will be set to the index of the first reference buffer
+// index that this frame will refresh.
+static INLINE bool av2_frame_clears_multiple_inserted_in_one(
+    int refresh_frame_flags, FRAME_TYPE frame_type, int max_mlayer_id,
+    int *first_ref_index) {
+  int refresh_count = 0;
+  *first_ref_index = -1;
+
+  // Special case is only for Key frames and S frames (SWITCH or RAS).
+  if (frame_type != KEY_FRAME && frame_type != S_FRAME) return false;
+
+  // Special case is only when max_mlayer_id = 0.
+  if (max_mlayer_id != 0) return false;
+
+  // Check if multiple DPB slots are going to be refreshed.
+  int ref_index = 0;
+  for (int mask = refresh_frame_flags; mask; mask >>= 1) {
+    if (mask & 1) {
+      ++refresh_count;
+      if (refresh_count > 1) {
+        break;
+      }
+      assert(*first_ref_index == -1);
+      *first_ref_index = ref_index;
+    }
+    ++ref_index;
+  }
+  return (refresh_count > 1);
+}
+
+// Returns true if we need to skip refreshing this reference buffer slot with
+// current frame, as current frame has / is going to refresh another reference
+// buffer slot.
+static INLINE bool av2_skip_reference_buffer_update(
+    bool clear_multiple_insert_in_one, int ref_index, int first_ref_index) {
+  return clear_multiple_insert_in_one && ref_index != first_ref_index;
+}
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

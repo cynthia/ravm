@@ -1046,6 +1046,11 @@ typedef struct avm_codec_enc_cfg {
    */
   unsigned int sframe_mode;
 
+  /*
+   * This value indicates a swithch frame is coded as RAS frame.
+   */
+  unsigned int enable_ras_frame;
+
   /*!\brief Monochrome mode
    *
    * If this is nonzero, the encoder will generate a monochrome stream

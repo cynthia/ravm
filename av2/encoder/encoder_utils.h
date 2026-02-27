@@ -885,12 +885,12 @@ static AVM_INLINE void refresh_reference_frames(AV2_COMP *cpi) {
   cm->cur_frame->is_restricted = false;
   if (!cm->bru.enabled) {
     // All buffers are refreshed for shown keyframes and S-frames.
+    int marked = 0;
     for (int ref_frame = 0; ref_frame < cm->seq_params.ref_frames;
          ref_frame++) {
       if (((cm->current_frame.refresh_frame_flags >> ref_frame) & 1) == 1) {
         if (cm->cur_frame->frame_type == KEY_FRAME &&
-            cm->immediate_output_picture == 1 &&
-            cm->seq_params.max_mlayer_id == 0 && ref_frame > 0) {
+            cm->seq_params.max_mlayer_id == 0 && ref_frame > 0 && marked) {
           // NOTE: if a keyframe has refresh_idx!=0, this process doesnot add
           // the keyframe to the reference list. for example, mlayer_id=1,
           // refresh_frame_flags=64
@@ -900,6 +900,7 @@ static AVM_INLINE void refresh_reference_frames(AV2_COMP *cpi) {
           }
         } else {
           assign_frame_buffer_p(&cm->ref_frame_map[ref_frame], cm->cur_frame);
+          marked = 1;
         }
       }
     }

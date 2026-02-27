@@ -7265,7 +7265,8 @@ static void handle_sequence_header(AV2Decoder *pbi, OBU_TYPE obu_type,
   AV2_COMMON *const cm = &pbi->common;
   // TODO: make sure pbi->random_accessed is correctly assigned
   bool activate_sequence_header =
-      ((obu_type == OBU_CLK || obu_type == OBU_OLK) &&
+      ((obu_type == OBU_CLK || obu_type == OBU_OLK ||
+        obu_type == OBU_RAS_FRAME) &&
        pbi->is_random_access_frame_unit) ||
       pbi->stream_switched;
   bool seq_header_found = false;
@@ -7281,7 +7282,8 @@ static void handle_sequence_header(AV2Decoder *pbi, OBU_TYPE obu_type,
                        "No sequence header found with id = %d", seq_header_id);
   }
   if (pbi->decoding_first_frame &&
-      !(obu_type == OBU_CLK || obu_type == OBU_OLK)) {
+      !(obu_type == OBU_CLK || obu_type == OBU_OLK ||
+        obu_type == OBU_RAS_FRAME)) {
     avm_internal_error(&cm->error, AVM_CODEC_CORRUPT_FRAME,
                        "the first frame of a bitstream shall be a keyframe");
   }
@@ -7294,7 +7296,8 @@ static void handle_sequence_header(AV2Decoder *pbi, OBU_TYPE obu_type,
     return;
   }
 
-  assert(obu_type == OBU_CLK || obu_type == OBU_OLK || pbi->stream_switched);
+  assert(obu_type == OBU_CLK || obu_type == OBU_OLK ||
+         obu_type == OBU_RAS_FRAME || pbi->stream_switched);
 
   if (obu_type == OBU_OLK && !pbi->random_accessed) {
     if (!are_seq_headers_consistent(&cm->seq_params, pbi->active_seq)) {
@@ -7304,7 +7307,6 @@ static void handle_sequence_header(AV2Decoder *pbi, OBU_TYPE obu_type,
           pbi->random_accessed);
     }
   }
-
   cm->seq_params = *pbi->active_seq;
 
   if (obu_type == OBU_CLK) {
@@ -7560,7 +7562,6 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
             beginningFrameFlag[i][j][k][l][h] = 1;
   }
 #endif
-
   // The current decoder implementation supports all levels.
   // TODO: Replace this with a CLI option that allows to choose an operating
   // point by external means.

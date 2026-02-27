@@ -759,16 +759,17 @@ static void update_frame_buffers(AV2Decoder *pbi, int frame_decoded) {
 static AVM_INLINE void update_long_term_frame_id(AV2Decoder *const pbi) {
   AV2_COMMON *const cm = &pbi->common;
   int refresh_frame_flags = cm->current_frame.refresh_frame_flags;
+  int marked = 0;
   for (int i = 0; i < cm->seq_params.ref_frames; i++) {
     if ((refresh_frame_flags >> i) & 1) {
-      if ((cm->current_frame.frame_type == KEY_FRAME &&
-           cm->immediate_output_picture == 1) &&
+      if ((cm->current_frame.frame_type == KEY_FRAME) && marked &&
           cm->seq_params.max_mlayer_id == 0 && i > 0) {
         pbi->long_term_ids_in_buffer[i] = -1;
         pbi->valid_for_referencing[i] = 0;
       } else {
         pbi->long_term_ids_in_buffer[i] = cm->cur_frame->long_term_id;
         pbi->valid_for_referencing[i] = 1;
+        marked = 1;
       }
     }
   }

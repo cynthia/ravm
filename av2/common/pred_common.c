@@ -283,8 +283,12 @@ int av2_get_ref_frames(AV2_COMMON *cm, int cur_frame_disp,
     // Get reference frame buffer
     RefFrameMapPair cur_ref = ref_frame_map_pairs[i];
     if (cur_ref.ref_frame_restricted == 1) {
-      remap_idx_sframe[cm->ref_frames_info.num_restricted_ref] = i;
-      cm->ref_frames_info.num_restricted_ref++;
+      // Skip storing if this is a bridge frame and the index doesn't match
+      if (!(cm->bridge_frame_info.is_bridge_frame &&
+            i != cm->bridge_frame_info.bridge_frame_ref_idx)) {
+        remap_idx_sframe[cm->ref_frames_info.num_restricted_ref] = i;
+        cm->ref_frames_info.num_restricted_ref++;
+      }
       continue;
     }
     if (cur_ref.ref_frame_for_inference == -1) continue;
@@ -381,8 +385,23 @@ int av2_get_ref_frames(AV2_COMMON *cm, int cur_frame_disp,
 
   if (cm->bridge_frame_info.is_bridge_frame &&
       !bridge_frame_ref_idx_remapped_found) {
-    avm_internal_error(&cm->error, AVM_CODEC_ERROR,
-                       "Bridge frame index into remapped not found");
+    for (int i = cm->ref_frames_info.num_total_refs;
+         i < cm->ref_frames_info.num_total_refs +
+                 cm->ref_frames_info.num_restricted_ref;
+         ++i) {
+      if (i + cm->ref_frames_info.num_total_refs >= INTER_REFS_PER_FRAME) break;
+      if (cm->remapped_ref_idx[i] ==
+          cm->bridge_frame_info.bridge_frame_ref_idx) {
+        cm->bridge_frame_info.bridge_frame_ref_idx_remapped = i;
+        bridge_frame_ref_idx_remapped_found = true;
+        break;
+      }
+    }
+
+    if (!bridge_frame_ref_idx_remapped_found) {
+      avm_internal_error(&cm->error, AVM_CODEC_ERROR,
+                         "Bridge frame index into remapped not found");
+    }
   }
 
   // Fill in RefFramesInfo struct according to computed mapping

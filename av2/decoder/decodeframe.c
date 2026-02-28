@@ -8313,7 +8313,6 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
           avm_internal_error(&cm->error, AVM_CODEC_CORRUPT_FRAME,
                              "Referenced frame has invalid size");
       }
-
       if (obu_type != OBU_LEADING_TIP && obu_type != OBU_REGULAR_TIP &&
           current_frame->frame_type == INTER_FRAME) {
         setup_bru_active_info(cm, rb);
@@ -8693,6 +8692,10 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
     cm->cur_frame->base_qindex = cm->quant_params.base_qindex;
     cm->cur_frame->u_ac_delta_q = cm->quant_params.u_ac_delta_q;
     cm->cur_frame->v_ac_delta_q = cm->quant_params.v_ac_delta_q;
+
+    // Bridge frames should inherit the restricted status from their reference
+    cm->cur_frame->is_restricted = ref_buf->is_restricted;
+
     xd->bd = (int)seq_params->bit_depth;
     set_primary_ref_frame_and_ctx(pbi);
 

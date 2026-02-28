@@ -816,13 +816,6 @@ int av2_receive_compressed_data(AV2Decoder *pbi, size_t size,
     RefCntBuffer *ref_buf = get_ref_frame_buf(cm, last_frame);
     if (ref_buf != NULL) ref_buf->buf.corrupted = 1;
   }
-  // flush_remaining_frames() is invoked before assign_cur_frame_new_fb().
-  // FLUSH remaing frames at the first CLK in the tu
-  if (pbi->this_is_first_keyframe_unit_in_tu &&
-      pbi->obus_in_frame_unit_data[pbi->current_tlayer_id]
-                                  [pbi->current_mlayer_id][OBU_CLK]) {
-    flush_remaining_frames(pbi);
-  }
   check_ref_count_status_dec(pbi);
   if (assign_cur_frame_new_fb(cm) == NULL) {
     cm->error.error_code = AVM_CODEC_MEM_ERROR;

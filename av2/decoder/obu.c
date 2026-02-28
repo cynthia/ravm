@@ -2989,6 +2989,13 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
       cm->bridge_frame_info.is_bridge_frame = 0;
     }
 
+    // Flush remaining frames after xlayer context is correctly set.
+    // This must happen after xlayer switching but before processing frame OBUs.
+    if (pbi->this_is_first_keyframe_unit_in_tu &&
+        pbi->obus_in_frame_unit_data[cm->tlayer_id][cm->mlayer_id][OBU_CLK]) {
+      flush_remaining_frames(pbi);
+    }
+
     av2_init_read_bit_buffer(pbi, &rb, data, data + payload_size);
     switch (obu_header.type) {
       case OBU_TEMPORAL_DELIMITER:

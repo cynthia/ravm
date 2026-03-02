@@ -4141,7 +4141,7 @@ void av2_setup_motion_field(AV2_COMMON *cm) {
   // The idx of rf in sort_ref that is before current frame, and closest.
   int cur_frame_sort_idx = -1;
   for (int rf_idx = 0; rf_idx < cm->ref_frames_info.num_total_refs; rf_idx++) {
-    if (get_ref_frame_buf(cm, rf_idx)->is_restricted) continue;
+    if (get_ref_frame_buf(cm, sort_ref[rf_idx])->is_restricted) continue;
 
     if (get_relative_dist(order_hint_info, disp_order[rf_idx], cur_disp_order) <
         0) {

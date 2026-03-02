@@ -53,23 +53,6 @@ static int enable_noise_estimation(AV2_COMP *const cpi) {
   /* if (cpi->common.seq_params.use_highbitdepth) */ return 0;
 }
 
-#if CONFIG_AV2_TEMPORAL_DENOISING
-static void copy_frame(YV12_BUFFER_CONFIG *const dest,
-                       const YV12_BUFFER_CONFIG *const src) {
-  const uint8_t *srcbuf = src->y_buffer;
-  uint8_t *destbuf = dest->y_buffer;
-
-  assert(dest->y_width == src->y_width);
-  assert(dest->y_height == src->y_height);
-
-  for (int r = 0; r < dest->y_height; ++r) {
-    memcpy(destbuf, srcbuf, dest->y_width);
-    destbuf += dest->y_stride;
-    srcbuf += src->y_stride;
-  }
-}
-#endif  // CONFIG_AV2_TEMPORAL_DENOISING
-
 NOISE_LEVEL av2_noise_estimate_extract_level(NOISE_ESTIMATE *const ne) {
   int noise_level = kLowLow;
   if (ne->value > (ne->thresh << 1)) {
@@ -96,24 +79,11 @@ void av2_update_noise_estimate(AV2_COMP *const cpi) {
   int frame_counter = cm->current_frame.frame_number;
   // Estimate is between current source and last source.
   YV12_BUFFER_CONFIG *last_source = cpi->last_source;
-#if CONFIG_AV2_TEMPORAL_DENOISING
-  if (cpi->oxcf.noise_sensitivity > 0) {
-    last_source = &cpi->denoiser.last_source;
-    // Tune these thresholds for different resolutions when denoising is
-    // enabled.
-    if (cm->width > 640 && cm->width <= 1920) {
-      thresh_consec_zeromv = 2;
-    }
-  }
-#endif
+
   ne->enabled = enable_noise_estimation(cpi);
   if (!ne->enabled || frame_counter % frame_period != 0 ||
       last_source == NULL ||
       ((ne->last_w != cm->width || ne->last_h != cm->height))) {
-#if CONFIG_AV2_TEMPORAL_DENOISING
-    if (cpi->oxcf.noise_sensitivity > 0)
-      copy_frame(&cpi->denoiser.last_source, cpi->source);
-#endif
     if (last_source != NULL) {
       ne->last_w = cm->width;
       ne->last_h = cm->height;
@@ -238,14 +208,6 @@ void av2_update_noise_estimate(AV2_COMP *const cpi) {
       ne->num_frames_estimate = 30;
       ne->count = 0;
       ne->level = av2_noise_estimate_extract_level(ne);
-#if CONFIG_AV2_TEMPORAL_DENOISING
-      if (cpi->oxcf.noise_sensitivity > 0)
-        av2_denoiser_set_noise_level(cpi, ne->level);
-#endif
     }
   }
-#if CONFIG_AV2_TEMPORAL_DENOISING
-  if (cpi->oxcf.noise_sensitivity > 0)
-    copy_frame(&cpi->denoiser.last_source, cpi->source);
-#endif
 }

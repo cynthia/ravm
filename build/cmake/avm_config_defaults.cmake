@@ -125,8 +125,6 @@ set_avm_config_var(CONFIG_COLLECT_PARTITION_STATS 0
                    "Collect stats on partition decisions.")
 set_avm_config_var(CONFIG_COLLECT_COMPONENT_TIMING 0
                    "Collect encoding component timing information.")
-set_avm_config_var(CONFIG_AV2_TEMPORAL_DENOISING 0
-                   "Build with temporal denoising support.")
 set_avm_config_var(CONFIG_NN_V2 0 "Fully-connected neural nets ver.2.")
 set_avm_config_var(CONFIG_AV2_PROFILES 1 "AV2 profile related changes.")
 set_avm_config_var(CONFIG_TU_ALIGNMENT 1 "Missing TU alignment syntax")

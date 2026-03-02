@@ -3083,8 +3083,11 @@ static avm_codec_err_t encoder_encode(avm_codec_alg_priv_t *ctx,
   }
 
 #if CONFIG_TUNE_VMAF
-  avm_init_vmaf_model(&cpi->vmaf_info.vmaf_model,
-                      cpi->oxcf.tune_cfg.vmaf_model_path);
+  if (cpi->oxcf.tune_cfg.tuning >= AVM_TUNE_VMAF_WITH_PREPROCESSING &&
+      cpi->oxcf.tune_cfg.tuning <= AVM_TUNE_VMAF_NEG_MAX_GAIN) {
+    avm_init_vmaf_model(&cpi->vmaf_info.vmaf_model,
+                        cpi->oxcf.tune_cfg.vmaf_model_path);
+  }
 #endif
 
   // Handle fixed keyframe intervals

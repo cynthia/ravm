@@ -710,7 +710,8 @@ static INLINE void check_ref_count_status_dec(struct AV2Decoder *pbi) {
   }
 }
 
-avm_codec_err_t flush_remaining_frames(struct AV2Decoder *pbi);
+avm_codec_err_t flush_remaining_frames(struct AV2Decoder *pbi,
+                                       int order_hint_limit);
 
 static INLINE int av2_read_uniform(avm_reader *r, int n) {
   const int l = get_unsigned_bits(n);

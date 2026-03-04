@@ -581,19 +581,24 @@ static void release_current_frame(AV2Decoder *pbi) {
   cm->cur_frame = NULL;
 }
 
-// This function flushes out the DPB, all the slots in the dpb is free to use
-avm_codec_err_t flush_remaining_frames(struct AV2Decoder *pbi) {
+// This function flushes out the DPB, all the slots in the dpb is free to use.
+avm_codec_err_t flush_remaining_frames(struct AV2Decoder *pbi,
+                                       int order_hint_limit) {
   avm_codec_err_t res = AVM_CODEC_OK;
   AV2_COMMON *const cm = &pbi->common;
   RefCntBuffer *output_candidate = NULL;
   do {
     output_candidate = NULL;
     for (int i = 0; i < REF_FRAMES; i++) {
-      if (is_frame_eligible_for_output(cm->ref_frame_map[i]) &&
-          (output_candidate == NULL ||
-           derive_output_order_idx(cm, cm->ref_frame_map[i]) <=
+      RefCntBuffer *const buf = cm->ref_frame_map[i];
+      if (buf == NULL) continue;
+      if (!is_frame_eligible_for_output(buf)) continue;
+      if ((int)buf->display_order_hint >= order_hint_limit) continue;
+
+      if ((output_candidate == NULL ||
+           derive_output_order_idx(cm, buf) <=
                derive_output_order_idx(cm, output_candidate))) {
-        output_candidate = cm->ref_frame_map[i];
+        output_candidate = buf;
       }
     }
     if (output_candidate != NULL) {

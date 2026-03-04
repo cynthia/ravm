@@ -2998,7 +2998,15 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
     // This must happen after xlayer switching but before processing frame OBUs.
     if (pbi->this_is_first_keyframe_unit_in_tu &&
         pbi->obus_in_frame_unit_data[cm->tlayer_id][cm->mlayer_id][OBU_CLK]) {
-      flush_remaining_frames(pbi);
+      flush_remaining_frames(pbi, INT_MAX);
+    }
+
+    // Flush leading frames (doh < last_olk_tu_display_order_hint) at the start
+    // of the first regular temporal unit after an OLK, before
+    // reset_buffer_other_than_OLK() clears their DPB slots.
+    if (pbi->olk_encountered && pbi->this_is_first_vcl_obu_in_tu &&
+        cm->is_leading_picture == 0) {
+      flush_remaining_frames(pbi, pbi->last_olk_tu_display_order_hint);
     }
 
     av2_init_read_bit_buffer(pbi, &rb, data, data + payload_size);

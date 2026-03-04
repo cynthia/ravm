@@ -963,7 +963,7 @@ static avm_codec_err_t decoder_decode(avm_codec_alg_priv_t *ctx,
           }
 
           size_t num_frames_before = pbi->num_output_frames;
-          err = flush_remaining_frames(pbi);
+          err = flush_remaining_frames(pbi, INT_MAX);
           if (err != AVM_CODEC_OK) break;
 
           // Only decrease ref count for frames added by this layer's flush

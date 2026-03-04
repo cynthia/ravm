@@ -1598,6 +1598,7 @@ static int is_global_config_obu(OBU_TYPE obu_type, int xlayer_id) {
          (obu_type == OBU_OPERATING_POINT_SET &&
           xlayer_id == GLOBAL_XLAYER_ID) ||
          (obu_type == OBU_ATLAS_SEGMENT && xlayer_id == GLOBAL_XLAYER_ID) ||
+         (obu_type == OBU_METADATA_SHORT && xlayer_id == GLOBAL_XLAYER_ID) ||
          (obu_type == OBU_METADATA_GROUP && xlayer_id == GLOBAL_XLAYER_ID);
 }
 
@@ -1618,8 +1619,8 @@ static int is_frame_unit(OBU_TYPE obu_type, int xlayer_id) {
   //  OBU_QM,
   //  OBU_FGM,
   //  OBU_CONTENT_INTERPRETATION,
-  //  OBU_METADATA,
   //  OBU_METADATA_SHORT,
+  //  OBU_METADATA_GROUP,
   //  OBU_CLK,
   //  OBU_OLK,
   //  OBU_LEADING_TILE_GROUP,

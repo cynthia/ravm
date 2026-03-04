@@ -138,8 +138,8 @@ static int peek_obu_from_file(FILE *f, size_t obu_size, uint8_t *buffer,
   // as the condition used in 2 places with TODOs below. Need to refactor
   // after macros are cleaned up.
   if (is_multi_tile_vcl_obu(obu_header->type) ||
-      obu_header->type == OBU_METADATA_GROUP ||
-      obu_header->type == OBU_METADATA_SHORT) {
+      obu_header->type == OBU_METADATA_SHORT ||
+      obu_header->type == OBU_METADATA_GROUP) {
     if (obu_size < (size_t)obu_header_size + 1) {
       return -2;
     }

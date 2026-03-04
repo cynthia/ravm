@@ -664,9 +664,9 @@ static size_t check_frame_unit_data(struct AV2Decoder *pbi, const uint8_t *data,
           is_suffix_or_padding = true;
         }
 
-        // OBU_METADATA and OBU_METADATA_GROUP can be suffix (part of picture
-        // unit) Read the metadata_is_suffix flag from the first bit of the
-        // payload
+        // OBU_METADATA_SHORT and OBU_METADATA_GROUP can be suffix (part of
+        // picture unit) Read the metadata_is_suffix flag from the first bit of
+        // the payload
         if ((obu_header.type == OBU_METADATA_SHORT ||
              obu_header.type == OBU_METADATA_GROUP) &&
             payload_size > 0) {

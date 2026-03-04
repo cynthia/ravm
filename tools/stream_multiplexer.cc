@@ -165,7 +165,8 @@ std::vector<uint8_t> WriteTU(const uint8_t *data, int length,
         (obu_header.type == OBU_LAYER_CONFIGURATION_RECORD ||
          obu_header.type == OBU_OPERATING_POINT_SET ||
          obu_header.type == OBU_ATLAS_SEGMENT ||
-         (obu_header.type == OBU_METADATA_GROUP &&
+         ((obu_header.type == OBU_METADATA_SHORT ||
+           obu_header.type == OBU_METADATA_GROUP) &&
           obu_header.obu_header_extension_flag &&
           obu_header.obu_xlayer_id == GLOBAL_XLAYER_ID) ||
          obu_header.type == OBU_SEQUENCE_HEADER) &&

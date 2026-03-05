@@ -2997,7 +2997,11 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
 
     // Flush remaining frames after xlayer context is correctly set.
     // This must happen after xlayer switching but before processing frame OBUs.
+    // Skip flush while in GLOBAL_XLAYER_ID context -- the target layer's
+    // context has not been restored yet; flush will run once a non-global
+    // OBU restores it.
     if (pbi->this_is_first_keyframe_unit_in_tu &&
+        cm->xlayer_id != GLOBAL_XLAYER_ID &&
         pbi->obus_in_frame_unit_data[cm->tlayer_id][cm->mlayer_id][OBU_CLK]) {
       flush_remaining_frames(pbi, INT_MAX);
     }

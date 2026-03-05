@@ -7028,7 +7028,6 @@ static void reset_buffer_other_than_OLK(AV2Decoder *pbi) {
   AV2_COMMON *const cm = &pbi->common;
   const SequenceHeader *const seq_params = &cm->seq_params;
   BufferPool *const pool = cm->buffer_pool;
-  if (pbi->this_is_first_vcl_obu_in_tu != 1) return;
   int ref_flags_to_keep = 0;
   for (int layer = 0; layer <= seq_params->max_mlayer_id; layer++) {
     if (cm->olk_refresh_frame_flags[layer] != -1)
@@ -7049,8 +7048,6 @@ static void reset_buffer_other_than_OLK(AV2Decoder *pbi) {
     cm->olk_refresh_frame_flags[layer] = -1;
     cm->olk_co_vcl_refresh_frame_flags[layer] = -1;
   }
-
-  pbi->olk_encountered = 0;
 }
 
 int av2_is_regular_non_olk_obu(OBU_TYPE obu_type) {
@@ -7095,6 +7092,14 @@ static int read_show_existing_frame(AV2Decoder *pbi, bool is_regular_obu,
   BufferPool *const pool = cm->buffer_pool;
   cm->show_existing_frame = 1;
   init_bru_params(cm);
+
+  if (is_regular_obu && pbi->olk_encountered &&
+      pbi->this_is_first_vcl_obu_in_tu) {
+    lock_buffer_pool(pool);
+    reset_buffer_other_than_OLK(pbi);
+    unlock_buffer_pool(pool);
+  }
+
   // Show an existing frame directly.
   const int existing_frame_idx = cm->sef_ref_fb_idx =
       avm_rb_read_literal(rb, seq_params->ref_frames_log2);
@@ -7210,6 +7215,7 @@ static int read_show_existing_frame(AV2Decoder *pbi, bool is_regular_obu,
     current_frame->display_order_hint = cm->cur_frame->display_order_hint =
         frame_to_show->display_order_hint;
   }
+
   if (is_regular_obu && pbi->olk_encountered) {
     if (pbi->last_olk_tu_display_order_hint == -1 &&
         !pbi->this_is_first_vcl_obu_in_tu) {
@@ -7224,7 +7230,7 @@ static int read_show_existing_frame(AV2Decoder *pbi, bool is_regular_obu,
                          "the reference frame should in the current GOP");
       return 0;
     }
-    reset_buffer_other_than_OLK(pbi);
+    pbi->olk_encountered = 0;
   }
 
   lock_buffer_pool(pool);
@@ -7944,10 +7950,10 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
   features->cross_frame_context = CROSS_FRAME_CONTEXT_FORWARD;
 
   if (!seq_params->single_picture_header_flag) {
-    if (obu_type == OBU_CLK)
+    if (obu_type == OBU_CLK) {
       pbi->olk_encountered = 0;
-    else if (obu_type == OBU_OLK) {
-      if (pbi->olk_encountered) {
+    } else if (obu_type == OBU_OLK) {
+      if (pbi->olk_encountered && pbi->this_is_first_vcl_obu_in_tu) {
         // This is the case when the first regular frame is another OLK
         // (0-4(K)-2-1-3-8(K)...
         lock_buffer_pool(pool);
@@ -7955,10 +7961,12 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
         unlock_buffer_pool(pool);
       }
       pbi->olk_encountered = 1;
-    } else if (pbi->olk_encountered && av2_is_regular_non_olk_obu(obu_type)) {
+    } else if (pbi->olk_encountered && av2_is_regular_non_olk_obu(obu_type) &&
+               pbi->this_is_first_vcl_obu_in_tu) {
       lock_buffer_pool(pool);
       reset_buffer_other_than_OLK(pbi);
       unlock_buffer_pool(pool);
+      pbi->olk_encountered = 0;
     }
     if (cm->bridge_frame_info.is_bridge_frame) {
       frame_size_override_flag = 1;

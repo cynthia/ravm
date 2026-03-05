@@ -351,6 +351,9 @@ static void init_stream_info(StreamInfo *stream_info) {
   for (int i = 1; i < MAX_MFH_NUM; i++) {
     stream_info->mfh_valid_buf[i] = false;
   }
+  for (int i = 0; i < MAX_NUM_MLAYERS; i++) {
+    av2_initialize_ci_params(&stream_info->ci_params_per_layer_buf[i]);
+  }
 }
 
 static uint32_t read_multi_stream_decoder_operation_obu(
@@ -2965,13 +2968,11 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
         // Restore xlayer context
         cm->xlayer_id = obu_header.obu_xlayer_id;
         av2_restore_xlayer_context(pbi, cm, cm->xlayer_id);
-        pbi->stream_switched = 1;
       } else if (cm->xlayer_id != obu_header.obu_xlayer_id) {
         // Store and restore xlayer context
         av2_store_xlayer_context(pbi, cm, cm->xlayer_id);
         cm->xlayer_id = obu_header.obu_xlayer_id;
         av2_restore_xlayer_context(pbi, cm, cm->xlayer_id);
-        pbi->stream_switched = 1;
       }
       if (obu_header.type == OBU_LEADING_TILE_GROUP ||
           obu_header.type == OBU_REGULAR_TILE_GROUP) {
@@ -3023,7 +3024,6 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
         break;
       case OBU_SEQUENCE_HEADER:
         cm->xlayer_id = obu_header.obu_xlayer_id;
-        pbi->stream_switched = 0;
         decoded_payload_size =
             read_sequence_header_obu(pbi, obu_header.obu_xlayer_id, &rb);
         // check dependency map consistency for LCR

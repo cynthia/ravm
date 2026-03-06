@@ -728,7 +728,7 @@ static void update_frame_buffers(AV2Decoder *pbi, int frame_decoded) {
     const bool clear_multiple_insert_in_one =
         av2_frame_clears_multiple_inserted_in_one(
             cm->current_frame.refresh_frame_flags, cm->current_frame.frame_type,
-            cm->seq_params.max_mlayer_id, &first_ref_index);
+            cm->current_frame.mlayer_id, &first_ref_index);
 
     // The following for loop needs to release the reference stored in
     // cm->ref_frame_map[ref_index] before storing a reference to
@@ -788,7 +788,7 @@ static AVM_INLINE void update_long_term_frame_id(AV2Decoder *const pbi) {
   const bool clear_multiple_insert_in_one =
       av2_frame_clears_multiple_inserted_in_one(
           refresh_frame_flags, cm->current_frame.frame_type,
-          cm->seq_params.max_mlayer_id, &first_ref_index);
+          cm->current_frame.mlayer_id, &first_ref_index);
   for (int i = 0; i < cm->seq_params.ref_frames; i++) {
     if ((refresh_frame_flags >> i) & 1) {
       if (av2_skip_reference_buffer_update(clear_multiple_insert_in_one, i,

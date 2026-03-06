@@ -894,7 +894,12 @@ static AVM_INLINE void refresh_reference_frames(AV2_COMP *cpi) {
     const bool clear_multiple_insert_in_one =
         av2_frame_clears_multiple_inserted_in_one(
             cm->current_frame.refresh_frame_flags, cm->current_frame.frame_type,
-            cm->seq_params.max_mlayer_id, &first_ref_index);
+#if CONFIG_KF_REFRESH
+            cm->current_frame.mlayer_id,
+#else
+            cm->seq_params.max_mlayer_id,
+#endif
+            &first_ref_index);
     for (int ref_frame = 0; ref_frame < cm->seq_params.ref_frames;
          ref_frame++) {
       if (((cm->current_frame.refresh_frame_flags >> ref_frame) & 1) == 1) {

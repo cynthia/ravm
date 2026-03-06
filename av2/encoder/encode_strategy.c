@@ -697,7 +697,11 @@ int av2_get_refresh_frame_flags(
 
   // Switch frames and shown key-frames overwrite all reference slots
   if ((av2_is_shown_keyframe(cpi, frame_params->frame_type) &&
+#if CONFIG_KF_REFRESH
+       cpi->common.current_frame.mlayer_id == 0) ||
+#else
        cpi->common.seq_params.max_mlayer_id == 0) ||
+#endif
       (cpi->oxcf.kf_cfg.sframe_mode != 0 &&
        frame_params->frame_type == S_FRAME)) {
     return (1 << cpi->common.seq_params.ref_frames) - 1;
@@ -1066,9 +1070,23 @@ int av2_encode_strategy(AV2_COMP *const cpi, size_t *const size,
   frame_params.speed = oxcf->speed;
 
   // Work out some encoding parameters specific to the pass:
+#if CONFIG_KF_REFRESH
+  if (has_no_stats_stage(cpi)) {
+    if ((cm->current_frame.frame_number == 0 ||
+         (*frame_flags & FRAMEFLAGS_KEY))) {
+      frame_params.frame_type = KEY_FRAME;
+    } else {
+      frame_params.frame_type = INTER_FRAME;
+    }
+    if (oxcf->q_cfg.aq_mode == CYCLIC_REFRESH_AQ) {
+      av2_cyclic_refresh_update_parameters(cpi, frame_params.frame_type);
+    }
+  } else if (is_stat_generation_stage(cpi)) {
+#else
   if (has_no_stats_stage(cpi) && oxcf->q_cfg.aq_mode == CYCLIC_REFRESH_AQ) {
     av2_cyclic_refresh_update_parameters(cpi, frame_params.frame_type);
   } else if (is_stat_generation_stage(cpi)) {
+#endif
     cpi->td.mb.e_mbd.lossless[0] = is_lossless_requested(&oxcf->rc_cfg);
     const int kf_requested = (cm->current_frame.frame_number == 0 ||
                               (*frame_flags & FRAMEFLAGS_KEY));

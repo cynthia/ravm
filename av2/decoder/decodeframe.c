@@ -7224,7 +7224,7 @@ static int read_show_existing_frame(AV2Decoder *pbi, bool is_regular_obu,
       // are always shown).
       pbi->last_olk_tu_display_order_hint = current_frame->display_order_hint;
     }
-    pbi->olk_encountered = 0;
+    if (pbi->this_is_first_vcl_obu_in_tu) pbi->olk_encountered = 0;
   }
 
   lock_buffer_pool(pool);

@@ -7047,6 +7047,7 @@ static void reset_buffer_other_than_OLK(AV2Decoder *pbi) {
   for (int layer = 0; layer <= seq_params->max_mlayer_id; layer++) {
     cm->olk_refresh_frame_flags[layer] = -1;
     cm->olk_co_vcl_refresh_frame_flags[layer] = -1;
+    cm->prev_olk_co_vcl_refresh_frame_flags[layer] = -1;
   }
 }
 
@@ -7222,13 +7223,6 @@ static int read_show_existing_frame(AV2Decoder *pbi, bool is_regular_obu,
       // First non-hidden regular frame after a hidden OLK is this SEF (SEFs
       // are always shown).
       pbi->last_olk_tu_display_order_hint = current_frame->display_order_hint;
-    }
-    if ((int)current_frame->display_order_hint <
-        pbi->last_olk_tu_display_order_hint) {
-      // last_olk_tu_display_order_hint cannot be -1 at this point
-      avm_internal_error(&cm->error, AVM_CODEC_UNSUP_BITSTREAM,
-                         "the reference frame should in the current GOP");
-      return 0;
     }
     pbi->olk_encountered = 0;
   }
@@ -7505,6 +7499,7 @@ static void handle_sequence_header(AV2Decoder *pbi, OBU_TYPE obu_type,
     for (int layer = 0; layer < MAX_NUM_MLAYERS; layer++) {
       cm->olk_refresh_frame_flags[layer] = -1;
       cm->olk_co_vcl_refresh_frame_flags[layer] = -1;
+      cm->prev_olk_co_vcl_refresh_frame_flags[layer] = -1;
     }
   }
 
@@ -8195,6 +8190,8 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
   // when the first regular temporal unit begins.
   if (pbi->olk_encountered && av2_is_regular_non_olk_obu(obu_type) &&
       pbi->this_is_first_vcl_obu_in_tu == 0) {
+    cm->prev_olk_co_vcl_refresh_frame_flags[cm->mlayer_id] =
+        cm->olk_co_vcl_refresh_frame_flags[cm->mlayer_id];
     if (cm->olk_co_vcl_refresh_frame_flags[cm->mlayer_id] == -1)
       cm->olk_co_vcl_refresh_frame_flags[cm->mlayer_id] = 0;
     cm->olk_co_vcl_refresh_frame_flags[cm->mlayer_id] |=
@@ -8234,10 +8231,14 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
       cm->cur_frame->num_ref_frames = 0;
 
     } else if (pbi->need_resync != 1) { /* Skip if need resync */
+      int use_olk_ref_only = pbi->olk_encountered &&
+                             av2_is_regular_non_olk_obu(obu_type) &&
+                             pbi->this_is_first_vcl_obu_in_tu == 0;
       // Implicitly derive the reference mapping
-      init_ref_map_pair(cm, cm->ref_frame_map_pairs,
-                        current_frame->frame_type == KEY_FRAME,
-                        pbi->obu_type == OBU_RAS_FRAME);
+      init_ref_map_pair_dec(cm, cm->ref_frame_map_pairs,
+                            current_frame->frame_type == KEY_FRAME,
+                            pbi->obu_type == OBU_RAS_FRAME, use_olk_ref_only);
+
       if (cm->bridge_frame_info.is_bridge_frame) {
         current_frame->order_hint =
             cm->ref_frame_map[cm->bridge_frame_info.bridge_frame_ref_idx]
@@ -8469,7 +8470,8 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
                              "Reference frame not valid for referencing");
         // Check that co-VCL frames in an OLK TU only reference frames written
         // in the current TU.
-        if (pbi->olk_encountered && !pbi->this_is_first_vcl_obu_in_tu) {
+        if (pbi->olk_encountered && !pbi->this_is_first_vcl_obu_in_tu &&
+            av2_is_regular_non_olk_obu(obu_type)) {
           const RefCntBuffer *const ref_buf = cm->ref_frame_map[ref];
           const int ref_mlayer_id = ref_buf->mlayer_id;
           const int ref_tlayer_id = ref_buf->tlayer_id;
@@ -8490,9 +8492,9 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
                 continue;
               if (cm->olk_refresh_frame_flags[layer] != -1)
                 current_tu_ref_flags |= cm->olk_refresh_frame_flags[layer];
-              if (cm->olk_co_vcl_refresh_frame_flags[layer] != -1)
+              if (cm->prev_olk_co_vcl_refresh_frame_flags[layer] != -1)
                 current_tu_ref_flags |=
-                    cm->olk_co_vcl_refresh_frame_flags[layer];
+                    cm->prev_olk_co_vcl_refresh_frame_flags[layer];
             }
             if (!((current_tu_ref_flags >> ref) & 1)) {
               avm_internal_error(

@@ -4529,6 +4529,14 @@ void write_tile_syntax_info(const TileInfoSyntax *tile_params,
   }
 }
 
+static AVM_INLINE void write_sequence_tile_config(
+    const SequenceHeader *const seq_params, struct avm_write_bit_buffer *wb) {
+  avm_wb_write_bit(wb, seq_params->seq_tile_info_present_flag);
+  if (seq_params->seq_tile_info_present_flag) {
+    write_tile_syntax_info(&seq_params->tile_params, wb);
+  }
+}
+
 static AVM_INLINE void encode_film_grain(const AV2_COMP *const cpi,
                                          struct avm_write_bit_buffer *wb) {
   const AV2_COMMON *const cm = &cpi->common;
@@ -4908,10 +4916,7 @@ static AVM_INLINE void write_sequence_header(
   write_sequence_scc_group_tool_flags(seq_params, wb);
   write_sequence_transform_quant_entropy_group_tool_flags(seq_params, wb);
   write_sequence_filter_group_tool_flags(seq_params, wb);
-  avm_wb_write_bit(wb, seq_params->seq_tile_info_present_flag);
-  if (seq_params->seq_tile_info_present_flag) {
-    write_tile_syntax_info(&seq_params->tile_params, wb);
-  }
+  write_sequence_tile_config(seq_params, wb);
 }
 
 static void write_frame_max_drl_bits(AV2_COMMON *const cm,

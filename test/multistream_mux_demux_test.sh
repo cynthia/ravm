@@ -594,7 +594,7 @@ run_encode_mux_demux_avmenc() {
   decode_muxed_bitstream || return 1
   compare_md5 || return 1
 
-  echo "Done avmenc single layer streamS"
+  echo "Done avmenc single layer streams"
 }
 
 run_encode_mux_demux_ml_temporal() {

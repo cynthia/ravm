@@ -1640,14 +1640,14 @@ static void check_tilegroup_obus_in_a_frame_unit(AV2_COMMON *const cm,
       current_obu->showable_frame != prev_obu->showable_frame ||
       current_obu->display_order_hint != prev_obu->display_order_hint ||
       current_obu->mlayer_id != prev_obu->mlayer_id) {
-    avm_internal_error(&cm->error, AVM_CODEC_UNSUP_BITSTREAM,
-                       "%s : no obu is allowed between tilegroup obus in a "
-                       "frame unit (current obu "
-                       "%s, current oh %d previous obu %s previous oh %d)",
-                       __func__, avm_obu_type_to_string(current_obu->obu_type),
-                       current_obu->display_order_hint,
-                       avm_obu_type_to_string(prev_obu->obu_type),
-                       prev_obu->display_order_hint);
+    avm_internal_error(
+        &cm->error, AVM_CODEC_UNSUP_BITSTREAM,
+        "%s : no non-padding obu is allowed between tilegroup obus in a frame "
+        "unit (current obu %s, current oh %d previous obu %s previous oh %d)",
+        __func__, avm_obu_type_to_string(current_obu->obu_type),
+        current_obu->display_order_hint,
+        avm_obu_type_to_string(prev_obu->obu_type),
+        prev_obu->display_order_hint);
   }
 }
 
@@ -3681,13 +3681,19 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
     }
     if (is_multi_tile_vcl_obu(this_obu->obu_type) &&
         this_obu->first_tile_group == 0) {
-      if (obu_idx == 0) {
+      // Allow padding OBUs between tile group OBUs.
+      int prev_obu_idx = obu_idx - 1;
+      while (prev_obu_idx >= 0 &&
+             obu_list[prev_obu_idx].obu_type == OBU_PADDING) {
+        prev_obu_idx--;
+      }
+      if (prev_obu_idx < 0) {
         avm_internal_error(&cm->error, AVM_CODEC_UNSUP_BITSTREAM,
-                           "The first OBU in a frame unit cannot be a tile "
-                           "group with is_first_tile_group == 0");
+                           "The first non-padding OBU in a frame unit cannot "
+                           "be a tile group with is_first_tile_group == 0");
       }
       check_tilegroup_obus_in_a_frame_unit(cm, this_obu,
-                                           &obu_list[obu_idx - 1]);
+                                           &obu_list[prev_obu_idx]);
     }
   }
 

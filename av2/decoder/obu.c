@@ -1323,10 +1323,6 @@ static size_t read_metadata_unit_payload(AV2Decoder *pbi, const uint8_t *data,
       if (read_metadata_frame_hash(pbi, &rb)) {
         return sz;
       }
-    } else if (metadata_type == OBU_METADATA_TYPE_BANDING_HINTS) {
-      // Banding hints metadata is variable bits, not byte-aligned
-      read_metadata_banding_hints_from_rb(pbi, &rb, data + type_length,
-                                          sz - type_length);
     } else {
       assert(metadata_type == OBU_METADATA_TYPE_TIMECODE);
       read_metadata_timecode(&rb);
@@ -1661,6 +1657,18 @@ static size_t read_metadata_short(AV2Decoder *pbi, const uint8_t *data,
       const size_t banding_payload_size = last_nonzero_idx;
       read_metadata_banding_hints_from_rb(pbi, &rb, data + type_length,
                                           banding_payload_size);
+      // Update the metadata with the header fields we read
+      if (pbi->metadata && pbi->metadata->sz > 0) {
+        avm_metadata_t *last_metadata =
+            pbi->metadata->metadata_array[pbi->metadata->sz - 1];
+        if (last_metadata &&
+            last_metadata->type == OBU_METADATA_TYPE_BANDING_HINTS) {
+          last_metadata->is_suffix = metadata_is_suffix;
+          last_metadata->layer_idc = muh_layer_idc;
+          last_metadata->cancel_flag = muh_cancel_flag;
+          last_metadata->persistence_idc = muh_persistence_idc;
+        }
+      }
       return sz;
     } else if (metadata_type == OBU_METADATA_TYPE_ICC_PROFILE) {
       // ICC profile is byte-aligned binary data

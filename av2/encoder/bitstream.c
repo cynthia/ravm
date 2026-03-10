@@ -3744,7 +3744,9 @@ static AVM_INLINE void encode_loopfilter(AV2_COMMON *cm,
   }
 
   // Encode the loop filter level and type
+#if !CONFIG_NO_MFH
   if (!cm->mfh_params[cm->cur_mfh_id].mfh_deblocking_filter_update_flag) {
+#endif  // !CONFIG_NO_MFH
     avm_wb_write_bit(wb, lf->apply_deblocking_filter[0]);
 
     avm_wb_write_bit(wb, lf->apply_deblocking_filter[1]);
@@ -3755,7 +3757,9 @@ static AVM_INLINE void encode_loopfilter(AV2_COMMON *cm,
         avm_wb_write_bit(wb, lf->apply_deblocking_filter_v);
       }
     }
+#if !CONFIG_NO_MFH
   }
+#endif  // !CONFIG_NO_MFH
   const uint8_t df_par_bits = cm->seq_params.df_par_bits_minus2 + 2;
   const uint8_t df_par_offset = 1 << (df_par_bits - 1);
   if (lf->apply_deblocking_filter[0]) {
@@ -4947,6 +4951,7 @@ static void write_frame_max_bvp_drl_bits(AV2_COMMON *const cm,
   }
 }
 
+#if !CONFIG_NO_MFH
 static AVM_INLINE void write_multi_frame_header(
     const MultiFrameHeader *const mfh_param, struct avm_write_bit_buffer *wb) {
   avm_wb_write_uvlc(wb, mfh_param->mfh_seq_header_id);
@@ -4977,6 +4982,7 @@ static AVM_INLINE void write_multi_frame_header(
     write_seg_syntax_info(&mfh_param->mfh_seg_params, wb);
   }
 }
+#endif  // !CONFIG_NO_MFH
 
 static AVM_INLINE void write_global_motion_params(
     const WarpedMotionParams *params, const WarpedMotionParams *ref_params,
@@ -5213,17 +5219,22 @@ static AVM_INLINE void write_uncompressed_header(
   FeatureFlags *const features = &cm->features;
 
   if (cm->bridge_frame_info.is_bridge_frame) {
+#if !CONFIG_NO_MFH
     assert(cm->cur_mfh_id == 0);
+#endif  // !CONFIG_NO_MFH
     avm_wb_write_uvlc(wb, cm->seq_params.seq_header_id);
     avm_wb_write_literal(wb, cm->bridge_frame_info.bridge_frame_ref_idx,
                          seq_params->ref_frames_log2);
   } else {
+#if !CONFIG_NO_MFH
     avm_wb_write_uvlc(wb, cm->cur_mfh_id);
     if (cm->cur_mfh_id == 0) {
+#endif  // !CONFIG_NO_MFH
       avm_wb_write_uvlc(wb, cm->seq_params.seq_header_id);
+#if !CONFIG_NO_MFH
     }
+#endif  // !CONFIG_NO_MFH
   }
-
   if (seq_params->still_picture) {
     assert(cm->immediate_output_picture == 1);
     assert(current_frame->frame_type == KEY_FRAME);
@@ -6044,6 +6055,7 @@ uint32_t av2_write_sequence_header_obu(const SequenceHeader *seq_params,
   return size;
 }
 
+#if !CONFIG_NO_MFH
 uint32_t write_multi_frame_header_obu(const MultiFrameHeader *mfh_param,
                                       uint8_t *const dst) {
   struct avm_write_bit_buffer wb = { dst, 0 };
@@ -6059,6 +6071,7 @@ uint32_t write_multi_frame_header_obu(const MultiFrameHeader *mfh_param,
   size = avm_wb_bytes_written(&wb);
   return size;
 }
+#endif  // !CONFIG_NO_MFH
 
 static uint32_t write_tilegroup_payload(AV2_COMP *const cpi, uint8_t *const dst,
                                         struct avm_write_bit_buffer *saved_wb,
@@ -6726,6 +6739,7 @@ static size_t av2_write_frame_hash_metadata(
   return total_bytes_written;
 }
 
+#if !CONFIG_NO_MFH
 // This function sets paramsters for MFH
 static void set_multi_frame_header_with_keyframe(AV2_COMP *cpi,
                                                  MultiFrameHeader *mfh_params) {
@@ -6754,6 +6768,7 @@ static void set_multi_frame_header_with_keyframe(AV2_COMP *cpi,
   mfh_params->mfh_extension_present_flag = 0;
 #endif  // CONFIG_F414_OBU_EXTENSION
 }
+#endif  // !CONFIG_NO_MFH
 
 size_t av2_write_banding_hints_metadata(
     AV2_COMP *const cpi, uint8_t *dst,
@@ -7003,6 +7018,7 @@ static int av2_pack_bitstream_internal(AV2_COMP *const cpi, uint8_t *dst,
       data += obu_header_size + obu_payload_size + length_field_size1;
     }
 
+#if !CONFIG_NO_MFH
     if (cm->cur_mfh_id != 0) {
       // write multi-frame header if KEY_FRAME
       set_multi_frame_header_with_keyframe(cpi,
@@ -7018,6 +7034,7 @@ static int av2_pack_bitstream_internal(AV2_COMP *const cpi, uint8_t *dst,
       }
       data += obu_header_size + obu_payload_size + length_field_size;
     }
+#endif  // !CONFIG_NO_MFH
 
     if (av2_is_shown_keyframe(cpi, cm->current_frame.frame_type) &&
         cpi->write_brt_obu) {

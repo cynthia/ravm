@@ -158,7 +158,9 @@ const char *avm_obu_type_to_string(OBU_TYPE type) {
     case OBU_SEQUENCE_HEADER: return "OBU_SEQUENCE_HEADER";
     case OBU_CONTENT_INTERPRETATION: return "OBU_CONTENT_INTERPRETATION";
     case OBU_TEMPORAL_DELIMITER: return "OBU_TEMPORAL_DELIMITER";
+#if !CONFIG_NO_MFH
     case OBU_MULTI_FRAME_HEADER: return "OBU_MULTI_FRAME_HEADER";
+#endif  // !CONFIG_NO_MFH
     case OBU_SWITCH: return "OBU_SWITCH";
     case OBU_LEADING_SEF: return "OBU_LEADING_SEF";
     case OBU_REGULAR_SEF: return "OBU_REGULAR_SEF";
@@ -190,7 +192,9 @@ int avm_obu_type_is_valid(int obu_type) {
   switch (obu_type) {
     case OBU_SEQUENCE_HEADER:
     case OBU_TEMPORAL_DELIMITER:
+#if !CONFIG_NO_MFH
     case OBU_MULTI_FRAME_HEADER:
+#endif  // !CONFIG_NO_MFH
     case OBU_CLK:
     case OBU_OLK:
     case OBU_LEADING_TILE_GROUP:

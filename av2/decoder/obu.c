@@ -217,10 +217,11 @@ void av2_store_xlayer_context(AV2Decoder *pbi, AV2_COMMON *cm, int xlayer_id) {
     pbi->stream_info[stream_idx].remapped_ref_idx_buf[i] =
         cm->remapped_ref_idx[i];
   }
+#if !CONFIG_NO_MFH
   for (int i = 0; i < MAX_MFH_NUM; i++) {
     pbi->stream_info[stream_idx].mfh_params_buf[i] = cm->mfh_params[i];
   }
-
+#endif  // !CONFIG_NO_MFH
 #if CONFIG_AV2_LCR_PROFILES
   // Global OBUs (xlayer_id=31) excluded from per-layer save/restore
 #else
@@ -270,9 +271,11 @@ void av2_store_xlayer_context(AV2Decoder *pbi, AV2_COMMON *cm, int xlayer_id) {
         cm->olk_co_vcl_refresh_frame_flags[i];
   }
   pbi->stream_info[stream_idx].seq_params_buf = cm->seq_params;
+#if !CONFIG_NO_MFH
   for (int i = 0; i < MAX_MFH_NUM; i++) {
     pbi->stream_info[stream_idx].mfh_valid_buf[i] = cm->mfh_valid[i];
   }
+#endif  // !CONFIG_NO_MFH
 }
 
 // Helper function to restore xlayer context
@@ -297,10 +300,11 @@ void av2_restore_xlayer_context(AV2Decoder *pbi, AV2_COMMON *cm,
     cm->remapped_ref_idx[i] =
         pbi->stream_info[stream_idx].remapped_ref_idx_buf[i];
   }
+#if !CONFIG_NO_MFH
   for (int i = 0; i < MAX_MFH_NUM; i++) {
     cm->mfh_params[i] = pbi->stream_info[stream_idx].mfh_params_buf[i];
   }
-
+#endif  // !CONFIG_NO_MFH
 #if CONFIG_AV2_LCR_PROFILES
   // Global OBUs (xlayer_id=31) excluded from per-layer save/restore
 #else
@@ -349,9 +353,11 @@ void av2_restore_xlayer_context(AV2Decoder *pbi, AV2_COMMON *cm,
         pbi->stream_info[stream_idx].olk_co_vcl_refresh_frame_flags_buf[i];
   }
   cm->seq_params = pbi->stream_info[stream_idx].seq_params_buf;
+#if !CONFIG_NO_MFH
   for (int i = 0; i < MAX_MFH_NUM; i++) {
     cm->mfh_valid[i] = pbi->stream_info[stream_idx].mfh_valid_buf[i];
   }
+#endif  // !CONFIG_NO_MFH
 }
 
 static void init_stream_info(StreamInfo *stream_info) {
@@ -364,10 +370,12 @@ static void init_stream_info(StreamInfo *stream_info) {
   for (int i = 0; i < REF_FRAMES; i++) {
     stream_info->ref_frame_map_buf[i] = NULL;
   }
+#if !CONFIG_NO_MFH
   stream_info->mfh_valid_buf[0] = true;
   for (int i = 1; i < MAX_MFH_NUM; i++) {
     stream_info->mfh_valid_buf[i] = false;
   }
+#endif  // !CONFIG_NO_MFH
   for (int i = 0; i < MAX_NUM_MLAYERS; i++) {
     av2_initialize_ci_params(&stream_info->ci_params_per_layer_buf[i]);
   }
@@ -691,6 +699,7 @@ static uint32_t read_sequence_header_obu(AV2Decoder *pbi, int xlayer_id,
   return ((rb->bit_offset - saved_bit_offset + 7) >> 3);
 }
 
+#if !CONFIG_NO_MFH
 static uint32_t read_multi_frame_header_obu(AV2Decoder *pbi,
                                             struct avm_read_bit_buffer *rb) {
   AV2_COMMON *const cm = &pbi->common;
@@ -724,6 +733,7 @@ static uint32_t read_multi_frame_header_obu(AV2Decoder *pbi,
 
   return ((rb->bit_offset - saved_bit_offset + 7) >> 3);
 }
+#endif  // !CONFIG_NO_MFH
 
 static uint32_t read_tilegroup_obu(AV2Decoder *pbi,
                                    struct avm_read_bit_buffer *rb,
@@ -1677,7 +1687,9 @@ static int is_local_config_obu(OBU_TYPE obu_type, int xlayer_id) {
 // TU validation: Check if an OBU type is not global or local configuration
 // information, not sequence header or not padding
 static int is_frame_unit(OBU_TYPE obu_type, int xlayer_id) {
+#if !CONFIG_NO_MFH
   //  OBU_MULTI_FRAME_HEADER,
+#endif  // !CONFIG_NO_MFH
   //  OBU_BUFFER_REMOVAL_TIMING,
   //  OBU_QM,
   //  OBU_FGM,
@@ -1826,10 +1838,12 @@ int check_temporal_unit_structure(temporal_unit_state_t *state, int obu_type,
         if (obu_type == OBU_CONTENT_INTERPRETATION &&
             prev_obu_type != OBU_CONTENT_INTERPRETATION)
           return 0;
+#if !CONFIG_NO_MFH
         else if (obu_type == OBU_MULTI_FRAME_HEADER &&
                  (prev_obu_type != OBU_CONTENT_INTERPRETATION &&
                   prev_obu_type != OBU_MULTI_FRAME_HEADER))
           return 0;
+#endif  // !CONFIG_NO_MFH
         else if (((is_metadata_obu(obu_type) &&
                    metadata_is_suffix == 0) ||  // prefix
                   obu_type == OBU_BUFFER_REMOVAL_TIMING ||
@@ -2518,6 +2532,7 @@ avm_codec_err_t parse_sh(struct AV2Decoder *pbi, const uint8_t *data,
   return AVM_CODEC_OK;
 }
 
+#if !CONFIG_NO_MFH
 avm_codec_err_t parse_mfh(struct AV2Decoder *pbi, const uint8_t *data,
                           size_t payload_size,
                           struct MultiFrameHeader *mfh_list) {
@@ -2542,6 +2557,7 @@ avm_codec_err_t parse_mfh(struct AV2Decoder *pbi, const uint8_t *data,
   mfh_list[mfh_id].mfh_seq_header_id = mfh_seq_header_id;
   return AVM_CODEC_OK;
 }
+#endif  // !CONFIG_NO_MFH
 // Lightweight parser for all VCL OBUs that carry a full uncompressed frame
 // header (CLK, OLK, LEADING/REGULAR_TILE_GROUP, SWITCH, RAS_FRAME,
 // LEADING/REGULAR_TIP, BRIDGE_FRAME).  SEF is excluded because it uses
@@ -2560,8 +2576,10 @@ avm_codec_err_t parse_to_order_hint_for_vcl_obu(
     struct AV2Decoder *pbi, const uint8_t *data, size_t payload_size,
     OBU_TYPE obu_type, int xlayer_id, int tlayer_id, int mlayer_id,
     struct SequenceHeader *current_seq_params,
-    struct MultiFrameHeader *current_mfh, int *current_is_shown,
-    int *current_order_hint) {
+#if !CONFIG_NO_MFH
+    struct MultiFrameHeader *current_mfh,
+#endif  // !CONFIG_NO_MFH
+    int *current_is_shown, int *current_order_hint) {
   assert(is_multi_tile_vcl_obu(obu_type) || obu_type == OBU_LEADING_TIP ||
          obu_type == OBU_REGULAR_TIP || obu_type == OBU_BRIDGE_FRAME);
   assert(obu_type != OBU_LEADING_SEF && obu_type != OBU_REGULAR_SEF);
@@ -2583,6 +2601,10 @@ avm_codec_err_t parse_to_order_hint_for_vcl_obu(
     if (!is_first_tile_group) return AVM_CODEC_OK;
   }
 
+#if CONFIG_NO_MFH
+  uint32_t seq_header_id_in_frame_header =
+      (obu_type == OBU_BRIDGE_FRAME) ? 0 : (uint32_t)avm_rb_read_uvlc(rb);
+#else
   // --- cur_mfh_id and seq_header_id (common to all remaining OBU types) ---
   // BRIDGE_FRAME: cur_mfh_id is implicitly 0 (no bit in bitstream).
   int32_t cur_mfh_id =
@@ -2603,6 +2625,7 @@ avm_codec_err_t parse_to_order_hint_for_vcl_obu(
       return AVM_CODEC_CORRUPT_FRAME;
     }
   }
+#endif  // CONFIG_NO_MFH
 
   // Select sequence header
   struct SequenceHeader *seq_params;
@@ -2731,8 +2754,10 @@ avm_codec_err_t parse_to_order_hint_for_sef(
     struct AV2Decoder *pbi, const uint8_t *data, size_t payload_size,
     OBU_TYPE obu_type, int xlayer_id, int tlayer_id, int mlayer_id,
     struct SequenceHeader *current_seq_params,
-    struct MultiFrameHeader *current_mfh, int *current_is_shown,
-    int *current_order_hint) {
+#if !CONFIG_NO_MFH
+    struct MultiFrameHeader *current_mfh,
+#endif  // !CONFIG_NO_MFH
+    int *current_is_shown, int *current_order_hint) {
   assert(obu_type == OBU_LEADING_SEF || obu_type == OBU_REGULAR_SEF);
 
   struct avm_read_bit_buffer readbits;
@@ -2743,6 +2768,9 @@ avm_codec_err_t parse_to_order_hint_for_sef(
   rb->bit_buffer_end = data + payload_size;
 
   // --- cur_mfh_id and seq_header_id ---
+#if CONFIG_NO_MFH
+  uint32_t seq_header_id_in_frame_header = (uint32_t)avm_rb_read_uvlc(rb);
+#else
   int32_t cur_mfh_id = avm_rb_read_uvlc(rb);
   uint32_t seq_header_id_in_frame_header = 0;
   if (cur_mfh_id == 0) {
@@ -2758,6 +2786,7 @@ avm_codec_err_t parse_to_order_hint_for_sef(
       return AVM_CODEC_CORRUPT_FRAME;
     }
   }
+#endif  // CONFIG_NO_MFH
 
   // Select sequence header
   struct SequenceHeader *seq_params;
@@ -3118,10 +3147,12 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
         decoded_payload_size = av2_read_content_interpretation_obu(pbi, &rb);
         if (cm->error.error_code != AVM_CODEC_OK) return -1;
         break;
+#if !CONFIG_NO_MFH
       case OBU_MULTI_FRAME_HEADER:
         decoded_payload_size = read_multi_frame_header_obu(pbi, &rb);
         if (cm->error.error_code != AVM_CODEC_OK) return -1;
         break;
+#endif  // !CONFIG_NO_MFH
       case OBU_CLK:
       case OBU_OLK:
       case OBU_LEADING_TILE_GROUP:
@@ -3156,10 +3187,12 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
                                           [leading_mlayer_id]
                                           [OBU_CONTENT_INTERPRETATION])
             cm->ci_from_leading[leading_mlayer_id] = true;
+#if !CONFIG_NO_MFH
           if (pbi->obus_in_frame_unit_data[obu_header.obu_tlayer_id]
                                           [leading_mlayer_id]
                                           [OBU_MULTI_FRAME_HEADER])
             cm->mfh_from_leading[cm->cur_mfh_id] = true;
+#endif  // !CONFIG_NO_MFH
 #if CONFIG_CWG_G010
           if (pbi->obus_in_frame_unit_data[obu_header.obu_tlayer_id]
                                           [leading_mlayer_id]
@@ -3209,6 +3242,7 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
           }
           cm->ci_from_leading[regular_mlayer_id] = false;
 
+#if !CONFIG_NO_MFH
           for (int i = 0; i < MAX_MFH_NUM; i++) {
             if (cm->mfh_from_leading[i] &&
                 !pbi->obus_in_frame_unit_data[obu_header.obu_tlayer_id]
@@ -3218,6 +3252,7 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
             }
             cm->mfh_from_leading[i] = false;
           }
+#endif  // !CONFIG_NO_MFH
 
 #if CONFIG_CWG_G010
           if (cm->brt_from_leading &&

@@ -298,11 +298,16 @@ static avm_codec_err_t decoder_peek_si_internal(const uint8_t *data,
       if (!first_tile_group_in_frame) {
         avm_rb_read_bit(&rb);  // send_uncompressed_header_flag
       }
+#if !CONFIG_NO_MFH
       uint32_t mfh_id = avm_rb_read_uvlc(&rb);
       if (mfh_id == 0) {
+#endif  // !CONFIG_NO_MFH
         uint32_t seq_header_id_in_frame_header = avm_rb_read_uvlc(&rb);
         (void)seq_header_id_in_frame_header;
+#if !CONFIG_NO_MFH
       }
+#endif  // !CONFIG_NO_MFH
+
       FRAME_TYPE frame_type = avm_rb_read_bit(&rb) ? INTER_FRAME : INTRA_FRAME;
       if (frame_type == INTRA_ONLY_FRAME) {
         intra_only_flag = 1;
@@ -467,6 +472,7 @@ static avm_codec_err_t init_decoder(avm_codec_alg_priv_t *ctx) {
        i++) {
     frame_worker_data->pbi->common.ref_frame_map[i] = NULL;
   }
+#if !CONFIG_NO_MFH
   frame_worker_data->pbi->common.mfh_valid[0] = true;
   for (int i = 1; i < MAX_MFH_NUM; i++) {
     frame_worker_data->pbi->common.mfh_valid[i] = false;
@@ -474,6 +480,7 @@ static avm_codec_err_t init_decoder(avm_codec_alg_priv_t *ctx) {
   // Initialize cm->cur_mfh_id to -1 to help detect if cm->cur_mfh_id is used
   // before being assigned a valid value.
   frame_worker_data->pbi->common.cur_mfh_id = -1;
+#endif  // !CONFIG_NO_MFH
   return AVM_CODEC_OK;
 }
 
@@ -713,8 +720,10 @@ static int quick_parsing_to_order_hint(struct AV2Decoder *pbi,
 
   struct SequenceHeader seq_params;
   seq_params.seq_header_id = -1;
+#if !CONFIG_NO_MFH
   struct MultiFrameHeader mfh_list[MAX_MFH_NUM];
   for (int i = 0; i < MAX_MFH_NUM; i++) mfh_list[i].mfh_id = -1;
+#endif  // !CONFIG_NO_MFH
   while (data_read < data + data_sz) {
     size_t payload_size = 0;
     size_t bytes_read = 0;
@@ -726,16 +735,21 @@ static int quick_parsing_to_order_hint(struct AV2Decoder *pbi,
       // NOTE: this does not happen since this function is not invoked when data
       // has OBU_SEQUENCE_HEADER && CLK/OLK Keep it here for future usage
       res = parse_sh(pbi, data_read + bytes_read, payload_size, &seq_params);
+#if !CONFIG_NO_MFH
     } else if (obu_header.type == OBU_MULTI_FRAME_HEADER) {
       res = parse_mfh(pbi, data_read + bytes_read, payload_size, &mfh_list[0]);
+#endif  // !CONFIG_NO_MFH
     } else if (obu_header.type == OBU_LEADING_SEF ||
                obu_header.type == OBU_REGULAR_SEF) {
       // SEF uses show-existing-frame syntax; handled by a dedicated parser.
       res = parse_to_order_hint_for_sef(
           pbi, data_read + bytes_read, payload_size, obu_header.type,
           obu_header.obu_xlayer_id, obu_header.obu_tlayer_id,
-          obu_header.obu_mlayer_id, &seq_params, &mfh_list[0], current_is_shown,
-          current_order_hint);
+          obu_header.obu_mlayer_id, &seq_params,
+#if !CONFIG_NO_MFH
+          &mfh_list[0],
+#endif  // !CONFIG_NO_MFH
+          current_is_shown, current_order_hint);
     } else if (is_multi_tile_vcl_obu(obu_header.type) ||
                obu_header.type == OBU_LEADING_TIP ||
                obu_header.type == OBU_REGULAR_TIP ||
@@ -744,8 +758,11 @@ static int quick_parsing_to_order_hint(struct AV2Decoder *pbi,
       res = parse_to_order_hint_for_vcl_obu(
           pbi, data_read + bytes_read, payload_size, obu_header.type,
           obu_header.obu_xlayer_id, obu_header.obu_tlayer_id,
-          obu_header.obu_mlayer_id, &seq_params, &mfh_list[0], current_is_shown,
-          current_order_hint);
+          obu_header.obu_mlayer_id, &seq_params,
+#if !CONFIG_NO_MFH
+          &mfh_list[0],
+#endif  // !CONFIG_NO_MFH
+          current_is_shown, current_order_hint);
     }
     if (res != AVM_CODEC_OK) return 0;
     data_read += bytes_read + payload_size;
@@ -1062,8 +1079,10 @@ static avm_codec_err_t decoder_decode(avm_codec_alg_priv_t *ctx,
     }
     bool has_seq_header =
         pbi->obus_in_frame_unit_data[0][0][OBU_SEQUENCE_HEADER];
+#if !CONFIG_NO_MFH
     bool has_mf_header =
         pbi->obus_in_frame_unit_data[0][mlayer_id][OBU_MULTI_FRAME_HEADER];
+#endif  // !CONFIG_NO_MFH
     bool has_key_obu =
         pbi->obus_in_frame_unit_data[tlayer_id][mlayer_id][OBU_CLK] ||
         pbi->obus_in_frame_unit_data[tlayer_id][mlayer_id][OBU_OLK];
@@ -1137,7 +1156,9 @@ static avm_codec_err_t decoder_decode(avm_codec_alg_priv_t *ctx,
     // last_displayable_frame_unit.
     // currently has_seq_header is determined by the presence of SH. this
     // may need to be updated for the case of out-of-band SH
+#if !CONFIG_NO_MFH
     (void)has_mf_header;
+#endif  // !CONFIG_NO_MFH
     if (has_seq_header && has_key_obu) {
       memset(&pbi->last_frame_unit, -1, sizeof(pbi->last_frame_unit));
       memset(&pbi->last_displayable_frame_unit, -1,

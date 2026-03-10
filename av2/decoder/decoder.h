@@ -286,7 +286,9 @@ typedef struct {
   RefCntBuffer *ref_frame_map_buf[REF_FRAMES];
   int remapped_ref_idx_buf[INTER_REFS_PER_FRAME];
   struct SequenceHeader seq_list_buf[MAX_SEQ_NUM];
+#if !CONFIG_NO_MFH
   MultiFrameHeader mfh_params_buf[MAX_MFH_NUM];
+#endif  // !CONFIG_NO_MFH
   int valid_for_referencing_buf[REF_FRAMES];
   int long_term_ids_in_buffer_buf[REF_FRAMES];
 #if CONFIG_AV2_LCR_PROFILES
@@ -316,7 +318,9 @@ typedef struct {
   int olk_co_vcl_refresh_frame_flags_buf[MAX_NUM_MLAYERS];
   SequenceHeader seq_params_buf;
   int seq_header_count_buf;
+#if !CONFIG_NO_MFH
   bool mfh_valid_buf[MAX_MFH_NUM];
+#endif  // !CONFIG_NO_MFH
 } StreamInfo;
 
 /*!

@@ -1601,6 +1601,7 @@ typedef struct {
   bool enable_ext_seg;
 } FeatureFlags;
 
+#if !CONFIG_NO_MFH
 /*!
  * \brief Multi-frame level parameters.
  */
@@ -1676,6 +1677,7 @@ typedef struct MultiFrameHeader {
   int mfh_extension_present_flag;
 #endif  // CONFIG_F414_OBU_EXTENSION
 } MultiFrameHeader;
+#endif  // !CONFIG_NO_MFH
 
 typedef struct CommonModeInfoParams CommonModeInfoParams;
 /*!
@@ -2793,12 +2795,13 @@ typedef struct AV2Common {
    */
   bool brt_from_leading;
 #endif  // CONFIG_CWG_G010
-
+#if !CONFIG_NO_MFH
   /*!
    * Elements part of the multi-frame header, that are applicable for multiple
    * frames in the video.
    */
   MultiFrameHeader mfh_params[MAX_MFH_NUM];
+
   /*!
    * Array of booleans to indicate whether mfh_params[i] has been received.
    */
@@ -2808,7 +2811,7 @@ typedef struct AV2Common {
    * TU are invalidated (mfh_valid[i] set to false) at the transition.
    */
   bool mfh_from_leading[MAX_MFH_NUM];
-
+#endif  // !CONFIG_NO_MFH
   /*!
    * Elements part of the content interpretation, when present, applicable for
    * all the frames in the video. ci_params_per_layer is initialized to default
@@ -3042,11 +3045,12 @@ typedef struct AV2Common {
    * True if we are in a decoding process.
    */
   bool decoding;
+#if !CONFIG_NO_MFH
   /*!
    * Identifier to indicate mult-frame header.
    */
   int cur_mfh_id;
-
+#endif  // !CONFIG_NO_MFH
   /*!
    * Flag to indicate whether wedge masks are initialized.
    * Wedge masks are only needed for inter prediction.
@@ -6179,12 +6183,14 @@ static INLINE int is_frame_seg_config_reuse_eligible(
 
 static INLINE const SegmentationInfoSyntax *find_effective_seg_params(
     const AV2_COMMON *const cm) {
-  // Returns pointer to effective sequence level or multi-frame header level seg
+  // Returns pointer to effective sequence header level seg
   // info. Returns null if none exist
+#if !CONFIG_NO_MFH
   if (cm->mfh_valid[cm->cur_mfh_id] &&
       cm->mfh_params[cm->cur_mfh_id].mfh_seg_info_present_flag) {
     return &cm->mfh_params[cm->cur_mfh_id].mfh_seg_params;
   }
+#endif  // !CONFIG_NO_MFH
   if (cm->seq_params.seq_seg_info_present_flag)
     return &cm->seq_params.seg_params;
   else

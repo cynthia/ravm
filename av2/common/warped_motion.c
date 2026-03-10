@@ -500,11 +500,6 @@ void av2_set_warp_translation(int mi_row, int mi_col, BLOCK_SIZE bsize, MV mv,
   wm->wmtype = get_wmtype(wm);
 }
 
-static int is_affine_valid(const WarpedMotionParams *const wm) {
-  const int32_t *mat = wm->wmmat;
-  return (mat[2] > 0);
-}
-
 static int is_affine_shear_allowed(int16_t alpha, int16_t beta, int16_t gamma,
                                    int16_t delta) {
   if ((4 * abs(alpha) + 7 * abs(beta) >= (3 << WARPEDMODEL_PREC_BITS)) ||
@@ -514,11 +509,9 @@ static int is_affine_shear_allowed(int16_t alpha, int16_t beta, int16_t gamma,
     return 1;
 }
 
-// Returns 1 on success or 0 on an invalid affine set
-int av2_get_shear_params(WarpedMotionParams *wm, const struct scale_factors *sf
+void av2_get_shear_params(WarpedMotionParams *wm, const struct scale_factors *sf
 
 ) {
-  if (!is_affine_valid(wm)) return 0;
   const int16_t max_value = INT16_MAX - (1 << (WARP_PARAM_REDUCE_BITS - 1));
 
   // Always use 4x4 warp in scale of across-scale
@@ -567,8 +560,6 @@ int av2_get_shear_params(WarpedMotionParams *wm, const struct scale_factors *sf
       is_scaled
           ? 0
           : is_affine_shear_allowed(wm->alpha, wm->beta, wm->gamma, wm->delta);
-
-  return 1;
 }
 
 // Reduce the precision of a warp model, ready for use in the warp filter
@@ -1336,10 +1327,10 @@ static int32_t get_mult_shift_diag(int64_t Px, int16_t iDet, int shift) {
 }
 #endif  // USE_LIMITED_PREC_MULT
 
-static int find_affine_int(int np, const int *pts1, const int *pts2,
-                           BLOCK_SIZE bsize, MV mv, WarpedMotionParams *wm,
-                           int mi_row, int mi_col,
-                           const struct scale_factors *sf
+static void find_affine_int(int np, const int *pts1, const int *pts2,
+                            BLOCK_SIZE bsize, MV mv, WarpedMotionParams *wm,
+                            int mi_row, int mi_col,
+                            const struct scale_factors *sf
 
 ) {
   int32_t A[2][2] = { { 0, 0 }, { 0, 0 } };
@@ -1417,7 +1408,7 @@ static int find_affine_int(int np, const int *pts1, const int *pts2,
     wm->wmmat[7] = 0;
     av2_get_shear_params(wm, sf);
     av2_set_warp_translation(mi_row, mi_col, bsize, mv, wm);
-    return 0;
+    return;
   }
 
   int16_t shift;
@@ -1445,32 +1436,19 @@ static int find_affine_int(int np, const int *pts1, const int *pts2,
       clamp64_to_32(ROUND_POWER_OF_TWO_SIGNED_64(Py[1] * iDet, shift));
 
   av2_reduce_warp_model(wm);
-  // check compatibility with the fast warp filter
-  if (!av2_get_shear_params(wm, sf
-
-                            ))
-    return 1;
+  av2_get_shear_params(wm, sf);
   av2_set_warp_translation(mi_row, mi_col, bsize, mv, wm);
   wm->wmmat[6] = wm->wmmat[7] = 0;
-  return 0;
 }
 
-int av2_find_projection(int np, const int *pts1, const int *pts2,
-                        BLOCK_SIZE bsize, MV mv, WarpedMotionParams *wm_params,
-                        int mi_row, int mi_col, const struct scale_factors *sf
+void av2_find_projection(int np, const int *pts1, const int *pts2,
+                         BLOCK_SIZE bsize, MV mv, WarpedMotionParams *wm_params,
+                         int mi_row, int mi_col, const struct scale_factors *sf
 
 ) {
   assert(wm_params->wmtype <= AFFINE);
-
-  if (find_affine_int(np, pts1, pts2, bsize, mv, wm_params, mi_row, mi_col, sf
-
-                      )) {
-    wm_params->invalid = 1;
-    return 1;
-  }
+  find_affine_int(np, pts1, pts2, bsize, mv, wm_params, mi_row, mi_col, sf);
   wm_params->invalid = 0;
-
-  return 0;
 }
 
 /* Given a neighboring block's warp model and the motion vector at the center
@@ -1573,10 +1551,7 @@ int av2_extend_warp_model(const bool neighbor_is_above, const BLOCK_SIZE bsize,
 
   av2_reduce_warp_model(wm_params);
   // check compatibility with the fast warp filter
-  if (!av2_get_shear_params(wm_params, sf)) {
-    wm_params->invalid = 1;
-    return 1;
-  }
+  av2_get_shear_params(wm_params, sf);
 
   // Derive translational part from signaled MV
   av2_set_warp_translation(mi_row, mi_col, bsize, *center_mv, wm_params);
@@ -1594,7 +1569,7 @@ int_mv get_warp_motion_vector_xy_pos(const MACROBLOCKD *xd,
   int_mv res;
   int tx, ty;
 
-  if (model->invalid || model->wmtype == IDENTITY) {
+  if (model->wmtype == IDENTITY) {
     res.as_int = 0;
     return res;
   }
@@ -1721,12 +1696,7 @@ int get_model_from_corner_mvs(WarpedMotionParams *derive_model, int *pts,
   av2_reduce_warp_model(derive_model);
 
   // check compatibility with the fast warp filter
-  if (!av2_get_shear_params(derive_model, sf
-
-                            )) {
-    derive_model->invalid = 1;
-    return 0;
-  }
+  av2_get_shear_params(derive_model, sf);
 
   derive_model->wmmat[0] =
       (int32_t)clamp64(wmmat0, -WARPEDMODEL_TRANS_CLAMP,

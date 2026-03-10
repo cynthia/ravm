@@ -602,18 +602,11 @@ static void read_warp_delta(const AV2_COMMON *cm, const MACROBLOCKD *xd,
   }
 
   av2_reduce_warp_model(params);
-  int valid = av2_get_shear_params(
+  av2_get_shear_params(
       params, get_ref_scale_factors_const(cm, mbmi->ref_frame[0])
 
   );
-  params->invalid = !valid;
-  if (!valid) {
-#if WARPED_MOTION_DEBUG
-    printf("Warning: unexpected WARP_DELTA model from avmenc\n");
-#endif
-    return;
-  }
-
+  params->invalid = 0;
   av2_set_warp_translation(mi_row, mi_col, bsize, center_mv.as_mv, params);
   assign_warpmv(cm, xd->submi, bsize, params, mi_row, mi_col, 0);
 }
@@ -2993,25 +2986,22 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
     sf[1] = get_ref_scale_factors(cm, mbmi->ref_frame[1]);
 
     if (mbmi->num_proj_ref[0] > 0) {
-      if (!av2_find_projection(mbmi->num_proj_ref[0], pts0, pts0_inref, bsize,
-                               mv0, &mbmi->wm_params[0], mi_row, mi_col, sf[0]
+      av2_find_projection(mbmi->num_proj_ref[0], pts0, pts0_inref, bsize, mv0,
+                          &mbmi->wm_params[0], mi_row, mi_col, sf[0]
 
-                               ))
-        mbmi->wm_params[0].invalid = 0;
+      );
+      mbmi->wm_params[0].invalid = 0;
     }
     if (has_second_ref(mbmi)) {
       if (mbmi->num_proj_ref[1] > 0) {
-        if (!av2_find_projection(mbmi->num_proj_ref[1], pts1, pts1_inref, bsize,
-                                 mv1, &mbmi->wm_params[1], mi_row, mi_col, sf[1]
+        av2_find_projection(mbmi->num_proj_ref[1], pts1, pts1_inref, bsize, mv1,
+                            &mbmi->wm_params[1], mi_row, mi_col, sf[1]
 
-                                 ))
-          mbmi->wm_params[1].invalid = 0;
+        );
+        mbmi->wm_params[1].invalid = 0;
       }
     }
-#if WARPED_MOTION_DEBUG
-    if (mbmi->wm_params[0].invalid && mbmi->wm_params[1].invalid)
-      printf("Warning: unexpected warped model from avmenc\n");
-#endif
+
     if (!mbmi->wm_params[0].invalid)
       assign_warpmv(cm, xd->submi, bsize, &mbmi->wm_params[0], mi_row, mi_col,
                     0);

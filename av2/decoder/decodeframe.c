@@ -6492,13 +6492,13 @@ uint32_t av2_read_multi_frame_header(AV2_COMMON *cm,
   return cur_mfh_id;
 }
 
-static int read_global_motion_params(WarpedMotionParams *params,
-                                     const WarpedMotionParams *ref_params,
-                                     struct avm_read_bit_buffer *rb,
+static void read_global_motion_params(WarpedMotionParams *params,
+                                      const WarpedMotionParams *ref_params,
+                                      struct avm_read_bit_buffer *rb,
 
-                                     const struct scale_factors *sf,
+                                      const struct scale_factors *sf,
 
-                                     MvSubpelPrecision precision) {
+                                      MvSubpelPrecision precision) {
   const int precision_loss = get_gm_precision_loss(precision);
   (void)precision_loss;
   TransformationType type = avm_rb_read_bit(rb);
@@ -6559,16 +6559,13 @@ static int read_global_motion_params(WarpedMotionParams *params,
 
   if (params->wmtype <= AFFINE) {
     av2_reduce_warp_model(params);
-    int good_shear_params = av2_get_shear_params(params
+    av2_get_shear_params(params
 
-                                                 ,
-                                                 sf
+                         ,
+                         sf
 
     );
-    if (!good_shear_params) return 0;
   }
-
-  return 1;
 }
 
 static AVM_INLINE void read_global_motion(AV2_COMMON *cm,
@@ -6645,18 +6642,11 @@ static AVM_INLINE void read_global_motion(AV2_COMMON *cm,
                          cm->base_global_motion_distance, &ref_params_,
                          temporal_distance);
     WarpedMotionParams *ref_params = &ref_params_;
-    int good_params =
-        read_global_motion_params(&cm->global_motion[frame], ref_params, rb,
+    read_global_motion_params(&cm->global_motion[frame], ref_params, rb,
 
-                                  get_ref_scale_factors_const(cm, frame),
+                              get_ref_scale_factors_const(cm, frame),
 
-                                  cm->features.fr_mv_precision);
-    if (!good_params) {
-#if WARPED_MOTION_DEBUG
-      printf("Warning: unexpected global motion shear params from avmenc\n");
-#endif
-      cm->global_motion[frame].invalid = 1;
-    }
+                              cm->features.fr_mv_precision);
 
     // TODO(sarahparker, debargha): The logic in the commented out code below
     // does not work currently and causes mismatches when resize is on. Fix it

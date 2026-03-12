@@ -411,7 +411,7 @@ static struct av2_extracfg default_extra_cfg = {
   1,                                         // enable_ccso
   0,                                         // ccso_unit_matches_sb
 #if CONFIG_BAND_DETECTION
-  1,                                         // enable_band_metadata
+  0,                                         // enable_band_metadata
 #endif  // CONFIG_BAND_DETECTION
   1,                            // enable_lf_sub_pu
   0,                            // force_video_mode

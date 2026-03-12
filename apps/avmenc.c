@@ -666,7 +666,7 @@ static void init_config(cfg_options_t *config) {
   config->enable_ccso = 1;
   config->ccso_unit_matches_sb = 0;
 #if CONFIG_BAND_DETECTION
-  config->enable_band_metadata = 1;
+  config->enable_band_metadata = 0;
 #endif  // CONFIG_BAND_DETECTION
   config->enable_lf_sub_pu = 1;
   config->enable_warped_motion = 1;

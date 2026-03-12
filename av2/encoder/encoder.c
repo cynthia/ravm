@@ -3136,12 +3136,11 @@ static void avm_band_search(AV2_COMP *cpi, AV2_COMMON *cm, MACROBLOCKD *xd) {
   int frame_width = xd->plane[0].dst.width;
   int frame_height = xd->plane[0].dst.height;
   if(avm_band_detection_init(dbi, frame_width, frame_height, bit_depth)) {
-    // Populate the banding metadata structure in the encoder context
     avm_band_detection(&cm->cur_frame->buf, cpi->source, cm, xd, &cpi->band_metadata);
-    // Mark metadata as valid if banding was detected
-    cpi->band_metadata_present = 1;
-    // (cpi->banding_metadata.coding_banding_present_flag ||
-    // cpi->banding_metadata.source_banding_present_flag);
+
+    cpi->band_metadata_present = (cpi->band_metadata.coding_banding_present_flag ||
+                                  cpi->band_metadata.source_banding_present_flag);
+
     avm_band_detection_close(&cm->band_info);
   }
 }

@@ -82,6 +82,26 @@ int av2_check_seg_equivalence(const struct SegmentationInfoSyntax *seg_params,
   }
   return 1;
 }
+#if CONFIG_NO_MFH
+int av2_check_seg_params_equivalence(const struct segmentation *seg_params,
+                                     const struct segmentation *seg) {
+  if (seg_params->enable_ext_seg != seg->enable_ext_seg) return 0;
+  const int max_seg_num = seg->enable_ext_seg ? MAX_SEGMENTS : MAX_SEGMENTS_8;
+
+  for (int i = 0; i < max_seg_num; i++) {
+    if (seg_params->feature_mask[i] != seg->feature_mask[i]) return 0;
+  }
+
+  for (int i = 0; i < max_seg_num; i++) {
+    for (int j = 0; j < SEG_LVL_MAX; j++) {
+      if (seg_params->feature_mask[i] & (1 << j)) {
+        if (seg_params->feature_data[i][j] != seg->feature_data[i][j]) return 0;
+      }
+    }
+  }
+  return 1;
+}
+#endif  // CONFIG_NO_MFH
 
 void av2_reconstruct_seg_params(const struct SegmentationInfoSyntax *seg_params,
                                 struct segmentation *seg) {

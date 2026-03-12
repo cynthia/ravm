@@ -2458,11 +2458,20 @@ static AVM_INLINE void setup_segmentation(AV2_COMMON *const cm,
       reuse = 1;
     }
   }
-
   if (reuse) {
     av2_reconstruct_seg_params(seg_params, seg);
   } else {
-    read_seg_syntax_info_to_segmentation(seg, rb);
+#if CONFIG_NO_MFH
+    if (cm->features.derived_primary_ref_frame != PRIMARY_REF_NONE) {
+      int data_from_frame = avm_rb_read_bit(rb);
+      if (data_from_frame) {
+        segfeatures_copy(seg, &cm->prev_frame->seg);
+        reuse = 1;
+      }
+    }
+    if (!reuse)
+#endif  // CONFIG_NO_MFH
+      read_seg_syntax_info_to_segmentation(seg, rb);
   }
 
   if (cm->features.derived_primary_ref_frame == PRIMARY_REF_NONE) {

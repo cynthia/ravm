@@ -4194,7 +4194,19 @@ static AVM_INLINE void encode_segmentation(AV2_COMMON *cm,
   }
 
   if (!reuse) {
-    write_seg_syntax_info_from_segmentation(seg, wb);
+#if CONFIG_NO_MFH
+    if (cm->features.derived_primary_ref_frame == PRIMARY_REF_NONE) {
+      const int prev_equal =
+          av2_check_seg_params_equivalence(&cm->prev_frame->seg, seg);
+      avm_wb_write_bit(wb, prev_equal);
+      if (prev_equal) {
+        segfeatures_copy(seg, &cm->prev_frame->seg);
+        reuse = 1;
+      }
+    }
+    if (!reuse)
+#endif  // CONFIG_NO_MFH
+      write_seg_syntax_info_from_segmentation(seg, wb);
   }
 
   if (cm->features.derived_primary_ref_frame == PRIMARY_REF_NONE) {

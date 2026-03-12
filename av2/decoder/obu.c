@@ -2314,7 +2314,14 @@ bool conformance_check_msdo_lcr(struct AV2Decoder *pbi, bool global_lcr_present,
     if (pbi->xlayer_id_map[i] > 0) num_extended_layers++;
   }
   for (int i = 0; i < MAX_NUM_MLAYERS; i++) {
-    if (pbi->mlayer_id_map[i] > 0) num_embedded_layers++;
+    bool found = false;
+    for (int x = 0; x < AVM_MAX_NUM_STREAMS; x++) {
+      if (pbi->mlayer_id_map[x][i] > 0) {
+        found = true;
+        break;
+      }
+    }
+    if (found) num_embedded_layers++;
   }
   assert(num_extended_layers > 0 && num_embedded_layers > 0);
 
@@ -2993,7 +3000,14 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
       if (pbi->xlayer_id_map[i] > 0) num_xlayers++;
     }
     for (int i = 0; i < MAX_NUM_MLAYERS; i++) {
-      if (pbi->mlayer_id_map[i] > 0) num_mlayers++;
+      bool found = false;
+      for (int x = 0; x < AVM_MAX_NUM_STREAMS; x++) {
+        if (pbi->mlayer_id_map[x][i] > 0) {
+          found = true;
+          break;
+        }
+      }
+      if (found) num_mlayers++;
     }
 
     if (num_xlayers > 0 && num_mlayers > 0) {
@@ -3023,7 +3037,8 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
 
     // Reset maps for the current TU
     for (int i = 0; i < AVM_MAX_NUM_STREAMS - 1; i++) pbi->xlayer_id_map[i] = 0;
-    for (int i = 0; i < MAX_NUM_MLAYERS; i++) pbi->mlayer_id_map[i] = 0;
+    for (int x = 0; x < AVM_MAX_NUM_STREAMS; x++)
+      for (int i = 0; i < MAX_NUM_MLAYERS; i++) pbi->mlayer_id_map[x][i] = 0;
   }
 #endif  // CONFIG_AV2_LCR_PROFILES
 
@@ -3113,7 +3128,7 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
       cm->is_leading_picture = -1;
 #if CONFIG_AV2_LCR_PROFILES
     pbi->xlayer_id_map[obu_header.obu_xlayer_id] = 1;
-    pbi->mlayer_id_map[obu_header.obu_mlayer_id] = 1;
+    pbi->mlayer_id_map[obu_header.obu_xlayer_id][obu_header.obu_mlayer_id] = 1;
 #else
     if (pbi->random_accessed) {
 #if CONFIG_AV2_PROFILES
@@ -3137,11 +3152,12 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
         pbi->multi_stream_mode = 0;
       for (int i = 0; i < AVM_MAX_NUM_STREAMS - 1; i++)
         pbi->xlayer_id_map[i] = 0;
-      for (int i = 0; i < MAX_NUM_MLAYERS; i++) pbi->mlayer_id_map[i] = 0;
+      for (int x = 0; x < AVM_MAX_NUM_STREAMS; x++)
+        for (int i = 0; i < MAX_NUM_MLAYERS; i++) pbi->mlayer_id_map[x][i] = 0;
     }
 
     pbi->xlayer_id_map[obu_header.obu_xlayer_id] = 1;
-    pbi->mlayer_id_map[obu_header.obu_mlayer_id] = 1;
+    pbi->mlayer_id_map[obu_header.obu_xlayer_id][obu_header.obu_mlayer_id] = 1;
 #endif  // CONFIG_AV2_LCR_PROFILES
 
     obu_info *const curr_obu_info = &obu_list[count_obus_with_frame_unit];
@@ -3376,6 +3392,21 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
                 (obu_header.type == OBU_CLK || obu_header.type == OBU_OLK);
           }
         }
+#if CONFIG_AV2_PROFILES
+        int num_mlayers = 0;
+        for (int i = 0; i < MAX_NUM_MLAYERS; ++i) {
+          if (pbi->mlayer_id_map[obu_header.obu_xlayer_id][i] == 1)
+            num_mlayers++;
+        }
+        if (num_mlayers > 1 &&
+            num_mlayers > cm->seq_params.seq_max_mlayer_cnt) {
+          avm_internal_error(
+              &cm->error, AVM_CODEC_UNSUP_BITSTREAM,
+              "The number of embedded layers (%d) in the current video "
+              "sequence is larger than the seq_max_mlayer_cnt (%d).",
+              num_mlayers, cm->seq_params.seq_max_mlayer_cnt);
+        }
+#endif  // CONFIG_AV2_PROFILES
 
         // Drop picture unit HLS state that was derived exclusively from leading
         // frame picture units when the first regular VCL OBU is encountered.
@@ -3556,6 +3587,17 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
         break;
     }
 
+    // Spec 6.2.2:
+    // "At the end of reading the OBU, it is a requirement of bitstream "
+    // "conformance that obu_mlayer_id is less than or equal to max_mlayer_id."
+    if (obu_header.obu_mlayer_id > cm->seq_params.max_mlayer_id) {
+      avm_internal_error(&cm->error, AVM_CODEC_UNSUP_BITSTREAM,
+                         "obu_mlayer_id (%d) must be less than or equal to "
+                         "max_mlayer_id (%d).",
+                         obu_header.obu_mlayer_id,
+                         cm->seq_params.max_mlayer_id);
+    }
+
     // Check that the signalled OBU size matches the actual amount of data read
     if (decoded_payload_size > payload_size) {
       cm->error.error_code = AVM_CODEC_CORRUPT_FRAME;
@@ -3645,6 +3687,17 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
       count_obus_with_frame_unit++;
     }
     if (cm->error.error_code != AVM_CODEC_OK) return -1;
+
+    // Spec 6.2.2:
+    // "At the end of reading the OBU, it is a requirement of bitstream "
+    // "conformance that obu_mlayer_id is less than or equal to max_mlayer_id."
+    if (obu_header.obu_mlayer_id > cm->seq_params.max_mlayer_id) {
+      avm_internal_error(&cm->error, AVM_CODEC_UNSUP_BITSTREAM,
+                         "obu_mlayer_id (%d) must be less than or equal to "
+                         "max_mlayer_id (%d).",
+                         obu_header.obu_mlayer_id,
+                         cm->seq_params.max_mlayer_id);
+    }
 
     // Check that the signalled OBU size matches the actual amount of data read
     if (decoded_payload_size > payload_size) {

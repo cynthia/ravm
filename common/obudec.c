@@ -112,7 +112,9 @@ static int is_fu_head_non_vcl_obu(OBU_TYPE obu_type, int xlayer_id) {
   // note that prefix metata is not included in this list since 1 bit parsing is
   // required to check if the metadata obu is prefix.
   return is_tu_head_non_vcl_obu(obu_type, xlayer_id) ||
+#if !CONFIG_NO_MFH
          obu_type == OBU_MULTI_FRAME_HEADER ||
+#endif  // !CONFIG_NO_MFH
          obu_type == OBU_CONTENT_INTERPRETATION ||
          obu_type == OBU_BUFFER_REMOVAL_TIMING || obu_type == OBU_QM ||
          obu_type == OBU_FGM;

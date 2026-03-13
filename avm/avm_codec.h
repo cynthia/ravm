@@ -561,7 +561,9 @@ avm_codec_err_t avm_codec_set_option(avm_codec_ctx_t *ctx, const char *name,
 typedef enum ATTRIBUTE_PACKED {
   OBU_SEQUENCE_HEADER = 1,
   OBU_TEMPORAL_DELIMITER,
+#if !CONFIG_NO_MFH
   OBU_MULTI_FRAME_HEADER,
+#endif  // !CONFIG_NO_MFH
   OBU_CLK,
   OBU_OLK,
   OBU_LEADING_TILE_GROUP,

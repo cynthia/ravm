@@ -2897,10 +2897,12 @@ typedef struct AV2_COMP {
    * allocation height
    */
   int alloc_height;
+#if !CONFIG_NO_MFH
   /*!
    * Record the current multi-frame header parameters
    */
   MultiFrameHeader cur_mfh_params;
+#endif  // !CONFIG_NO_MFH
   /*!
    * TIP mode selected count for first INTER_REFS_PER_FRAME frames
    * Encoder would use this value to decide if need to enable TIP mode

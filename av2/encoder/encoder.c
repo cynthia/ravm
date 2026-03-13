@@ -1187,8 +1187,10 @@ static void init_config(struct AV2_COMP *cpi, AV2EncoderConfig *oxcf) {
 
   av2_update_film_grain_parameters(cpi, oxcf);
 
+#if !CONFIG_NO_MFH
   cm->cur_mfh_id = oxcf->tool_cfg.enable_mfh_obu_signaling ? 1 : 0;
   cpi->cur_mfh_params.mfh_deblocking_filter_update_flag = 0;
+#endif  // !CONFIG_NO_MFH
 
   // Single thread case: use counts in common.
   cpi->td.counts = &cpi->counts;
@@ -3348,6 +3350,7 @@ static void loopfilter_frame(AV2_COMP *cpi, AV2_COMMON *cm) {
     lf->apply_deblocking_filter[0] = 0;
     lf->apply_deblocking_filter[1] = 0;
   }
+#if !CONFIG_NO_MFH
   cpi->cur_mfh_params.mfh_apply_deblocking_filter[0] =
       lf->apply_deblocking_filter[0];
   cpi->cur_mfh_params.mfh_apply_deblocking_filter[1] =
@@ -3356,6 +3359,7 @@ static void loopfilter_frame(AV2_COMP *cpi, AV2_COMMON *cm) {
       lf->apply_deblocking_filter_u;
   cpi->cur_mfh_params.mfh_apply_deblocking_filter[3] =
       lf->apply_deblocking_filter_v;
+#endif  // !CONFIG_NO_MFH
   if (lf->apply_deblocking_filter[0] || lf->apply_deblocking_filter[1]) {
     if (num_workers > 1)
       av2_loop_filter_frame_mt(&cm->cur_frame->buf, cm, xd, 0, num_planes, 0,
@@ -5400,7 +5404,9 @@ int av2_get_compressed_data(AV2_COMP *cpi, unsigned int *frame_flags,
                             const avm_rational64_t *timestamp_ratio) {
   const AV2EncoderConfig *const oxcf = &cpi->oxcf;
   AV2_COMMON *const cm = &cpi->common;
+#if !CONFIG_NO_MFH
   cm->cur_mfh_id = oxcf->tool_cfg.enable_mfh_obu_signaling ? 1 : 0;
+#endif  // !CONFIG_NO_MFH
   cm->implicit_output_picture = 0;
   cm->allow_direct_use = 0;
   *size = 0;

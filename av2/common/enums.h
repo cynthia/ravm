@@ -1081,7 +1081,10 @@ typedef uint16_t TXFM_CONTEXT;
 
 #define TIP_CONTEXTS 3
 
+#if !CONFIG_NO_MFH
 #define MAX_MFH_NUM 16
+#endif  // !CONFIG_NO_MFH
+
 #define WARP_CAUSAL_MODE_CTX 4
 
 #define TIP_PRED_MODES 2

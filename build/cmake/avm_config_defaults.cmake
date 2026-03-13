@@ -167,6 +167,8 @@ set_avm_config_var(
   "Encoder only flag to configure encoder to enable mixed lossy/lossless coding"
 )
 
+set_avm_config_var(CONFIG_NO_MFH 1 "Remove MFH OBU.")
+
 #
 # Variables in this section control optional features of the build system.
 #

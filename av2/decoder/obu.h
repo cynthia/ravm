@@ -21,10 +21,11 @@
 avm_codec_err_t parse_sh(struct AV2Decoder *pbi, const uint8_t *data,
                          size_t payload_size,
                          struct SequenceHeader *seq_params);
-
+#if !CONFIG_NO_MFH
 // Parse given "data" to get mfh_seq_header_id
 avm_codec_err_t parse_mfh(struct AV2Decoder *pbi, const uint8_t *data,
                           size_t payload_size, struct MultiFrameHeader *mfh);
+#endif  // !CONFIG_NO_MFH
 
 // Lightweight parser for all VCL OBUs that carry a full uncompressed frame
 // header (CLK, OLK, tile groups, SWITCH, RAS_FRAME, TIP, BRIDGE_FRAME).
@@ -36,8 +37,10 @@ avm_codec_err_t parse_to_order_hint_for_vcl_obu(
     struct AV2Decoder *pbi, const uint8_t *data, size_t payload_size,
     OBU_TYPE obu_type, int xlayer_id, int tlayer_id, int mlayer_id,
     struct SequenceHeader *current_seq_params,
-    struct MultiFrameHeader *current_mfh, int *current_is_shown,
-    int *current_order_hint);
+#if !CONFIG_NO_MFH
+    struct MultiFrameHeader *current_mfh,
+#endif  // !CONFIG_NO_MFH
+    int *current_is_shown, int *current_order_hint);
 
 // Parse an SEF (LEADING or REGULAR) OBU payload to extract current_is_shown
 // and current_order_hint. SEF payloads have no is_first_tile_group bit and
@@ -46,8 +49,10 @@ avm_codec_err_t parse_to_order_hint_for_sef(
     struct AV2Decoder *pbi, const uint8_t *data, size_t payload_size,
     OBU_TYPE obu_type, int xlayer_id, int tlayer_id, int mlayer_id,
     struct SequenceHeader *current_seq_params,
-    struct MultiFrameHeader *current_mfh, int *current_is_shown,
-    int *current_order_hint);
+#if !CONFIG_NO_MFH
+    struct MultiFrameHeader *current_mfh,
+#endif  // !CONFIG_NO_MFH
+    int *current_is_shown, int *current_order_hint);
 
 // Try to decode one frame from a buffer.
 // Returns 1 if we decoded a frame,
@@ -86,7 +91,7 @@ typedef enum {
   TU_STATE_LOCAL_INFO,  // Processing local information OBUs (xlayer_id != 0x1F)
   TU_STATE_SEQUENCE_HEADER,  // Processing sequence header OBUs
   TU_STATE_FRAME_UINT_DATA,  // Processing frame/coded picture data, CI, FGM,
-                             // QM, MFH, BRT
+                             // QM, BRT
 } temporal_unit_state_t;
 
 // Multi-layer frame validation state

@@ -101,6 +101,11 @@ void av2_enable_segfeature(struct segmentation *seg, int segment_id,
 int av2_check_seg_equivalence(const struct SegmentationInfoSyntax *seg_params,
                               const struct segmentation *seg);
 
+#if CONFIG_NO_MFH
+int av2_check_seg_params_equivalence(const struct segmentation *seg_params,
+                                     const struct segmentation *seg);
+#endif  // CONFIG_NO_MFH
+
 void av2_reconstruct_seg_params(const struct SegmentationInfoSyntax *seg_params,
                                 struct segmentation *seg);
 

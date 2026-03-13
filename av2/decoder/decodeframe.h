@@ -73,11 +73,13 @@ void alloc_qmatrix(struct quantization_matrix_set *qm_set);
 void av2_copy_predefined_qmatrices_to_list(struct AV2Decoder *pbi,
                                            int num_planes);
 
+#if !CONFIG_NO_MFH
 // Reads MFH (multi-frame header) from bitstream.
 // On success, returns the MFH ID.
 // On failure, calls avm_internal_error() and does not return.
 uint32_t av2_read_multi_frame_header(AV2_COMMON *cm,
                                      struct avm_read_bit_buffer *rb);
+#endif  // !CONFIG_NO_MFH
 
 void av2_read_frame_size(struct avm_read_bit_buffer *rb, int num_bits_width,
                          int num_bits_height, int *width, int *height);

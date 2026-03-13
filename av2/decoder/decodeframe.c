@@ -7749,7 +7749,7 @@ static void handle_sequence_header(AV2Decoder *pbi, OBU_TYPE obu_type,
   bool keyframe_unit_in_tu =
       ((obu_type == OBU_CLOSED_LOOP_KEY || obu_type == OBU_OPEN_LOOP_KEY ||
         obu_type == OBU_RAS_FRAME) &&
-       pbi->this_is_first_keyframe_unit_in_tu);
+       pbi->this_is_first_vcl_obu_in_tu);
 
   if (pbi->decoding_first_frame &&
       !(obu_type == OBU_CLOSED_LOOP_KEY || obu_type == OBU_OPEN_LOOP_KEY ||

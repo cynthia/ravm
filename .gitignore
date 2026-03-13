@@ -27,3 +27,5 @@ build/
 *.swp
 *.swn
 *.swo
+
+tools/convexhull_framework/ctc_result/**/Perframe_*

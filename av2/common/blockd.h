@@ -61,6 +61,12 @@ enum {
   FRAME_TYPES,
 } UENUM1BYTE(FRAME_TYPE);
 
+enum {
+  REGULAR_S_FRAME = 0,
+  RAS_FRAME = 1,
+  sframe_typeS,
+} UENUM1BYTE(SFRAME_TYPE);
+
 // Enum for valid chroma subsampling formats.
 enum {
   CHROMA_FORMAT_420 = 0,

@@ -3722,7 +3722,12 @@ static void none_partition_search(
 #endif
   SimpleMotionData *sms_data = av2_get_sms_data_entry(
       x->sms_bufs, mi_row, mi_col, bsize, cm->sb_size, (int8_t)cur_region_type);
-  av2_set_best_mode_cache(x, sms_data->mode_cache);
+  // Skip the SMS mode cache when retrying partition search
+  // (must_find_valid_partition). The first pass may have cached
+  // PICK_MODE_CONTEXT pointers that become dangling when partition subtrees
+  // are freed and rebuilt in the second pass.
+  if (!x->must_find_valid_partition)
+    av2_set_best_mode_cache(x, sms_data->mode_cache);
 
   // PARTITION_NONE evaluation and cost update.
   pick_sb_modes(cpi, td, tile_data, x, mi_row, mi_col, this_rdc, PARTITION_NONE,
@@ -3733,7 +3738,8 @@ static void none_partition_search(
     x->inter_mode_cache[k] = NULL;
   }
   if (this_rdc->rate != INT_MAX &&
-      !is_inter_sdp_chroma(cm, cur_region_type, x->e_mbd.tree_type)) {
+      !is_inter_sdp_chroma(cm, cur_region_type, x->e_mbd.tree_type) &&
+      !x->must_find_valid_partition) {
     av2_add_mode_search_context_to_cache(sms_data,
                                          pc_tree->none[pc_tree->region_type]);
   }

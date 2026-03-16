@@ -292,7 +292,6 @@ typedef struct {
   struct SequenceHeader seq_list_buf[MAX_SEQ_NUM];
   MultiFrameHeader mfh_params_buf[MAX_MFH_NUM];
   int valid_for_referencing_buf[REF_FRAMES];
-  int long_term_ids_in_buffer_buf[REF_FRAMES];
 #if CONFIG_AV2_LCR_PROFILES
   struct LayerConfigurationRecord lcr_list_buf[MAX_NUM_XLAYERS][MAX_NUM_LCR];
 #else
@@ -457,7 +456,6 @@ typedef struct AV2Decoder {
   int skip_film_grain;
   int bru_opt_mode;
   int valid_for_referencing[REF_FRAMES];
-  int long_term_ids_in_buffer[REF_FRAMES];
   int is_fwd_kf_present;
   int is_arf_frame_present;
   int num_tile_groups;

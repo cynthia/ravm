@@ -213,8 +213,6 @@ void av2_store_xlayer_context(AV2Decoder *pbi, AV2_COMMON *cm, int xlayer_id) {
     pbi->stream_info[stream_idx].ref_frame_map_buf[i] = cm->ref_frame_map[i];
     pbi->stream_info[stream_idx].valid_for_referencing_buf[i] =
         pbi->valid_for_referencing[i];
-    pbi->stream_info[stream_idx].long_term_ids_in_buffer_buf[i] =
-        pbi->long_term_ids_in_buffer[i];
   }
   for (int i = 0; i < INTER_REFS_PER_FRAME; i++) {
     pbi->stream_info[stream_idx].remapped_ref_idx_buf[i] =
@@ -293,8 +291,6 @@ void av2_restore_xlayer_context(AV2Decoder *pbi, AV2_COMMON *cm,
     cm->ref_frame_map[i] = pbi->stream_info[stream_idx].ref_frame_map_buf[i];
     pbi->valid_for_referencing[i] =
         pbi->stream_info[stream_idx].valid_for_referencing_buf[i];
-    pbi->long_term_ids_in_buffer[i] =
-        pbi->stream_info[stream_idx].long_term_ids_in_buffer_buf[i];
   }
   for (int i = 0; i < INTER_REFS_PER_FRAME; i++) {
     cm->remapped_ref_idx[i] =

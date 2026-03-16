@@ -5231,6 +5231,11 @@ static AVM_INLINE void write_uncompressed_header(
     assert(current_frame->frame_type == KEY_FRAME);
   }
 
+  if (cm->mlayer_id == 0) {
+    for (int layer_idx = 0; layer_idx < MAX_NUM_MLAYERS; ++layer_idx)
+      cm->layer_refresh_frame_flags[layer_idx] = 0;
+  }
+
   if (!seq_params->single_picture_header_flag) {
     if (obu_type == OBU_LEADING_SEF || obu_type == OBU_REGULAR_SEF) {
       write_show_existing_frame(cpi, wb);
@@ -5449,6 +5454,9 @@ static AVM_INLINE void write_uncompressed_header(
       }
     }
   }
+
+  cm->layer_refresh_frame_flags[cm->mlayer_id] =
+      current_frame->refresh_frame_flags;
 
   if (current_frame->frame_type == KEY_FRAME) {
     write_frame_size(cm, frame_size_override_flag, wb);

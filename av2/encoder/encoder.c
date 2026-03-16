@@ -4496,6 +4496,7 @@ static int encode_frame_to_data_rate(AV2_COMP *cpi, size_t *size,
     }
 
     if (cpi->olk_encountered && ref_flags_to_keep != 0 &&
+        cpi->fb_idx_for_overlay >= 0 &&
         ((ref_flags_to_keep >> cpi->fb_idx_for_overlay) & 1u)) {
       for (int ref_index = 0; ref_index < cm->seq_params.ref_frames;
            ref_index++) {
@@ -4509,6 +4510,7 @@ static int encode_frame_to_data_rate(AV2_COMP *cpi, size_t *size,
         }
       }
       cpi->is_olk_overlay = 1;
+      cpi->gf_state.olk_overlay_last = 1;
       cpi->olk_encountered = 0;
     } else {
       cpi->is_olk_overlay = 0;
@@ -4531,6 +4533,7 @@ static int encode_frame_to_data_rate(AV2_COMP *cpi, size_t *size,
       ref_flags_to_keep |= cm->olk_refresh_frame_flags[layer];
     }
     if (cpi->olk_encountered && ref_flags_to_keep != 0 &&
+        cpi->fb_idx_for_overlay >= 0 &&
         ((ref_flags_to_keep >> cpi->fb_idx_for_overlay) & 1u)) {
       for (int ref_index = 0; ref_index < cm->seq_params.ref_frames;
            ref_index++) {
@@ -4544,6 +4547,7 @@ static int encode_frame_to_data_rate(AV2_COMP *cpi, size_t *size,
         }
       }
       cpi->is_olk_overlay = 1;
+      cpi->gf_state.olk_overlay_last = 1;
       cpi->olk_encountered = 0;
     } else {
       cpi->is_olk_overlay = 0;
@@ -4890,7 +4894,10 @@ int av2_encode(AV2_COMP *const cpi, uint8_t *const dest,
 
   cm->current_frame.cm_obu_type = frame_params->frame_params_obu_type;
   current_frame->order_hint =
-      current_frame->frame_number + frame_params->order_offset;
+      (current_frame->frame_number + frame_params->order_offset) /
+      (cpi->oxcf.unit_test_cfg.multi_layers_lag_test
+           ? cpi->common.number_mlayers
+           : 1);
   current_frame->display_order_hint = current_frame->order_hint;
 
   // scan the reference list. if all the display_order_hint of the reference
@@ -4948,7 +4955,10 @@ int av2_encode(AV2_COMP *const cpi, uint8_t *const dest,
   }
   const int order_offset = cpi->gf_group.arf_src_offset[cpi->gf_group.index];
   const int cur_frame_disp =
-      cpi->common.current_frame.frame_number + order_offset;
+      (cpi->common.current_frame.frame_number + order_offset) /
+      (cpi->oxcf.unit_test_cfg.multi_layers_lag_test
+           ? cpi->common.number_mlayers
+           : 1);
 
   int use_olk_ref_only =
       cpi->gf_group.update_type[cpi->gf_group.index] == FWD_KF_OVERLAY_UPDATE ||
@@ -5164,7 +5174,10 @@ int av2_receive_raw_frame(AV2_COMP *cpi, avm_enc_frame_flags_t frame_flags,
 #endif  //  CONFIG_DENOISE
 
   const int order_offset = cpi->gf_group.arf_src_offset[cpi->gf_group.index];
-  const int disp_order_hint = (cm->current_frame.frame_number + order_offset);
+  const int disp_order_hint = (cm->current_frame.frame_number + order_offset) /
+                              (cpi->oxcf.unit_test_cfg.multi_layers_lag_test
+                                   ? cpi->common.number_mlayers
+                                   : 1);
   if (av2_lookahead_push(cpi->lookahead, sd, time_stamp, end_time,
                          disp_order_hint, frame_flags, cpi->alloc_pyramid))
     res = -1;

@@ -5250,7 +5250,10 @@ static AVM_INLINE void write_uncompressed_header(
     }
 
     if (current_frame->frame_type == KEY_FRAME) {
-      avm_wb_write_literal(wb, current_frame->long_term_id,
+      // When long term id is not in use for the sequence coding,
+      // long_term_id will be set as -1, and number_of_bits_for_lt_frame_id
+      // will be 0.
+      avm_wb_write_literal(wb, current_frame->long_term_id + 1,
                            seq_params->number_of_bits_for_lt_frame_id);
     } else if ((cpi->is_ras_frame == 1 || obu_type == OBU_OPEN_LOOP_KEY) &&
                seq_params->number_of_bits_for_lt_frame_id != 0) {

@@ -7020,6 +7020,7 @@ static void reset_buffer_other_than_OLK(AV2Decoder *pbi) {
   }
   for (int ref_index = 0; ref_index < seq_params->ref_frames; ref_index++) {
     if (!((ref_flags_to_keep >> ref_index) & 1u) &&
+        cm->ref_frame_map[ref_index] != NULL &&
         cm->ref_frame_map[ref_index]->long_term_id == -1) {
       decrease_ref_count(cm->ref_frame_map[ref_index], pool);
       cm->ref_frame_map[ref_index] = NULL;
@@ -7422,7 +7423,8 @@ void mark_reference_frames_with_long_term_ids(AV2Decoder *pbi) {
   for (int i = 0; i < cm->seq_params.ref_frames; i++) {
     pbi->valid_for_referencing[i] = 0;
     for (int j = 0; j < cm->num_ref_key_frames; j++) {
-      if (cm->ref_long_term_ids[j] == cm->ref_frame_map[i]->long_term_id)
+      if (cm->ref_frame_map[i] != NULL &&
+          cm->ref_long_term_ids[j] == cm->ref_frame_map[i]->long_term_id)
         pbi->valid_for_referencing[i] = 1;
     }
   }

@@ -7948,6 +7948,24 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
 #endif
 
   cm->cur_mfh_id = setup_multiframe_header_id(cm, obu_type, rb);
+  if (is_leading_vcl_obu(obu_type)) {
+    // Tag the MFH slot referenced by this leading frame so it can be
+    // invalidated at the transition to regular frames.
+    if (cm->cur_mfh_id > 0 &&
+        pbi->obus_in_frame_unit_data[cm->tlayer_id][cm->mlayer_id]
+                                    [OBU_MULTI_FRAME_HEADER])
+      cm->mfh_params[cm->cur_mfh_id].mfh_from_leading = 1;
+  } else if (av2_is_regular_non_olk_obu(obu_type) &&
+             pbi->this_is_first_vcl_obu_in_tu == 1) {
+    // First regular VCL OBU in TU: invalidate MFH slots that came from
+    // leading frames and were not re-signalled in this regular picture unit.
+    if (cm->mfh_params[cm->cur_mfh_id].mfh_from_leading == 1 &&
+        !pbi->obus_in_frame_unit_data[cm->tlayer_id][cm->mlayer_id]
+                                     [OBU_MULTI_FRAME_HEADER]) {
+      cm->mfh_valid[cm->cur_mfh_id] = false;
+    }
+    cm->mfh_params[cm->cur_mfh_id].mfh_from_leading = 0;
+  }
 
   int seq_header_id_for_frame_header = setup_sequence_header_id(cm, rb);
   assert(seq_header_id_for_frame_header >= 0);

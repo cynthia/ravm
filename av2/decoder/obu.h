@@ -46,6 +46,8 @@ uint32_t av2_read_buffer_removal_timing_obu(struct AV2Decoder *pbi,
 // Helper function to map xlayer_id to stream_id array index
 int av2_get_stream_index(const struct AV2Common *cm, int xlayer_id);
 
+int is_leading_vcl_obu(OBU_TYPE obu_type);
+
 // =============================================================================
 // OBU VALIDATION FUNCTION DECLARATIONS AND TYPES
 // =============================================================================

@@ -707,7 +707,13 @@ void av2_init_seq_coding_tools(AV2_COMP *cpi, SequenceHeader *seq,
       seq->single_picture_header_flag || (oxcf->kf_cfg.sframe_type == RAS_FRAME)
           ? 0
           : tool_cfg->enable_short_refresh_frame_flags;
-  seq->number_of_bits_for_lt_frame_id = seq->single_picture_header_flag ? 0 : 3;
+  // Use 3 bits to signal long_term_id only if RAS frames are enabled and NOT a
+  // single picture.
+  seq->number_of_bits_for_lt_frame_id =
+      (seq->single_picture_header_flag ||
+       (cpi->oxcf.kf_cfg.sframe_type == REGULAR_S_FRAME))
+          ? 0
+          : 3;
   seq->enable_ext_seg = tool_cfg->enable_ext_seg;
   seq->ref_frames = seq->single_picture_header_flag ? 2 : tool_cfg->dpb_size;
   // Clamp ref_frames to the maximum allowed by the level constraints.

@@ -8193,11 +8193,14 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
     if (current_frame->frame_type == KEY_FRAME) {
       current_frame->long_term_id =
           avm_rb_read_literal(rb, seq_params->number_of_bits_for_lt_frame_id);
-    } else if (obu_type == OBU_RAS_FRAME) {
-      cm->num_ref_key_frames = avm_rb_read_literal(rb, 3);
-      for (int i = 0; i < cm->num_ref_key_frames; i++) {
-        cm->ref_long_term_ids[i] =
-            avm_rb_read_literal(rb, seq_params->number_of_bits_for_lt_frame_id);
+    } else if (obu_type == OBU_RAS_FRAME || obu_type == OBU_OPEN_LOOP_KEY) {
+      cm->num_ref_key_frames = 0;
+      if (seq_params->number_of_bits_for_lt_frame_id != 0) {
+        cm->num_ref_key_frames = avm_rb_read_literal(rb, 3);
+        for (int i = 0; i < cm->num_ref_key_frames; i++) {
+          cm->ref_long_term_ids[i] = avm_rb_read_literal(
+              rb, seq_params->number_of_bits_for_lt_frame_id);
+        }
       }
     }
 

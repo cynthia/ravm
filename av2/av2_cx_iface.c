@@ -241,6 +241,7 @@ struct av2_extracfg {
   int use_buffer_refresh_multi_layers_test;
   int buffer_refresh_multi_layers_test[REF_FRAMES];
   int multi_layers_lag_test;
+  int indep_mlayers_test;
 };
 
 // Example subgop configs. Currently not used by default.
@@ -567,6 +568,7 @@ static struct av2_extracfg default_extra_cfg = {
   0,  // use_buffer_refresh_multi_layers_test
   { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, // buffer_refresh_multi_layers_test
   0,      // multi_layers_test for nozero lag
+  0,      // indep_mlayers_test
 };
 // clang-format on
 
@@ -1712,6 +1714,7 @@ static avm_codec_err_t set_encoder_config(AV2EncoderConfig *oxcf,
          sizeof(oxcf->target_seq_level_idx));
   oxcf->tier_mask = extra_cfg->tier_mask;
   oxcf->unit_test_cfg.multi_layers_lag_test = extra_cfg->multi_layers_lag_test;
+  oxcf->unit_test_cfg.indep_mlayers_test = extra_cfg->indep_mlayers_test;
 
   if (update_config) {
     update_encoder_config(&cfg->encoder_cfg, extra_cfg);
@@ -2710,6 +2713,13 @@ static avm_codec_err_t ctrl_set_add_sef_for_hidden_frames(
   return update_extra_cfg(ctx, &extra_cfg);
 }
 
+static avm_codec_err_t ctrl_set_enable_indep_mlayers_test(
+    avm_codec_alg_priv_t *ctx, va_list args) {
+  struct av2_extracfg extra_cfg = ctx->extra_cfg;
+  extra_cfg.indep_mlayers_test = CAST(AV2E_SET_ENABLE_INDEP_MLAYERS_TEST, args);
+  return update_extra_cfg(ctx, &extra_cfg);
+}
+
 static avm_codec_err_t create_stats_buffer(FIRSTPASS_STATS **frame_stats_buffer,
                                            STATS_BUFFER_CTX *stats_buf_context,
                                            int num_lap_buffers) {
@@ -3393,11 +3403,11 @@ static avm_codec_err_t encoder_encode(avm_codec_alg_priv_t *ctx,
       if (!is_frame_visible_null && frame_size == 0) is_frame_visible = 0;
       if (frame_size) {
         if (ctx->pending_cx_data == 0) ctx->pending_cx_data = cx_data;
-        if (ready_for_next_tu && mlayer_id == 0) {
+        if (ready_for_next_tu && (cpi->common.mlayer_id == 0 ||
+                                  cpi->oxcf.unit_test_cfg.indep_mlayers_test)) {
           const uint32_t obu_payload_size = 0;
           const size_t length_field_size =
               avm_uleb_size_in_bytes(obu_payload_size);
-
           uint8_t obu_header[2];
           const uint32_t obu_header_size = av2_write_obu_header(
               &cpi->level_params, OBU_TEMPORAL_DELIMITER, 0, 0, obu_header);
@@ -4656,7 +4666,7 @@ static avm_codec_ctrl_fn_map_t encoder_ctrl_maps[] = {
   { AV2E_SET_ENABLE_FLAG_MULTI_LAYER_LAG_TEST,
     ctrl_set_enable_flag_multi_layer_lag_test },
   { AV2E_SET_ADD_SEF_FOR_HIDDEN_FRAMES, ctrl_set_add_sef_for_hidden_frames },
-
+  { AV2E_SET_ENABLE_INDEP_MLAYERS_TEST, ctrl_set_enable_indep_mlayers_test },
   // Getters
   { AVME_GET_LAST_QUANTIZER, ctrl_get_quantizer },
   { AV2_GET_REFERENCE, ctrl_get_reference },

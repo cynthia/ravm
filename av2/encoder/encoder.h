@@ -699,6 +699,8 @@ typedef struct {
   int multi_layers_lag_test;
   // Signal one sequence header for the entire sequence.
   uint8_t single_seq_header_for_all_test;
+  // Independent embedded layers for use in multi_layer unittests.
+  int indep_mlayers_test;
 } UnitTestCfg;
 
 typedef struct {

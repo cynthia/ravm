@@ -621,6 +621,13 @@ void av2_init_seq_coding_tools(AV2_COMP *cpi, SequenceHeader *seq,
   seq->mlayer_dependency_present_flag = 0;
   setup_default_temporal_layer_dependency_structure(seq);
   setup_default_embedded_layer_dependency_structure(seq);
+  if (cpi->oxcf.unit_test_cfg.indep_mlayers_test) {
+    seq->mlayer_dependency_present_flag = 1;
+    memset(seq->mlayer_dependency_map, 0, sizeof seq->mlayer_dependency_map);
+    // Force ml=0 to only predict off ml=0, ml=1 only predicts off ml=1.
+    seq->mlayer_dependency_map[0][0] = 1;
+    seq->mlayer_dependency_map[1][1] = 1;
+  }
   seq->seq_max_mlayer_cnt = cm->number_mlayers;
 
   // delta_q

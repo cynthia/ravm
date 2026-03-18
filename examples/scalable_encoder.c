@@ -298,6 +298,7 @@ int main(int argc, char **argv) {
           frames_encoded % (keyframe_interval * num_embedded_layers) == 0) {
         flags |= AVM_EFLAG_FORCE_KF;
       }
+
       set_layer_ids(num_temporal_layers, num_embedded_layers, frames_encoded,
                     temp_unit_counter, lag, &codec);
 

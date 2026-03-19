@@ -26,7 +26,7 @@ void usage_exit(void) {
   fprintf(stderr,
           "Usage: %s <width> <height> <infile0>  "
           "<outfile> <frames to encode> <num_temporal_layers> "
-          "<num_embedded_layers> <lag> <add_sef> \n"
+          "<num_embedded_layers> <lag> <add_sef> <fwd_kf> <keyframe_interval>\n"
           "See comments in embedded_temporal_layers_encoder.c for more "
           "information.\n",
           exec_name);
@@ -175,6 +175,7 @@ int main(int argc, char **argv) {
   int num_embedded_layers = 1;
   int lag = 0;
   int add_sef = 0;
+  int fwd_kf_enabled = 0;
   int temp_unit_counter = 0;
   const int fps = 30;
   const char *width_arg = NULL;
@@ -190,7 +191,7 @@ int main(int argc, char **argv) {
   // "missing-field-initializers" warning in some compilers.
   memset(&info, 0, sizeof(info));
 
-  if (argc != 10) die("Invalid number of arguments");
+  if (argc != 12) die("Invalid number of arguments");
 
   width_arg = argv[1];
   height_arg = argv[2];
@@ -201,6 +202,8 @@ int main(int argc, char **argv) {
   num_embedded_layers = (int)strtol(argv[7], NULL, 0);
   lag = (int)strtol(argv[8], NULL, 0);
   add_sef = (int)strtol(argv[9], NULL, 0);
+  fwd_kf_enabled = (int)strtol(argv[10], NULL, 0);
+  keyframe_interval = (int)strtol(argv[11], NULL, 0);
 
   avm_codec_iface_t *encoder = get_avm_encoder_by_short_name("av2");
   if (!encoder) die("Unsupported codec.");
@@ -229,10 +232,6 @@ int main(int argc, char **argv) {
     die("Failed to allocate image.");
   }
 
-  //  keyframe_interval = (int)strtol(keyframe_interval_arg, NULL, 0);
-  keyframe_interval = 1000;
-  if (keyframe_interval < 0) die("Invalid keyframe interval value.");
-
   avm_codec_ctx_t codec;
   res = avm_codec_enc_config_default(encoder, &cfg, 0);
   if (res) die_codec(&codec, "Failed to get default codec config.");
@@ -249,6 +248,12 @@ int main(int argc, char **argv) {
   cfg.g_profile = MAIN_420_10;
   cfg.enable_ops = 1;
   cfg.enable_lcr = 1;
+  cfg.fwd_kf_enabled = fwd_kf_enabled;
+  if (lag > 0) {
+    cfg.kf_max_dist = keyframe_interval;
+    cfg.kf_min_dist = keyframe_interval;
+  }
+
   outfile = fopen(outfile_arg, "wb");
   if (!outfile) die("Failed to open %s for writing.", outfile_arg);
 
@@ -276,20 +281,23 @@ int main(int argc, char **argv) {
     if (num_temporal_layers > 1 || num_embedded_layers > 1)
       avm_codec_control(&codec, AV2E_SET_ENABLE_FLAG_MULTI_LAYER_LAG_TEST, 1);
     avm_codec_control(&codec, AV2E_SET_ADD_SEF_FOR_HIDDEN_FRAMES, add_sef);
+    if (fwd_kf_enabled) {
+      avm_codec_control(&codec, AV2E_SET_GF_MAX_PYRAMID_HEIGHT, 1);
+      avm_codec_control(&codec, AV2E_SET_GF_MIN_PYRAMID_HEIGHT, 1);
+    }
   }
 
   // Encode frames.
   while (avm_img_read(&raw0, infile0)) {
-    int flags = 0;
-
-    if (keyframe_interval > 0 &&
-        frames_encoded % (keyframe_interval * num_embedded_layers) == 0) {
-      flags |= AVM_EFLAG_FORCE_KF;
-    }
-
     // For embedded layers: call the encoder num_embedded_layers times with same
     // input at different scales. So the example here is spatial layers.
     for (int sl = 0; sl < num_embedded_layers; sl++) {
+      int flags = 0;
+
+      if (keyframe_interval > 0 && lag == 0 &&
+          frames_encoded % (keyframe_interval * num_embedded_layers) == 0) {
+        flags |= AVM_EFLAG_FORCE_KF;
+      }
       set_layer_ids(num_temporal_layers, num_embedded_layers, frames_encoded,
                     temp_unit_counter, lag, &codec);
 

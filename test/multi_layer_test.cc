@@ -653,9 +653,6 @@ TEST_P(MultiLayerTest, MultiLayerTest2EmbeddedLagEx2) {
 // Test the case of nonzero lag for 2 embedded layers (ml) with OLK (fwd kf)
 // added, for both show (S) and hidden (H) frames. For fixed gop with pyramid
 // height = 1.
-//
-// TODO: turn this on once decoder does not reset ref frame buffer at olk in
-// layer 1.
 TEST_P(MultiLayerTest, MultiLayerTest2EmbeddedLagFwdKfEx1) {
   cfg_.g_lag_in_frames = 17;
   cfg_.kf_max_dist = 16;

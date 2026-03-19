@@ -882,10 +882,7 @@ static avm_codec_err_t decoder_decode(avm_codec_alg_priv_t *ctx,
     if (frame_unit_size == 0 || frame_unit_size == SIZE_MAX) {
       return AVM_CODEC_ERROR;
     }
-    bool has_seq_header =
-        pbi->obus_in_frame_unit_data[0][0][OBU_SEQUENCE_HEADER];
-    bool has_mf_header =
-        pbi->obus_in_frame_unit_data[0][mlayer_id][OBU_MULTI_FRAME_HEADER];
+    bool has_td = pbi->obus_in_frame_unit_data[0][0][OBU_TEMPORAL_DELIMITER];
     bool has_key_obu =
         pbi->obus_in_frame_unit_data[tlayer_id][mlayer_id]
                                     [OBU_CLOSED_LOOP_KEY] ||
@@ -910,13 +907,9 @@ static avm_codec_err_t decoder_decode(avm_codec_alg_priv_t *ctx,
       pbi->random_accessed = false;
     }
 
-    // When we have sequence header and keyframe OBUs (which indicate the first
-    // frame of the bitstream or the first frame of a new CVS), last_frame_unit
-    // and last_displayable_frame_unit need to be reset to -1.
-    // TODO(any): currently, has_seq_header is determined by the presence of SH.
-    // This may need to be updated for the case of out-of-band SH.
-    (void)has_mf_header;
-    if (has_seq_header && has_key_obu) {
+    // last_frame_unit and last_displayable_frame_unit are reset to -1
+    // when temporal delimiter and keyframe are in the input.
+    if (has_td && has_key_obu) {
       memset(&pbi->last_frame_unit, -1, sizeof(pbi->last_frame_unit));
       memset(&pbi->last_displayable_frame_unit, -1,
              sizeof(pbi->last_displayable_frame_unit));

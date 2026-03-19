@@ -180,90 +180,35 @@ static AVM_INLINE void convert_fullmv_to_mv(int_mv *mv) {
   mv->as_mv = get_mv_from_fullmv(&mv->as_fullmv);
 }
 
-// Actual mapping algorithm to compress the TMVP MV
-static inline int compute_mapping_val(int16_t range_interval_start_abs,
-                                      int16_t domain_interval_start_abs,
-                                      int16_t domain_val, int step_log2) {
-  const int abs_val = abs(domain_val);
-  const int sign = domain_val >= 0 ? 1 : -1;
-  const int compressed_val =
-      range_interval_start_abs +
-      ((abs_val - domain_interval_start_abs) >> step_log2);
-  return sign * compressed_val;
-}
-
-// Compress the TMVP MV to 8bits (1bit for sign, 7bits for magnitude)
+/* Compress the TMVP MV to 8bits (1bit for sign, 7bits for magnitude)
+ *
+ * Figure out how big the number is (log2), reduce its precision accordingly,
+ * and place it into the correct compressed bucket.
+ *
+ * c = A(quantized value) + B(range offset)
+ *
+ * abs        GetMsb     log2  A=(abs>>log2)  B=(log2<<4)  c = A + B
+ * 0–31        0–4        0        0–31            0          0–31
+ * 32–63        5         1       16–31           16         32–47
+ * 64–127       6         2       16–31           32         48–63
+ * 128–255      7         3       16–31           48         64–79
+ * 256–511      8         4       16–31           64         80–95
+ * 512–1023     9         5       16–31           80         96–111
+ * 1024–2047   10         6       16–31           96        112–127
+ */
 static inline int compression_mv(int16_t val) {
   const int abs_val = abs(val);
-  int compressed_val = val;
-  if (abs_val < 32) {
-    // Lossless coding
-    compressed_val = val;
-  } else if (abs_val >= 32 && abs_val < 64) {
-    // 2 continues numbers are quantized into the same number
-    compressed_val = compute_mapping_val(32, 32, val, 1);
-  } else if (abs_val >= 64 && abs_val < 128) {
-    // 4 continues numbers are quantized into the same number
-    compressed_val = compute_mapping_val(48, 64, val, 2);
-  } else if (abs_val >= 128 && abs_val < 256) {
-    // 8 continues numbers are quantized into the same number
-    compressed_val = compute_mapping_val(64, 128, val, 3);
-  } else if (abs_val >= 256 && abs_val < 512) {
-    // 16 continues numbers are quantized into the same number
-    compressed_val = compute_mapping_val(80, 256, val, 4);
-  } else if (abs_val >= 512 && abs_val < 1024) {
-    // 32 continues numbers are quantized into the same number
-    compressed_val = compute_mapping_val(96, 512, val, 5);
-  } else if (abs_val >= 1024 && abs_val < 2048) {
-    // 64 continues numbers are quantized into the same number
-    compressed_val = compute_mapping_val(112, 1024, val, 6);
-  }
-
-  return compressed_val;
-}
-
-// Actual inverse mapping algorithm to decompress the stored TMVP MV
-static inline int compute_inverse_mapping_val(int16_t domain_interval_start_abs,
-                                              int16_t range_interval_start_abs,
-                                              int16_t range_val,
-                                              int step_log2) {
-  const int abs_val = abs(range_val);
-  const int sign = range_val >= 0 ? 1 : -1;
-  const int uncompressed_val =
-      domain_interval_start_abs +
-      ((abs_val - range_interval_start_abs) << step_log2);
-  return sign * uncompressed_val;
+  const int step_log2 = AVMMAX(0, get_msb_signed(val) - 4);
+  const int compressed_val = (abs_val >> step_log2) + (step_log2 << 4);
+  return val < 0 ? -compressed_val : compressed_val;
 }
 
 // Decompress the TMVP MV from 8bits to 12bits
 static inline int uncompression_mv(int16_t val) {
   const int abs_val = abs(val);
-  int uncompressed_val = val;
-
-  if (abs_val < 32) {
-    // Lossless coding
-    uncompressed_val = val;
-  } else if (abs_val >= 32 && abs_val < 48) {
-    // 2 continues numbers are quantized into the same number
-    uncompressed_val = compute_inverse_mapping_val(32, 32, val, 1);
-  } else if (abs_val >= 48 && abs_val < 64) {
-    // 4 continues numbers are quantized into the same number
-    uncompressed_val = compute_inverse_mapping_val(64, 48, val, 2);
-  } else if (abs_val >= 64 && abs_val < 80) {
-    // 8 continues numbers are quantized into the same number
-    uncompressed_val = compute_inverse_mapping_val(128, 64, val, 3);
-  } else if (abs_val >= 80 && abs_val < 96) {
-    // 16 continues numbers are quantized into the same number
-    uncompressed_val = compute_inverse_mapping_val(256, 80, val, 4);
-  } else if (abs_val >= 96 && abs_val < 112) {
-    // 32 continues numbers are quantized into the same number
-    uncompressed_val = compute_inverse_mapping_val(512, 96, val, 5);
-  } else if (abs_val >= 112 && abs_val < 128) {
-    // 64 continues numbers are quantized into the same number
-    uncompressed_val = compute_inverse_mapping_val(1024, 112, val, 6);
-  }
-
-  return uncompressed_val;
+  const int step_log2 = AVMMAX(0, (abs_val >> 4) - 1);
+  const int uncompressed_val = (abs_val - (step_log2 << 4)) << step_log2;
+  return val < 0 ? -uncompressed_val : uncompressed_val;
 }
 
 // Compress TMVP MVs before storing

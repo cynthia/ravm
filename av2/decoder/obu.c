@@ -3148,18 +3148,19 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
 
   // When SBE filters out all frame OBUs in a temporal unit, no frame was
   // found: skip the consistency checks.
+  int xId = current_frame_unit.xlayer_id;
   if (current_frame_unit.display_order_hint != -1 &&
-      pbi->last_frame_unit.display_order_hint != -1 &&
-      (pbi->last_frame_unit.xlayer_id == current_frame_unit.xlayer_id)) {
-    check_clk_in_a_layer(cm, &current_frame_unit, &pbi->last_frame_unit);
+      pbi->last_frame_unit[xId].display_order_hint != -1 &&
+      (pbi->last_frame_unit[xId].xlayer_id == current_frame_unit.xlayer_id)) {
+    check_clk_in_a_layer(cm, &current_frame_unit, &pbi->last_frame_unit[xId]);
 
     if (current_frame_unit.showable_frame == 0) {
       check_layerid_hidden_frame_units(cm, &current_frame_unit,
-                                       &pbi->last_frame_unit);
+                                       &pbi->last_frame_unit[xId]);
     } else {
-      check_layerid_showable_frame_units(cm, &current_frame_unit,
-                                         &pbi->last_frame_unit,
-                                         &pbi->last_displayable_frame_unit);
+      check_layerid_showable_frame_units(
+          cm, &current_frame_unit, &pbi->last_frame_unit[xId],
+          &pbi->last_displayable_frame_unit[xId]);
     }
   }
 

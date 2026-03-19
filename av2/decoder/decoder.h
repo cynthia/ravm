@@ -539,15 +539,15 @@ typedef struct AV2Decoder {
    */
   obu_info *obu_list;
   /*!
-   * last_frame_unit contains obu_info of the last frame unit
+   * last_frame_unit contains obu_info of the last frame unit per xlayer_id
    * it is used to check the obu order validation
    */
-  obu_info last_frame_unit;
+  obu_info last_frame_unit[MAX_NUM_XLAYERS];
   /*!
-   * last_hidden_frame_unit contains obu_info of the last displayable frame unit
-   * it is used to check the obu order validation
+   * last_displayable_frame_unit contains obu_info of the last displayable frame
+   * unit per xlayer_id it is used to check the obu order validation
    */
-  obu_info last_displayable_frame_unit;
+  obu_info last_displayable_frame_unit[MAX_NUM_XLAYERS];
   /*!
    * Indicates if the current data chunk being decoded in avm_codec_decode()
    * is the first frame unit of the temporal unit

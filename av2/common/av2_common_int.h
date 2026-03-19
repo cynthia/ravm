@@ -3494,8 +3494,7 @@ static INLINE void set_default_global_lcr(
 //   Step 5: Set color info to unspecified defaults
 static INLINE void set_default_local_lcr_from_global(
     LocalLayerConfigurationRecord *local_lcr,
-    const GlobalLayerConfigurationRecord *glcr,
-    const SequenceHeader *seq) {
+    const GlobalLayerConfigurationRecord *glcr, const SequenceHeader *seq) {
   // Step 1: Zero-initialize (TEXTURE_LAYER=0, VIEW_UNSPECIFIED=0,
   // all present flags=0).
   memset(local_lcr, 0, sizeof(*local_lcr));

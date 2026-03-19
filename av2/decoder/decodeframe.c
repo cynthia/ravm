@@ -7522,10 +7522,16 @@ static void activate_layer_configuration_record(AV2Decoder *pbi,
           }
         }
       } else {
-        memset(&cm->global_lcr_params, 0, sizeof(cm->global_lcr_params));
+        // CWG-G068 Case 2: Local LCR present, parent global LCR absent.
+        set_default_global_lcr(&cm->global_lcr_params.global_lcr);
+        cm->global_lcr_params.valid = 1;
       }
     } else {
-      memset(&cm->global_lcr_params, 0, sizeof(cm->global_lcr_params));
+      // Global LCR activated directly, no local LCR for this layer.
+      // CWG-G068 Case 1: Store global for fallback and derive local defaults.
+      cm->global_lcr_params = *lcr;
+      set_default_local_lcr_from_global(&cm->lcr_params.local_lcr,
+                                        &lcr->global_lcr, &cm->seq_params);
     }
     activate_atlas_segment(pbi);
   } else {

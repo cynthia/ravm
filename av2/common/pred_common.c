@@ -159,6 +159,8 @@ int av2_get_op_constrained_ref_frames(AV2_COMMON *cm, int cur_frame_disp,
     cm->op_remapped_ref_idx[i] = INVALID_IDX;
   }
   int n_ranked = 0;
+  int num_restricted_ref = 0;
+  int remap_idx_sframe[REF_FRAMES] = { 0 };
 
   // Give more weight to base_qindex if all references are from the past
   int max_disp = 0;
@@ -172,6 +174,15 @@ int av2_get_op_constrained_ref_frames(AV2_COMMON *cm, int cur_frame_disp,
   for (int i = 0; i < cm->seq_params.ref_frames; i++) {
     // Get reference frame buffer
     RefFrameMapPair cur_ref = ref_frame_map_pairs[i];
+    if (cur_ref.ref_frame_restricted == 1 &&
+        !is_layer_dropped(cur_ref.mlayer_id, mlayer_mask) &&
+        !is_layer_dropped(cur_ref.tlayer_id, tlayer_mask)) {
+      if (!(cm->bridge_frame_info.is_bridge_frame &&
+            i != cm->bridge_frame_info.bridge_frame_ref_idx)) {
+        remap_idx_sframe[num_restricted_ref] = i;
+        num_restricted_ref++;
+      }
+    }
     if (cur_ref.ref_frame_for_inference == -1) continue;
     if (key_frame_only && cur_ref.frame_type != KEY_FRAME) continue;
     // In resize mode, only frames within 1/16 to 2 times the current frame in
@@ -241,6 +252,10 @@ int av2_get_op_constrained_ref_frames(AV2_COMMON *cm, int cur_frame_disp,
 
   for (int i = 0; i < AVMMIN(n_ranked, INTER_REFS_PER_FRAME); i++) {
     cm->op_remapped_ref_idx[i] = scores[i].index;
+  }
+  for (int i = 0; i < num_restricted_ref; ++i) {
+    if (i + n_ranked >= INTER_REFS_PER_FRAME) break;
+    cm->op_remapped_ref_idx[i + n_ranked] = remap_idx_sframe[i];
   }
   // Fill any slots that are empty (should only happen for the first 7 frames)
   for (int i = 0; i < INTER_REFS_PER_FRAME; i++) {

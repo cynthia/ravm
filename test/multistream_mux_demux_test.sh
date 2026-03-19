@@ -600,10 +600,6 @@ run_encode_mux_demux_avmenc() {
 run_encode_mux_demux_ml_temporal() {
   echo "Start multi layer streams"
 
-  echo "Usage: examples/scalable_encoder:
-        <width> <height> <infile0>  <outfile> <frames to encode> <num_temporal_layers> <num_embedded_layers>
-        <lag> <add_sef> <fwd_kf> <keyframe_interval>"
-  
   echo "(#temporal, #embedded) = (1, 1)"
   ml_encode_bitstream_0 1 1 0 0 0 0 10 || return 1
   ml_encode_bitstream_1 1 1 0 0 0 0 10 || return 1
@@ -676,10 +672,6 @@ run_encode_mux_demux_ml_temporal() {
 run_encode_mux_demux_ml_embedded() {
   echo "Start multi layer streams"
 
-  echo "Usage: examples/scalable_encoder:
-        <width> <height> <infile0>  <outfile> <frames to encode> <num_temporal_layers> <num_embedded_layers>
-        <lag> <add_sef> <fwd_kf> <keyframe_interval>"
-
   echo "(#temporal, #embedded) = (1, 2)"
   ml_encode_bitstream_0 1 2 0 0 0 0 10 || return 1
   ml_encode_bitstream_1 1 2 0 0 0 0 10 || return 1
@@ -730,10 +722,6 @@ run_encode_mux_demux_ml_embedded() {
 run_encode_mux_demux_ml_lag_ex1() {
   echo "Start multi layer streams"
 
-  echo "Usage: examples/scalable_encoder:
-        <width> <height> <infile0>  <outfile> <frames to encode> <num_temporal_layers> <num_embedded_layers>
-        <lag> <add_sef> <fwd_kf> <keyframe_interval>"
-  
   echo "(#temporal, #embedded) = (2, 1) for nonzero lag"
   ml_encode_bitstream_0 2 1 15 0 0 0 20 || return 1
   ml_encode_bitstream_1 2 1 15 0 0 0 20 || return 1
@@ -773,10 +761,6 @@ run_encode_mux_demux_ml_lag_ex1() {
 run_encode_mux_demux_ml_lag_ex2() {
   echo "Start multi layer streams"
 
-  echo "Usage: examples/scalable_encoder:
-        <width> <height> <infile0>  <outfile> <frames to encode> <num_temporal_layers> <num_embedded_layers>
-        <lag> <add_sef> <fwd_kf> <keyframe_interval>"
-
   echo "(#temporal, #embedded) = (2, 1) vs (2, 2) for nonzero lag"
   ml_encode_bitstream_0 2 1 10 0 0 0 15|| return 1
   ml_encode_bitstream_1 2 2 8 0 0 0 13 || return 1
@@ -793,10 +777,6 @@ run_encode_mux_demux_ml_lag_ex2() {
 
 run_encode_mux_demux_ml_clk_olk() {
   echo "Start multi layer streams"
-
-  echo "Usage: examples/scalable_encoder:
-        <width> <height> <infile0>  <outfile> <frames to encode> <num_temporal_layers> <num_embedded_layers>
-        <lag> <add_sef> <fwd_kf> <keyframe_interval>"
 
   echo "test: 2 temporal layers with clk inserted"
   echo "1. (#temporal, #embedded) = (2, 1)"
@@ -829,10 +809,6 @@ run_encode_mux_demux_ml_clk_olk() {
 
 run_encode_mux_demux_ml_4streams() {
   echo "Start multi layer streams"
-  
-  echo "Usage: examples/scalable_encoder:
-        <width> <height> <infile0>  <outfile> <frames to encode> <num_temporal_layers> <num_embedded_layers>
-        <lag> <add_sef> <fwd_kf> <keyframe_interval>"
 
   echo "test 4 multi layer streams:"
   echo "1. (#temporal, #embedded) = (3, 1)"
@@ -858,10 +834,6 @@ run_encode_mux_demux_ml_4streams() {
 
 run_encode_mux_demux_ml_4streams_lag() {
   echo "Start multi layer streams"
-
-  echo "Usage: examples/scalable_encoder:
-        <width> <height> <infile0>  <outfile> <frames to encode> <num_temporal_layers> <num_embedded_layers>
-        <lag> <add_sef> <fwd_kf> <keyframe_interval>"
 
   echo "test 4 multi layer streams: all with lag"
   echo "1. (#temporal, #embedded) = (2, 1)"

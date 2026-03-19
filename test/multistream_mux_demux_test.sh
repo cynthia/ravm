@@ -571,7 +571,7 @@ compare_md5_4() {
 
 run_encode_mux_demux_avmenc() {
   echo "Start single layer run_encode_mux_demux_ml_4streams"
- 
+
   echo "avmenc with lag = 0"
   encode_bitstream_0 5 || return 1
   encode_bitstream_1 5 || return 1

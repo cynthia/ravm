@@ -2643,6 +2643,11 @@ typedef struct AV2_COMP {
    */
   int print_per_frame_stats;
 
+  /*!
+   * Prints HLS info for each frame when set to 1.
+   */
+  int print_per_frame_hls_info;
+
 #if CONFIG_SPEED_STATS
   /*!
    * For debugging: number of transform searches we have performed.

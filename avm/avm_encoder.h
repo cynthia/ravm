@@ -66,6 +66,9 @@ extern "C" {
 #define AVM_CODEC_USE_PSNR 0x10000 /**< Calculate PSNR on each frame */
 /*!\brief Use stream PSNR instead of input PSNR. */
 #define AVM_CODEC_USE_STREAM_PSNR 0x20000
+/*!\brief Print per frame HLS info. */
+#define AVM_CODEC_USE_PER_FRAME_HLS_INFO \
+  0x40000 /**< Enable printing of HLS info */
 /*!\brief Print per frame stats. */
 #define AVM_CODEC_USE_PER_FRAME_STATS 0x80000 /**< Enable printing of stats */
 

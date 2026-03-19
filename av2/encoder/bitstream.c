@@ -5208,6 +5208,7 @@ static AVM_INLINE void write_uncompressed_header(
   MACROBLOCKD *const xd = &cpi->td.mb.e_mbd;
   CurrentFrame *const current_frame = &cm->current_frame;
   FeatureFlags *const features = &cm->features;
+  cm->current_frame.print_obu_type = obu_type;
 
   if (cm->bridge_frame_info.is_bridge_frame) {
     assert(cm->cur_mfh_id == 0);

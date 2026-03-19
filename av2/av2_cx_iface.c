@@ -2905,97 +2905,212 @@ static void report_stats(AV2_COMP *cpi, size_t frame_size, uint64_t cx_time) {
   }
 
   if (!cm->show_existing_frame || !cm->derive_sef_order_hint) {
-    // Get reference frame information
-    int ref_poc[INTER_REFS_PER_FRAME];
-    for (int ref_frame = 0; ref_frame < INTER_REFS_PER_FRAME; ++ref_frame) {
-      const int ref_idx = ref_frame;
-      const RefCntBuffer *const buf = get_ref_frame_buf(cm, ref_frame);
-      ref_poc[ref_idx] = buf ? (int)buf->absolute_poc : -1;
+    if (!cpi->print_per_frame_hls_info) {
+      // Get reference frame information
+      int ref_poc[INTER_REFS_PER_FRAME];
+      for (int ref_frame = 0; ref_frame < INTER_REFS_PER_FRAME; ++ref_frame) {
+        const int ref_idx = ref_frame;
+        const RefCntBuffer *const buf = get_ref_frame_buf(cm, ref_frame);
+        ref_poc[ref_idx] = buf ? (int)buf->absolute_poc : -1;
 
-      // Currently, "enable_keyframe_filtering > 1" is the only exception case
-      // in AVM. Later, if more cases arise, this condition can be made general
-      // based on frame type.
-      const int valid_ref_case =
-          (cpi->oxcf.kf_cfg.enable_keyframe_filtering > 1) &&
-          (cm->cur_frame->frame_type == INTER_FRAME);
-      ref_poc[ref_idx] =
-          ((ref_poc[ref_idx] == (int)cm->cur_frame->absolute_poc) &&
-           !valid_ref_case && !cm->bridge_frame_info.is_bridge_frame)
-              ? -1
-              : ref_poc[ref_idx];
-    }
-    if (cpi->b_calculate_psnr >= 1) {
-      const bool use_hbd_psnr = (cpi->b_calculate_psnr == 2);
-      if (cpi->oxcf.tool_cfg.enable_bru) {
-        fprintf(stdout,
-                "POC:%6d [%s][BRU%1d:%1d][Level:%d][Q:%3d]: %10" PRIu64
-                " Bytes, "
-                "%6.1fms, %2.4f dB(Y), %2.4f dB(U), "
-                "%2.4f dB(V), "
-                "%2.4f dB(Avg)",
-                cm->cur_frame->absolute_poc,
-                frameType[cm->current_frame.frame_type + cpi->is_ras_frame],
-                cm->bru.enabled, cm->bru.update_ref_idx,
-                cm->cur_frame->pyramid_level, base_qindex, (uint64_t)frame_size,
-                cx_time / 1000.0,
-                use_hbd_psnr ? psnr.psnr_hbd[1] : psnr.psnr[1],
-                use_hbd_psnr ? psnr.psnr_hbd[2] : psnr.psnr[2],
-                use_hbd_psnr ? psnr.psnr_hbd[3] : psnr.psnr[3],
-                use_hbd_psnr ? psnr.psnr_hbd[0] : psnr.psnr[0]);
-      } else {
-        fprintf(stdout,
-                "POC:%6d [%s][Level:%d][Q:%3d]: %10" PRIu64
-                " Bytes, "
-                "%6.1fms, %2.4f dB(Y), %2.4f dB(U), "
-                "%2.4f dB(V), "
-                "%2.4f dB(Avg)",
-                cm->cur_frame->absolute_poc,
-                frameType[cm->current_frame.frame_type + cpi->is_ras_frame],
-                cm->cur_frame->pyramid_level, base_qindex, (uint64_t)frame_size,
-                cx_time / 1000.0,
-                use_hbd_psnr ? psnr.psnr_hbd[1] : psnr.psnr[1],
-                use_hbd_psnr ? psnr.psnr_hbd[2] : psnr.psnr[2],
-                use_hbd_psnr ? psnr.psnr_hbd[3] : psnr.psnr[3],
-                use_hbd_psnr ? psnr.psnr_hbd[0] : psnr.psnr[0]);
+        // Currently, "enable_keyframe_filtering > 1" is the only exception case
+        // in AVM. Later, if more cases arise, this condition can be made
+        // general based on frame type.
+        const int valid_ref_case =
+            (cpi->oxcf.kf_cfg.enable_keyframe_filtering > 1) &&
+            (cm->cur_frame->frame_type == INTER_FRAME);
+        ref_poc[ref_idx] =
+            ((ref_poc[ref_idx] == (int)cm->cur_frame->absolute_poc) &&
+             !valid_ref_case && !cm->bridge_frame_info.is_bridge_frame)
+                ? -1
+                : ref_poc[ref_idx];
       }
+      if (cpi->b_calculate_psnr >= 1) {
+        const bool use_hbd_psnr = (cpi->b_calculate_psnr == 2);
+        if (cpi->oxcf.tool_cfg.enable_bru) {
+          fprintf(stdout,
+                  "POC:%6d [%s][BRU%1d:%1d][Level:%d][Q:%3d]: %10" PRIu64
+                  " Bytes, "
+                  "%6.1fms, %2.4f dB(Y), %2.4f dB(U), "
+                  "%2.4f dB(V), "
+                  "%2.4f dB(Avg)",
+                  cm->cur_frame->absolute_poc,
+                  frameType[cm->current_frame.frame_type + cpi->is_ras_frame],
+                  cm->bru.enabled, cm->bru.update_ref_idx,
+                  cm->cur_frame->pyramid_level, base_qindex,
+                  (uint64_t)frame_size, cx_time / 1000.0,
+                  use_hbd_psnr ? psnr.psnr_hbd[1] : psnr.psnr[1],
+                  use_hbd_psnr ? psnr.psnr_hbd[2] : psnr.psnr[2],
+                  use_hbd_psnr ? psnr.psnr_hbd[3] : psnr.psnr[3],
+                  use_hbd_psnr ? psnr.psnr_hbd[0] : psnr.psnr[0]);
+        } else {
+          fprintf(stdout,
+                  "POC:%6d [%s][Level:%d][Q:%3d]: %10" PRIu64
+                  " Bytes, "
+                  "%6.1fms, %2.4f dB(Y), %2.4f dB(U), "
+                  "%2.4f dB(V), "
+                  "%2.4f dB(Avg)",
+                  cm->cur_frame->absolute_poc,
+                  frameType[cm->current_frame.frame_type + cpi->is_ras_frame],
+                  cm->cur_frame->pyramid_level, base_qindex,
+                  (uint64_t)frame_size, cx_time / 1000.0,
+                  use_hbd_psnr ? psnr.psnr_hbd[1] : psnr.psnr[1],
+                  use_hbd_psnr ? psnr.psnr_hbd[2] : psnr.psnr[2],
+                  use_hbd_psnr ? psnr.psnr_hbd[3] : psnr.psnr[3],
+                  use_hbd_psnr ? psnr.psnr_hbd[0] : psnr.psnr[0]);
+        }
+      } else {
+        if (cpi->oxcf.tool_cfg.enable_bru) {
+          fprintf(stdout,
+                  "POC:%6d [%s][BRU%1d:%1d][Level:%d][Q:%3d]: %10" PRIu64
+                  " Bytes, "
+                  "%6.1fms",
+                  cm->cur_frame->absolute_poc,
+                  frameType[cm->current_frame.frame_type + cpi->is_ras_frame],
+                  cm->bru.enabled, cm->bru.update_ref_idx,
+                  cm->cur_frame->pyramid_level, base_qindex,
+                  (uint64_t)frame_size, cx_time / 1000.0);
+        } else {
+          fprintf(stdout,
+                  "POC:%6d [%s][Level:%d][Q:%3d]: %10" PRIu64
+                  " Bytes, "
+                  "%6.1fms",
+                  cm->cur_frame->absolute_poc,
+                  frameType[cm->current_frame.frame_type + cpi->is_ras_frame],
+                  cm->cur_frame->pyramid_level, base_qindex,
+                  (uint64_t)frame_size, cx_time / 1000.0);
+        }
+      }
+
+      fprintf(stdout, "    [");
+      for (int ref_idx = 0; ref_idx < INTER_REFS_PER_FRAME; ++ref_idx) {
+        fprintf(stdout, "%3d,", ref_poc[ref_idx]);
+      }
+      if (cpi->common.bridge_frame_info.print_bridge_frame_in_log)
+        fprintf(stdout, "] %dx%d\n", cpi->common.cur_frame->buf.y_crop_width,
+                cpi->common.cur_frame->buf.y_crop_height);
+      else if (cpi->oxcf.tool_cfg.enable_bru)
+        fprintf(stdout, "] %dx%d SB skipped %d/%d\n",
+                cpi->common.cur_frame->buf.y_crop_width,
+                cpi->common.cur_frame->buf.y_crop_height,
+                cm->bru.blocks_skipped, cm->bru.total_units);
+      else
+        fprintf(stdout, "] %dx%d\n", cpi->common.cur_frame->buf.y_crop_width,
+                cpi->common.cur_frame->buf.y_crop_height);
     } else {
-      if (cpi->oxcf.tool_cfg.enable_bru) {
-        fprintf(stdout,
-                "POC:%6d [%s][BRU%1d:%1d][Level:%d][Q:%3d]: %10" PRIu64
-                " Bytes, "
-                "%6.1fms",
-                cm->cur_frame->absolute_poc,
-                frameType[cm->current_frame.frame_type + cpi->is_ras_frame],
-                cm->bru.enabled, cm->bru.update_ref_idx,
-                cm->cur_frame->pyramid_level, base_qindex, (uint64_t)frame_size,
-                cx_time / 1000.0);
-      } else {
-        fprintf(stdout,
-                "POC:%6d [%s][Level:%d][Q:%3d]: %10" PRIu64
-                " Bytes, "
-                "%6.1fms",
-                cm->cur_frame->absolute_poc,
-                frameType[cm->current_frame.frame_type + cpi->is_ras_frame],
-                cm->cur_frame->pyramid_level, base_qindex, (uint64_t)frame_size,
-                cx_time / 1000.0);
-      }
-    }
+      // Get reference frame information
+      int ref_poc[INTER_REFS_PER_FRAME];
+      int ref_ltid[INTER_REFS_PER_FRAME];
+      for (int ref_frame = 0; ref_frame < INTER_REFS_PER_FRAME; ++ref_frame) {
+        const int ref_idx = ref_frame;
+        const RefCntBuffer *const buf = get_ref_frame_buf(cm, ref_frame);
+        ref_poc[ref_idx] = buf ? (int)buf->absolute_poc : -1;
+        ref_ltid[ref_idx] = buf ? buf->long_term_id : -1;
 
-    fprintf(stdout, "    [");
-    for (int ref_idx = 0; ref_idx < INTER_REFS_PER_FRAME; ++ref_idx) {
-      fprintf(stdout, "%3d,", ref_poc[ref_idx]);
+        // Currently, "enable_keyframe_filtering > 1" is the only exception case
+        // in AVM. Later, if more cases arise, this condition can be made
+        // general based on frame type.
+        const int valid_ref_case =
+            (cpi->oxcf.kf_cfg.enable_keyframe_filtering > 1) &&
+            (cm->cur_frame->frame_type == INTER_FRAME);
+        if ((ref_poc[ref_idx] == (int)cm->cur_frame->absolute_poc) &&
+            !valid_ref_case && !cm->bridge_frame_info.is_bridge_frame) {
+          ref_poc[ref_idx] = -1;
+          ref_ltid[ref_idx] = -1;
+        }
+      }
+      if (cpi->b_calculate_psnr >= 1) {
+        const bool use_hbd_psnr = (cpi->b_calculate_psnr == 2);
+        if (cpi->oxcf.tool_cfg.enable_bru) {
+          fprintf(stdout,
+                  "POC:%6d [%s][BRU%1d:%1d][Level:%d][Q:%3d][LTID:%d]"
+                  "[ELID:%d][TLID:%d]: %10" PRIu64
+                  " Bytes, "
+                  "%6.1fms, %2.4f dB(Y), %2.4f dB(U), "
+                  "%2.4f dB(V), "
+                  "%2.4f dB(Avg)",
+                  cm->cur_frame->absolute_poc,
+                  frameType[cm->current_frame.frame_type + cpi->is_ras_frame],
+                  cm->bru.enabled, cm->bru.update_ref_idx,
+                  cm->cur_frame->pyramid_level, base_qindex,
+                  cm->cur_frame->long_term_id, cm->cur_frame->mlayer_id,
+                  (int)cm->cur_frame->tlayer_id, (uint64_t)frame_size,
+                  cx_time / 1000.0,
+                  use_hbd_psnr ? psnr.psnr_hbd[1] : psnr.psnr[1],
+                  use_hbd_psnr ? psnr.psnr_hbd[2] : psnr.psnr[2],
+                  use_hbd_psnr ? psnr.psnr_hbd[3] : psnr.psnr[3],
+                  use_hbd_psnr ? psnr.psnr_hbd[0] : psnr.psnr[0]);
+        } else {
+          fprintf(stdout,
+                  "POC:%6d [%s][Level:%d][Q:%3d][LTID:%d]"
+                  "[ELID:%d][TLID:%d]: %10" PRIu64
+                  " Bytes, "
+                  "%6.1fms, %2.4f dB(Y), %2.4f dB(U), "
+                  "%2.4f dB(V), "
+                  "%2.4f dB(Avg)",
+                  cm->cur_frame->absolute_poc,
+                  frameType[cm->current_frame.frame_type + cpi->is_ras_frame],
+                  cm->cur_frame->pyramid_level, base_qindex,
+                  cm->cur_frame->long_term_id, cm->cur_frame->mlayer_id,
+                  (int)cm->cur_frame->tlayer_id, (uint64_t)frame_size,
+                  cx_time / 1000.0,
+                  use_hbd_psnr ? psnr.psnr_hbd[1] : psnr.psnr[1],
+                  use_hbd_psnr ? psnr.psnr_hbd[2] : psnr.psnr[2],
+                  use_hbd_psnr ? psnr.psnr_hbd[3] : psnr.psnr[3],
+                  use_hbd_psnr ? psnr.psnr_hbd[0] : psnr.psnr[0]);
+        }
+      } else {
+        if (cpi->oxcf.tool_cfg.enable_bru) {
+          fprintf(stdout,
+                  "POC:%6d [%s][BRU%1d:%1d][Level:%d][Q:%3d][LTID:%d]"
+                  "[ELID:%d][TLID:%d]: %10" PRIu64
+                  " Bytes, "
+                  "%6.1fms",
+                  cm->cur_frame->absolute_poc,
+                  frameType[cm->current_frame.frame_type + cpi->is_ras_frame],
+                  cm->bru.enabled, cm->bru.update_ref_idx,
+                  cm->cur_frame->pyramid_level, base_qindex,
+                  cm->cur_frame->long_term_id, cm->cur_frame->mlayer_id,
+                  (int)cm->cur_frame->tlayer_id, (uint64_t)frame_size,
+                  cx_time / 1000.0);
+        } else {
+          fprintf(stdout,
+                  "POC:%6d [%s][Level:%d][Q:%3d][LTID:%d]"
+                  "[ELID:%d][TLID:%d]: %10" PRIu64
+                  " Bytes, "
+                  "%6.1fms",
+                  cm->cur_frame->absolute_poc,
+                  frameType[cm->current_frame.frame_type + cpi->is_ras_frame],
+                  cm->cur_frame->pyramid_level, base_qindex,
+                  cm->cur_frame->long_term_id, cm->cur_frame->mlayer_id,
+                  (int)cm->cur_frame->tlayer_id, (uint64_t)frame_size,
+                  cx_time / 1000.0);
+        }
+      }
+
+      fprintf(stdout, "[RFF:");
+      for (int i = cm->seq_params.ref_frames - 1; i >= 0; --i) {
+        fprintf(stdout, "%d", (cm->current_frame.refresh_frame_flags >> i) & 1);
+      }
+      fprintf(stdout, "]    [");
+      for (int ref_idx = 0; ref_idx < INTER_REFS_PER_FRAME; ++ref_idx) {
+        fprintf(stdout, "%3d(LTID:%2d),", ref_poc[ref_idx], ref_ltid[ref_idx]);
+      }
+      if (cpi->common.bridge_frame_info.print_bridge_frame_in_log)
+        fprintf(stdout, "] %dx%d %s\n", cpi->common.cur_frame->buf.y_crop_width,
+                cpi->common.cur_frame->buf.y_crop_height,
+                avm_obu_type_to_string(cm->current_frame.print_obu_type));
+      else if (cpi->oxcf.tool_cfg.enable_bru)
+        fprintf(stdout, "] %dx%d %s SB skipped %d/%d\n",
+                cpi->common.cur_frame->buf.y_crop_width,
+                cpi->common.cur_frame->buf.y_crop_height,
+                avm_obu_type_to_string(cm->current_frame.print_obu_type),
+                cm->bru.blocks_skipped, cm->bru.total_units);
+      else
+        fprintf(stdout, "] %dx%d %s\n", cpi->common.cur_frame->buf.y_crop_width,
+                cpi->common.cur_frame->buf.y_crop_height,
+                avm_obu_type_to_string(cm->current_frame.print_obu_type));
     }
-    if (cpi->common.bridge_frame_info.print_bridge_frame_in_log)
-      fprintf(stdout, "] %dx%d\n", cpi->common.cur_frame->buf.y_crop_width,
-              cpi->common.cur_frame->buf.y_crop_height);
-    else if (cpi->oxcf.tool_cfg.enable_bru)
-      fprintf(stdout, "] %dx%d SB skipped %d/%d\n",
-              cpi->common.cur_frame->buf.y_crop_width,
-              cpi->common.cur_frame->buf.y_crop_height, cm->bru.blocks_skipped,
-              cm->bru.total_units);
-    else
-      fprintf(stdout, "] %dx%d\n", cpi->common.cur_frame->buf.y_crop_width,
-              cpi->common.cur_frame->buf.y_crop_height);
   }
 }
 
@@ -3103,6 +3218,9 @@ static avm_codec_err_t encoder_encode(avm_codec_alg_priv_t *ctx,
     }
     if (ctx->base.init_flags & AVM_CODEC_USE_PER_FRAME_STATS) {
       cpi->print_per_frame_stats = 1;
+    }
+    if (ctx->base.init_flags & AVM_CODEC_USE_PER_FRAME_HLS_INFO) {
+      cpi->print_per_frame_hls_info = 1;
     }
 
     if (img != NULL) {

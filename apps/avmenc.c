@@ -1719,6 +1719,7 @@ static void initialize_encoder(struct stream_state *stream,
   flags |= (global->show_psnr >= 1) ? AVM_CODEC_USE_PSNR : 0;
   flags |= (global->show_psnr == 2) ? AVM_CODEC_USE_STREAM_PSNR : 0;
   flags |= global->quiet ? 0 : AVM_CODEC_USE_PER_FRAME_STATS;
+  flags |= global->verbose ? AVM_CODEC_USE_PER_FRAME_HLS_INFO : 0;
 
   /* Construct Encoder Context */
   avm_codec_enc_init(&stream->encoder, global->codec, &stream->config.cfg,

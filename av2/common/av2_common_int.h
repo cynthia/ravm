@@ -1287,6 +1287,9 @@ typedef struct {
   OBU_TYPE cm_obu_type;
   REFERENCE_MODE reference_mode;
 
+  OBU_TYPE
+  print_obu_type;  // Last OBU type. Used to report OBU type by encoder.
+
   unsigned int order_hint;
   unsigned int display_order_hint;
   unsigned int display_order_hint_restricted;

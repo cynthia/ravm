@@ -190,6 +190,11 @@ void av2_enc_build_inter_predictor(const AV2_COMMON *cm, MACROBLOCKD *xd,
         mbmi->bawp_flag[plane ? 1 : 0] = 0;
       }
     }
+
+    if (mbmi->bawp_flag[0] == 0) {
+      mbmi->bawp_flag[1] = 0;
+      break;
+    }
   }
 
   int is_refinemv_supported =

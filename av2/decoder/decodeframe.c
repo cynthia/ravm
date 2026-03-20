@@ -4090,7 +4090,7 @@ static AVM_INLINE void setup_frame_size_with_refs(
                                : get_ref_frame_buf_res_indep(cm, i);
     // Skip restricted references since the encoder does not write a bit for
     // them.
-    if (ref_buf != NULL && ref_buf->is_restricted) continue;
+    if (ref_buf == NULL || ref_buf->is_restricted) continue;
     if (avm_rb_read_bit(rb)) {
       if (ref_buf->is_restricted) {
         avm_internal_error(&cm->error, AVM_CODEC_CORRUPT_FRAME,

@@ -763,7 +763,8 @@ int av2_get_refresh_frame_flags(
   }
 
   if (frame_params->frame_type == S_FRAME ||
-      frame_params->frame_type == KEY_FRAME) {
+      (frame_params->frame_type == KEY_FRAME &&
+       !cpi->oxcf.unit_test_cfg.use_buffer_refresh_multi_layers_test)) {
     AV2_COMMON *const cm = &cpi->common;
     int refresh_frame_flags = (1 << cpi->common.seq_params.ref_frames) - 1;
     cm->num_ref_key_frames = 0;
@@ -816,7 +817,7 @@ int av2_get_refresh_frame_flags(
 
   if (cpi->oxcf.unit_test_cfg.use_buffer_refresh_multi_layers_test) {
     // This logic is currently only used with the control
-    // AV2E_SET_ENABLE_BUFFER_REFRESH_TEST.
+    // AV2E_SET_ENABLE_BUFFER_REFRESH_TEST for the multi_layer unittests.
     int refresh_mask_control = 0;
     for (int i = 0; i < cpi->common.seq_params.ref_frames; i++) {
       refresh_mask_control |=
@@ -1199,13 +1200,24 @@ int av2_encode_strategy(AV2_COMP *const cpi, size_t *const size,
   frame_params.speed = oxcf->speed;
 
   // Work out some encoding parameters specific to the pass:
-
   if (has_no_stats_stage(cpi)) {
     if (*frame_flags & FRAMEFLAGS_KEY) {
       frame_params.frame_type = KEY_FRAME;
     }
     if (oxcf->q_cfg.aq_mode == CYCLIC_REFRESH_AQ) {
       av2_cyclic_refresh_update_parameters(cpi, frame_params.frame_type);
+    }
+    if (cpi->oxcf.unit_test_cfg.indep_mlayers_test) {
+      // The flag only used for multi_layer unittests.
+      if (frame_params.frame_type == KEY_FRAME &&
+          cpi->common.current_frame.frame_number == 1 && cm->mlayer_id > 0)
+        // Send sequence header for first keyframe on ml=1.
+        frame_params.frame_params_obu_type = OBU_CLOSED_LOOP_KEY;
+      if (cpi->oxcf.unit_test_cfg.indep_mlayers_test == 2 &&
+          cpi->common.current_frame.frame_number == 1 && cm->mlayer_id == 0) {
+        // Set intra_only_frame after first ml=0 keyframe.
+        frame_params.frame_type = INTRA_ONLY_FRAME;
+      }
     }
   } else if (is_stat_generation_stage(cpi)) {
     cpi->td.mb.e_mbd.lossless[0] = is_lossless_requested(&oxcf->rc_cfg);

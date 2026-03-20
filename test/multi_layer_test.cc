@@ -49,7 +49,13 @@ class MultiLayerTest : public ::libavm_test::CodecTestWithParam<int>,
     refresh_count_ = 0;
     enable_s_frame_ = false;
     start_decoding_tl1_ = 0;
+    start_decoding_ml1_ = 0;
     pyramid_level_one_ = false;
+    decode_sl1_only_ = false;
+    independent_layers_ = false;
+    decode_all_layers_ = false;
+    insert_key_frame_ = 0;
+    insert_s_frame_ = 0;
   }
 
   int GetNumEmbeddedLayers() override { return num_embedded_layers_; }
@@ -59,6 +65,16 @@ class MultiLayerTest : public ::libavm_test::CodecTestWithParam<int>,
     (void)video;
     encoder->SetOption("add-sef-for-output", "1");
     frame_flags_ = 0;
+    if (independent_layers_) {
+      // Keyframe at first TU.
+      if (layer_frame_cnt_ < num_embedded_layers_)
+        frame_flags_ |= AVM_EFLAG_FORCE_KF;
+      // Keyframe inserted iin the stream.
+      if (insert_key_frame_ > 0 && layer_frame_cnt_ == insert_key_frame_)
+        frame_flags_ |= AVM_EFLAG_FORCE_KF;
+      encoder->Control(AV2E_SET_ENABLE_INDEP_MLAYERS_TEST,
+                       decode_all_layers_ ? 2 : 1);
+    }
     if (layer_frame_cnt_ == 0) {
       encoder->Control(AVME_SET_CPUUSED, speed_);
       encoder->Control(AVME_SET_NUMBER_MLAYERS, num_embedded_layers_);
@@ -209,12 +225,38 @@ class MultiLayerTest : public ::libavm_test::CodecTestWithParam<int>,
       for (int i = 0; i < 8; i++) {
         buffer_refresh.buffer_refresh_test[i] = 0;
       }
-      if (num_temporal_layers_ == 2 && num_embedded_layers_ == 2) {
-        // Don't refresh (ml1, tl1).
-        if (embedded_layer_id_ != 1 || temporal_layer_id_ != 1) {
-          // Refresh based on refresh_count_, which takes even
-          // slot for ml=0 and odd slot for ml=1;
-          buffer_refresh.buffer_refresh_test[refresh_count_] = 1;
+      if (num_temporal_layers_ <= 2 && num_embedded_layers_ == 2) {
+        // Don't refresh (ml1, tl1), for temporal_layers > 1.
+        if (num_temporal_layers_ == 1 || embedded_layer_id_ != 1 ||
+            temporal_layer_id_ != 1) {
+          // For decode_all_layers: refresh slot 0 on base/ml=0 after
+          // first frame.
+          if (decode_all_layers_ && layer_frame_cnt_ == 2 &&
+              embedded_layer_id_ == 0) {
+            buffer_refresh.buffer_refresh_test[0] = 1;
+          } else {
+            // Refresh based on refresh_count_, which takes even
+            // slot for ml=0 and odd slot for ml=1;
+            buffer_refresh.buffer_refresh_test[refresh_count_] = 1;
+          }
+          if (layer_frame_cnt_ > embedded_layer_id_) {
+            // On keyframe inserted in stream: refresh all even slots for ml=0,
+            // odd slots for ml=1.
+            if (frame_flags_ == AVM_EFLAG_FORCE_KF && embedded_layer_id_ == 0) {
+              buffer_refresh.buffer_refresh_test[0] = 1;
+              buffer_refresh.buffer_refresh_test[2] = 1;
+              buffer_refresh.buffer_refresh_test[4] = 1;
+              buffer_refresh.buffer_refresh_test[6] = 1;
+              refresh_count_ = 0;
+            } else if (frame_flags_ == AVM_EFLAG_FORCE_KF &&
+                       embedded_layer_id_ == 1) {
+              buffer_refresh.buffer_refresh_test[1] = 1;
+              buffer_refresh.buffer_refresh_test[3] = 1;
+              buffer_refresh.buffer_refresh_test[5] = 1;
+              buffer_refresh.buffer_refresh_test[7] = 1;
+              refresh_count_ = 1;
+            }
+          }
           refresh_count_++;
           if (refresh_count_ > 7) refresh_count_ = 0;
         }
@@ -222,12 +264,21 @@ class MultiLayerTest : public ::libavm_test::CodecTestWithParam<int>,
       }
     }
     if (enable_s_frame_) {
-      if (layer_frame_cnt_ ==
-              (start_decoding_tl1_ - 1) * num_embedded_layers_ &&
-          temporal_layer_id_ == 0) {
-        encoder->Control(AV2E_SET_S_FRAME_MODE, 1);
+      if (independent_layers_) {
+        if (layer_frame_cnt_ == insert_s_frame_)
+          encoder->Control(AV2E_SET_S_FRAME_MODE, 1);
+        else
+          encoder->Control(AV2E_SET_S_FRAME_MODE, 0);
       } else {
-        encoder->Control(AV2E_SET_S_FRAME_MODE, 0);
+        int start_frame = start_decoding_tl1_;
+        if (num_temporal_layers_ == 1 && num_embedded_layers_ == 2)
+          start_frame = start_decoding_ml1_;
+        if (layer_frame_cnt_ == (start_frame - 1) * num_embedded_layers_ &&
+            embedded_layer_id_ == 0 && temporal_layer_id_ == 0) {
+          encoder->Control(AV2E_SET_S_FRAME_MODE, 1);
+        } else {
+          encoder->Control(AV2E_SET_S_FRAME_MODE, 0);
+        }
       }
     }
     layer_frame_cnt_++;
@@ -254,10 +305,36 @@ class MultiLayerTest : public ::libavm_test::CodecTestWithParam<int>,
   }
 
   bool DoDecode() const override {
+    if (independent_layers_ && enable_s_frame_) {
+      if (insert_s_frame_ == 10) {
+        if (embedded_layer_id_ == 0)
+          return layer_frame_cnt_ <= insert_s_frame_;
+        else if (embedded_layer_id_ == 1)
+          return layer_frame_cnt_ > insert_s_frame_;
+      } else if (insert_s_frame_ == 11) {
+        if (embedded_layer_id_ == 1)
+          return layer_frame_cnt_ <= insert_s_frame_;
+        else if (embedded_layer_id_ == 0)
+          return layer_frame_cnt_ > insert_s_frame_;
+      }
+    }
+    if (independent_layers_ && decode_sl1_only_ && insert_key_frame_ == 10) {
+      if (layer_frame_cnt_ < insert_key_frame_ && embedded_layer_id_ == 0)
+        return false;
+      else
+        return true;
+    }
     if (start_decoding_tl1_ > 0) {
-      // Drop TL1 until start_decoding_tl_.
+      // Drop TL1 until start_decoding_tl1_.
       if (layer_frame_cnt_ < start_decoding_tl1_ * num_embedded_layers_ &&
           temporal_layer_id_ == 1)
+        return false;
+      else
+        return true;
+    } else if (start_decoding_ml1_ > 0) {
+      // Drop ML1 until start_decoding_ml1_.
+      if (layer_frame_cnt_ < start_decoding_ml1_ * num_embedded_layers_ &&
+          embedded_layer_id_ == 1)
         return false;
       else
         return true;
@@ -289,6 +366,11 @@ class MultiLayerTest : public ::libavm_test::CodecTestWithParam<int>,
           return false;
         } else
           return true;
+      } else if (decode_sl1_only_) {
+        if (embedded_layer_id_ == 1) {
+          return true;
+        } else
+          return false;
       } else if (decode_base_only_) {
         if (embedded_layer_id_ == 0)
           return true;
@@ -327,7 +409,14 @@ class MultiLayerTest : public ::libavm_test::CodecTestWithParam<int>,
   bool enable_s_frame_;
   // Frame to start encoding the tl=1 layer.
   int start_decoding_tl1_;
+  // Frame to start encoding the ml=1 layer.
+  int start_decoding_ml1_;
   bool pyramid_level_one_;
+  bool decode_sl1_only_;
+  bool independent_layers_;
+  bool decode_all_layers_;
+  int insert_key_frame_;
+  int insert_s_frame_;
 };
 
 // The pattern for 2TL is as follows, where prediction can only be within
@@ -700,18 +789,126 @@ TEST_P(MultiLayerTest, MultiLayerTest2Embedded2TemporalLag) {
   ASSERT_NO_FATAL_FAILURE(RunLoop(&video_nonsc));
 }
 
-// 2 embedded (spatial) layers with periodic keyframe. Keyframe is inserted
-// on base ml=0 at time 4, 8, 12, 16.
-TEST_P(MultiLayerTest, DISABLED_MultiLayerTest2EmbeddedKeyFrame) {
+// 2 independent mlayers: ml=0 only predicts off ml=0 frames,
+// ml=1 only predicts off ml=1 frames. Start with CLK on each layer.
+// Decode base ml=0 layer only.
+TEST_P(MultiLayerTest, MultiLayerTest2EmbeddedIndependentDecodeBaseOnly) {
   ::libavm_test::Y4mVideoSource video_nonsc("park_joy_90p_8_420.y4m", 0, 20);
-  cfg_.g_lag_in_frames = 0;
-  cfg_.kf_min_dist = 4;
-  cfg_.kf_max_dist = 4;
+  num_temporal_layers_ = 1;
+  num_embedded_layers_ = 2;
+  decode_base_only_ = true;
+  decode_sl1_only_ = false;
+  enable_explicit_ref_frame_map_ = false;
+  enable_buffer_refresh_test_ = true;
+  independent_layers_ = true;
+  ASSERT_NO_FATAL_FAILURE(RunLoop(&video_nonsc));
+  EXPECT_EQ(num_mismatch_, 0);
+}
+
+// 2 independent mlayers: ml=0 only predicts off ml=0 frames, ml=1 only predicts
+// off ml=1 frames. Start with CLK on each layer. Decode ml=1 layers only.
+TEST_P(MultiLayerTest, MultiLayerTest2EmbeddedIndependentDecodeML1Only) {
+  ::libavm_test::Y4mVideoSource video_nonsc("park_joy_90p_8_420.y4m", 0, 20);
   num_temporal_layers_ = 1;
   num_embedded_layers_ = 2;
   decode_base_only_ = false;
-  drop_tl2_ = false;
+  decode_sl1_only_ = true;
   enable_explicit_ref_frame_map_ = false;
+  enable_buffer_refresh_test_ = true;
+  independent_layers_ = true;
+  ASSERT_NO_FATAL_FAILURE(RunLoop(&video_nonsc));
+  EXPECT_EQ(num_mismatch_, 0);
+}
+
+// 2 independent mlayers (same as above): ml=0 only predicts off ml=0 frames,
+// ml=1 only predicts off ml=1 frames. Decode base ml=0 layer only.
+// Keyframe inserted at frame=10 (ml=0).
+TEST_P(MultiLayerTest,
+       MultiLayerTest2EmbeddedIndependentDecodeBaseOnlyKeyInsert) {
+  ::libavm_test::Y4mVideoSource video_nonsc("park_joy_90p_8_420.y4m", 0, 20);
+  num_temporal_layers_ = 1;
+  num_embedded_layers_ = 2;
+  decode_base_only_ = true;
+  decode_sl1_only_ = false;
+  enable_explicit_ref_frame_map_ = false;
+  enable_buffer_refresh_test_ = true;
+  independent_layers_ = true;
+  insert_key_frame_ = 10;
+  ASSERT_NO_FATAL_FAILURE(RunLoop(&video_nonsc));
+  EXPECT_EQ(num_mismatch_, 0);
+}
+
+// 2 independent mlayers (same as above): ml=0 only predicts off ml=0 frames,
+// ml=1 only predicts off ml=1 frames. Decode ml=1 layers only. Keyframe
+// inserted at frame=11 (ml=1).
+TEST_P(MultiLayerTest,
+       MultiLayerTest2EmbeddedIndependentDecodeML1OnlyKeyInsert) {
+  ::libavm_test::Y4mVideoSource video_nonsc("park_joy_90p_8_420.y4m", 0, 20);
+  num_temporal_layers_ = 1;
+  num_embedded_layers_ = 2;
+  decode_base_only_ = false;
+  decode_sl1_only_ = true;
+  enable_explicit_ref_frame_map_ = false;
+  enable_buffer_refresh_test_ = true;
+  independent_layers_ = true;
+  insert_key_frame_ = 11;
+  ASSERT_NO_FATAL_FAILURE(RunLoop(&video_nonsc));
+  EXPECT_EQ(num_mismatch_, 0);
+}
+
+// 2 independent mlayers: ml=0 only predicts off ml=0 frames,
+// ml=1 only predicts off ml=1 frames. Start with CLK on each layer.
+// Decode all layers.
+TEST_P(MultiLayerTest, MultiLayerTest2EmbeddedIndependentDecodeAll) {
+  ::libavm_test::Y4mVideoSource video_nonsc("park_joy_90p_8_420.y4m", 0, 20);
+  num_temporal_layers_ = 1;
+  num_embedded_layers_ = 2;
+  decode_base_only_ = false;
+  decode_sl1_only_ = false;
+  decode_all_layers_ = true;
+  enable_explicit_ref_frame_map_ = false;
+  enable_buffer_refresh_test_ = true;
+  independent_layers_ = true;
+  ASSERT_NO_FATAL_FAILURE(RunLoop(&video_nonsc));
+  EXPECT_EQ(num_mismatch_, 0);
+}
+
+// 2 independent mlayers: ml=0 only predicts off ml=0 frames,
+// ml=1 only predicts off ml=1 frames. Start with CLK on each layer.
+// S frame test. Decode only base ml=0 until S frame at frame 10,
+// then switch to decoding ml=1 layer only.
+TEST_P(MultiLayerTest, MultiLayerTest2EmbeddedIndependentSframeEx1) {
+  ::libavm_test::Y4mVideoSource video_nonsc("park_joy_90p_8_420.y4m", 0, 20);
+  num_temporal_layers_ = 1;
+  num_embedded_layers_ = 2;
+  decode_base_only_ = true;
+  decode_sl1_only_ = false;
+  decode_all_layers_ = false;
+  enable_explicit_ref_frame_map_ = false;
+  enable_buffer_refresh_test_ = true;
+  independent_layers_ = true;
+  enable_s_frame_ = true;
+  insert_s_frame_ = 10;
+  ASSERT_NO_FATAL_FAILURE(RunLoop(&video_nonsc));
+  EXPECT_EQ(num_mismatch_, 0);
+}
+
+// 2 independent mlayers: ml=0 only predicts off ml=0 frames,
+// ml=1 only predicts off ml=1 frames. Start with CLK on each layer.
+// S frame test. Decode only ml=1 frames until S frame at frame 11,
+// then switch to decoding ml=0 layer only.
+TEST_P(MultiLayerTest, MultiLayerTest2EmbeddedIndependentSframeEx2) {
+  ::libavm_test::Y4mVideoSource video_nonsc("park_joy_90p_8_420.y4m", 0, 20);
+  num_temporal_layers_ = 1;
+  num_embedded_layers_ = 2;
+  decode_base_only_ = false;
+  decode_sl1_only_ = true;
+  decode_all_layers_ = false;
+  enable_explicit_ref_frame_map_ = false;
+  enable_buffer_refresh_test_ = true;
+  independent_layers_ = true;
+  enable_s_frame_ = true;
+  insert_s_frame_ = 11;
   ASSERT_NO_FATAL_FAILURE(RunLoop(&video_nonsc));
   EXPECT_EQ(num_mismatch_, 0);
 }

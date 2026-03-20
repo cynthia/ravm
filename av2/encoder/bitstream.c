@@ -4381,9 +4381,6 @@ static AVM_INLINE void write_frame_size_with_refs(
                            : cm->ref_frames_info.num_total_refs_res_indep;
   MV_REFERENCE_FRAME ref_frame;
   for (ref_frame = 0; ref_frame < num_refs; ++ref_frame) {
-    if (cm->ref_frame_map[ref_frame] != NULL &&
-        cm->ref_frame_map[ref_frame]->is_restricted)
-      continue;
     const YV12_BUFFER_CONFIG *cfg =
         explicit_ref_frame_map
             ? get_ref_frame_yv12_buf(cm, ref_frame)
@@ -4395,6 +4392,10 @@ static AVM_INLINE void write_frame_size_with_refs(
       found &= cm->render_width == cfg->render_width &&
                cm->render_height == cfg->render_height;
     }
+    const RefCntBuffer *const ref_buf =
+        explicit_ref_frame_map ? get_ref_frame_buf(cm, ref_frame)
+                               : get_ref_frame_buf_res_indep(cm, ref_frame);
+    if (ref_buf == NULL || ref_buf->is_restricted) found = 0;
     avm_wb_write_bit(wb, found);
     if (found) {
       break;

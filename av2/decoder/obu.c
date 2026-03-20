@@ -2786,6 +2786,18 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
       case OBU_REGULAR_TIP:
       case OBU_RAS_FRAME:
       case OBU_BRIDGE_FRAME:
+#if CONFIG_G043
+        // Constraint 4: Switch frames shall be at the base temporal layer.
+        if ((obu_header.type == OBU_SWITCH ||
+             obu_header.type == OBU_RAS_FRAME) &&
+            obu_header.obu_tlayer_id != 0) {
+          avm_internal_error(
+              &cm->error, AVM_CODEC_UNSUP_BITSTREAM,
+              "Switch frame (obu_type=%d) must have obu_tlayer_id equal to "
+              "0, got %d.",
+              obu_header.type, obu_header.obu_tlayer_id);
+        }
+#endif  // CONFIG_G043
         for (int i = 0; i < NUM_CUSTOM_QMS; i++) {
           if (acc_qm_id_bitmap & (1 << i)) {
             pbi->qm_protected[i] &= (obu_header.type == OBU_CLOSED_LOOP_KEY ||

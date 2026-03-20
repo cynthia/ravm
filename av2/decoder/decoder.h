@@ -581,6 +581,43 @@ typedef struct AV2Decoder {
    */
   int num_displayable_frame_unit[MAX_NUM_MLAYERS];
 
+// Maximum size for the DOH uniqueness boolean array.
+// Equals 4 << max(OrderHintBits), where OrderHintBits max = 8.
+#define MAX_DOH_SEEN_SIZE (4 << 8)
+
+  /*!
+   * Per xlayer DOH value array for uniqueness check (Rule 1).
+   * doh_seen[xl][doh % doh_seen_size[xl]] stores the DOH value when output,
+   * or -1 if the slot is empty.  Storing the value (not just a boolean)
+   * lets us distinguish "same DOH from another mlayer in the same TU"
+   * (not a violation) from "different DOH reusing the slot" after wrap.
+   * Since all output frames in a TU share the same OrderHint regardless
+   * of mlayer, the array is per xlayer only (not per mlayer).
+   */
+  int doh_seen[MAX_NUM_XLAYERS][MAX_DOH_SEEN_SIZE];
+  /*!
+   * Per xlayer actual size of the doh_seen array = 4 << OrderHintBits.
+   * Set from each xlayer's sequence header when order_hint_bits_minus_1
+   * is parsed.  Per-xlayer because different streams in a muxed bitstream
+   * may have different OrderHintBits.
+   */
+  int doh_seen_size[MAX_NUM_XLAYERS];
+  /*!
+   * Per xlayer: DOH value that triggers the next half-reset of doh_seen.
+   */
+  int doh_seen_threshold[MAX_NUM_XLAYERS];
+
+  /*!
+   * Tracks the maximum display order hint of output pictures per
+   * (xlayer_id, mlayer_id) pair within a coded video sequence.
+   * Used to enforce:
+   *   (1) uniqueness of output OrderHint per layer (equal case), and
+   *   (2) no picture coded after an output picture X may have an OrderHint
+   *       less than the OrderHint of X in the same layer (less-than case).
+   * Initialized and reset to -1 at CVS boundaries.
+   */
+  int last_output_doh[MAX_NUM_XLAYERS][MAX_NUM_MLAYERS];
+
   /*!
    * Indicates an OLK is encountered in any layer
    * It is initialized as 0 and set 1 when the first olk is decoded and set 0

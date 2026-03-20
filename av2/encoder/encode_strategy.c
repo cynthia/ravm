@@ -790,6 +790,15 @@ int av2_get_refresh_frame_flags(
       int refresh_idx = -1;
       for (int i = 0; i < cm->seq_params.ref_frames; ++i) {
         if ((refresh_frame_flags >> i) & 1) {
+          // Skip slots containing implicit-output frames that have not
+          // been output yet and whose DOH is at least the current
+          // frame's DOH. (DOH requirement)
+          if (cm->ref_frame_map[i] != NULL &&
+              cm->ref_frame_map[i]->implicit_output_picture &&
+              !cm->ref_frame_map[i]->frame_output_done &&
+              (int)cm->ref_frame_map[i]->display_order_hint >= cur_disp_order) {
+            continue;
+          }
           refresh_idx = i;
           break;
         }
@@ -831,6 +840,17 @@ int av2_get_refresh_frame_flags(
          layer++) {
       if (cpi->common.olk_refresh_frame_flags[layer] == -1) continue;
       olk_flags_to_keep |= cpi->common.olk_refresh_frame_flags[layer];
+    }
+  }
+
+  // Protect ref buffer slots containing implicit-output frames with DOH
+  // at least the current frame's DOH. (DOH requirement)
+  for (int i = 0; i < cpi->common.seq_params.ref_frames; i++) {
+    const RefCntBuffer *const buf = cpi->common.ref_frame_map[i];
+    if (buf != NULL && buf->implicit_output_picture &&
+        !buf->frame_output_done &&
+        (int)buf->display_order_hint >= cur_disp_order) {
+      olk_flags_to_keep |= (1 << i);
     }
   }
 

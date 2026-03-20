@@ -707,7 +707,13 @@ void av2_init_seq_coding_tools(AV2_COMP *cpi, SequenceHeader *seq,
       seq->single_picture_header_flag || (oxcf->kf_cfg.sframe_type == RAS_FRAME)
           ? 0
           : tool_cfg->enable_short_refresh_frame_flags;
-  seq->number_of_bits_for_lt_frame_id = seq->single_picture_header_flag ? 0 : 3;
+  // Use 3 bits to signal long_term_id only if RAS frames are enabled and NOT a
+  // single picture.
+  seq->number_of_bits_for_lt_frame_id =
+      (seq->single_picture_header_flag ||
+       (cpi->oxcf.kf_cfg.sframe_type == REGULAR_S_FRAME))
+          ? 0
+          : 3;
   seq->enable_ext_seg = tool_cfg->enable_ext_seg;
   seq->ref_frames = seq->single_picture_header_flag ? 2 : tool_cfg->dpb_size;
   // Clamp ref_frames to the maximum allowed by the level constraints.
@@ -4986,12 +4992,10 @@ int av2_encode(AV2_COMP *const cpi, uint8_t *const dest,
   }
   current_frame->absolute_poc =
       current_frame->key_frame_number + current_frame->display_order_hint;
-  if (current_frame->frame_type == KEY_FRAME) {
-    if (cpi->oxcf.kf_cfg.sframe_type == RAS_FRAME)
-      current_frame->long_term_id =
-          cpi->common.current_frame.frame_number % MAX_NUM_LONG_TERM_FRAMES;
-    else
-      current_frame->long_term_id = 0;
+  if (current_frame->frame_type == KEY_FRAME &&
+      cpi->oxcf.kf_cfg.sframe_type == RAS_FRAME) {
+    current_frame->long_term_id =
+        cpi->common.current_frame.frame_number % MAX_NUM_LONG_TERM_FRAMES;
   } else {
     current_frame->long_term_id = -1;
   }

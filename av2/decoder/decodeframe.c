@@ -4085,10 +4085,13 @@ static AVM_INLINE void setup_frame_size_with_refs(
                            ? cm->ref_frames_info.num_total_refs
                            : cm->ref_frames_info.num_total_refs_res_indep;
   for (int i = 0; i < num_refs; ++i) {
+    const RefCntBuffer *const ref_buf =
+        explicit_ref_frame_map ? get_ref_frame_buf(cm, i)
+                               : get_ref_frame_buf_res_indep(cm, i);
+    // Skip restricted references since the encoder does not write a bit for
+    // them.
+    if (ref_buf != NULL && ref_buf->is_restricted) continue;
     if (avm_rb_read_bit(rb)) {
-      const RefCntBuffer *const ref_buf =
-          explicit_ref_frame_map ? get_ref_frame_buf(cm, i)
-                                 : get_ref_frame_buf_res_indep(cm, i);
       if (ref_buf->is_restricted) {
         avm_internal_error(&cm->error, AVM_CODEC_CORRUPT_FRAME,
                            "Invalid condition: restricted reference buffer");

@@ -3479,6 +3479,52 @@ static INLINE int check_lcr_frame_size_conformance(const AV2_COMMON *cm,
   *layer_id = mlayer_id;
   return (width > *max_w || height > *max_h);
 }
+
+// CWG-G068 Case 2: Local LCR present, Global LCR absent.
+// Sets default global LCR values — all fields zero (no payload, no atlas,
+// no alignment enforcement, purpose unspecified).
+static INLINE void set_default_global_lcr(
+    GlobalLayerConfigurationRecord *global_lcr) {
+  memset(global_lcr, 0, sizeof(*global_lcr));
+}
+
+// CWG-G068 Case 1: Global LCR present, Local LCR absent.
+// Derives default local LCR values following Annex F fallback pattern:
+//   Step 1: Initialize all local LCR fields to zero
+//   Step 2: Link to parent global LCR via lcr_global_id
+//   Step 3: Derive seq profile/tier/level from sequence header
+//   Step 4: Derive representation info from sequence header
+//   Step 5: Set color info to unspecified defaults
+static INLINE void set_default_local_lcr_from_global(
+    LocalLayerConfigurationRecord *local_lcr,
+    const GlobalLayerConfigurationRecord *glcr, const SequenceHeader *seq) {
+  // Step 1: Zero-initialize (TEXTURE_LAYER=0, VIEW_UNSPECIFIED=0,
+  // all present flags=0).
+  memset(local_lcr, 0, sizeof(*local_lcr));
+
+  // Step 2: Link to parent global LCR.
+  local_lcr->lcr_global_id = glcr->lcr_global_config_record_id;
+  local_lcr->lcr_local_id = 0;
+
+  // Step 3: Derive seq profile/tier/level from sequence header.
+  local_lcr->seq_ptl.lcr_seq_profile_idc = seq->seq_profile_idc;
+  local_lcr->seq_ptl.lcr_max_level_idx = seq->seq_max_level_idx;
+  local_lcr->seq_ptl.lcr_tier_flag = seq->seq_tier;
+  local_lcr->seq_ptl.lcr_max_mlayer_count = seq->max_mlayer_id + 1;
+
+  // Step 4: Derive representation info from sequence header.
+  local_lcr->xlayer_info.rep_params.lcr_max_pic_width = seq->max_frame_width;
+  local_lcr->xlayer_info.rep_params.lcr_max_pic_height = seq->max_frame_height;
+
+  // Step 5: Set color info to unspecified defaults.
+  local_lcr->xlayer_info.xlayer_col_params.layer_color_primaries =
+      AVM_CICP_CP_UNSPECIFIED;
+  local_lcr->xlayer_info.xlayer_col_params.layer_transfer_characteristics =
+      AVM_CICP_TC_UNSPECIFIED;
+  local_lcr->xlayer_info.xlayer_col_params.layer_matrix_coefficients =
+      AVM_CICP_MC_UNSPECIFIED;
+  local_lcr->xlayer_info.xlayer_col_params.layer_full_range_flag = 0;
+}
 #endif  // CONFIG_AV2_LCR_PROFILES
 
 // Returns 1 if this frame might allow mvs from some reference frame.

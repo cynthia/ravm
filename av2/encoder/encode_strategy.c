@@ -1199,8 +1199,14 @@ int av2_encode_strategy(AV2_COMP *const cpi, size_t *const size,
   frame_params.speed = oxcf->speed;
 
   // Work out some encoding parameters specific to the pass:
-  if (has_no_stats_stage(cpi) && oxcf->q_cfg.aq_mode == CYCLIC_REFRESH_AQ) {
-    av2_cyclic_refresh_update_parameters(cpi, frame_params.frame_type);
+
+  if (has_no_stats_stage(cpi)) {
+    if (*frame_flags & FRAMEFLAGS_KEY) {
+      frame_params.frame_type = KEY_FRAME;
+    }
+    if (oxcf->q_cfg.aq_mode == CYCLIC_REFRESH_AQ) {
+      av2_cyclic_refresh_update_parameters(cpi, frame_params.frame_type);
+    }
   } else if (is_stat_generation_stage(cpi)) {
     cpi->td.mb.e_mbd.lossless[0] = is_lossless_requested(&oxcf->rc_cfg);
     const int kf_requested = (cm->current_frame.frame_number == 0 ||

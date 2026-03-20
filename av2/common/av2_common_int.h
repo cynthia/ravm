@@ -3317,6 +3317,35 @@ static INLINE int is_mlayer_scalable_and_dependent(
   }
 }
 
+// Returns true if mlayer `curr_layer_id` transitively depends on mlayer
+// `ref_layer_id`. Also returns true if both layer IDs are the same. Otherwise,
+// returns false.
+static INLINE int is_mlayer_transitively_dependent(
+    const SequenceHeader *const seq, const int curr_layer_id,
+    const int ref_layer_id) {
+  if (curr_layer_id == ref_layer_id) return 1;
+  if (!seq->mlayer_dependency_present_flag) return curr_layer_id > ref_layer_id;
+
+  int visited[MAX_NUM_MLAYERS] = { 0 };
+  int queue[MAX_NUM_MLAYERS];
+  int head = 0, tail = 0;
+
+  queue[tail++] = curr_layer_id;
+  visited[curr_layer_id] = 1;
+
+  while (head < tail) {
+    int layer = queue[head++];
+    if (layer == ref_layer_id) return 1;
+    for (int i = 0; i <= seq->max_mlayer_id; i++) {
+      if (seq->mlayer_dependency_map[layer][i] && !visited[i]) {
+        visited[i] = 1;
+        queue[tail++] = i;
+      }
+    }
+  }
+  return 0;
+}
+
 static INLINE void get_secondary_reference_frame_idx(const AV2_COMMON *const cm,
                                                      int *ref_frame_used,
                                                      int *secondary_map_idx) {

@@ -4956,8 +4956,8 @@ int av2_encode(AV2_COMP *const cpi, uint8_t *const dest,
       for (int i = 0; i < cm->seq_params.ref_frames; i++) {
         if (cm->ref_frame_map[i] != NULL) {
           int ref_mlayer_id = cm->ref_frame_map[i]->mlayer_id;
-          if (is_mlayer_scalable_and_dependent(&cm->seq_params, ref_mlayer_id,
-                                               cm->mlayer_id)) {
+          if (is_mlayer_transitively_dependent(&cm->seq_params, cm->mlayer_id,
+                                               ref_mlayer_id)) {
             cm->ref_frame_map[i]->is_restricted = true;
           }
         }

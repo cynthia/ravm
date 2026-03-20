@@ -6820,8 +6820,8 @@ static INLINE int get_disp_order_hint(AV2_COMMON *const cm, OBU_TYPE obu_type,
       RefCntBuffer *buf = cm->ref_frame_map[map_idx];
       if (buf != NULL) {
         int ref_mlayer_id = buf->mlayer_id;
-        if (is_mlayer_scalable_and_dependent(&cm->seq_params, ref_mlayer_id,
-                                             cm->mlayer_id)) {
+        if (is_mlayer_transitively_dependent(&cm->seq_params, cm->mlayer_id,
+                                             ref_mlayer_id)) {
           buf->display_order_hint = REF_RESTRICTED_DOH;
         }
       }
@@ -8175,8 +8175,8 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
         for (int i = 0; i < REF_FRAMES; i++) {
           if (cm->ref_frame_map[i] != NULL) {
             int ref_mlayer_id = cm->ref_frame_map[i]->mlayer_id;
-            if (is_mlayer_scalable_and_dependent(&cm->seq_params, ref_mlayer_id,
-                                                 cm->mlayer_id)) {
+            if (is_mlayer_transitively_dependent(&cm->seq_params, cm->mlayer_id,
+                                                 ref_mlayer_id)) {
               cm->ref_frame_map[i]->is_restricted = true;
               cm->ref_frame_map[i]->frame_output_done = true;
             }

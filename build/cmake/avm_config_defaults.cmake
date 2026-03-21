@@ -127,8 +127,6 @@ set_avm_config_var(CONFIG_COLLECT_COMPONENT_TIMING 0
                    "Collect encoding component timing information.")
 set_avm_config_var(CONFIG_NN_V2 0 "Fully-connected neural nets ver.2.")
 set_avm_config_var(CONFIG_ANNEXF 1 "Annex F sub-bitstream extraction support.")
-set_avm_config_var(CONFIG_G041 1
-                   "Reset QM to the default at the restricted switch frame")
 set_avm_config_var(CONFIG_G043 1
                    "Contsraint for switch frames to be on tlayer_id=0")
 set_avm_config_var(CONFIG_AV2_LCR_PROFILES 1

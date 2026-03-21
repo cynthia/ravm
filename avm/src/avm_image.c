@@ -64,9 +64,7 @@ static avm_image_t *img_alloc_helper(
   /* Get sample size for this format */
   switch (fmt) {
     case AVM_IMG_FMT_I420:
-    case AVM_IMG_FMT_YV12:
-    case AVM_IMG_FMT_AVMI420:
-    case AVM_IMG_FMT_AVMYV12: bps = 12; break;
+    case AVM_IMG_FMT_YV12: bps = 12; break;
     case AVM_IMG_FMT_I422: bps = 16; break;
     case AVM_IMG_FMT_I444: bps = 24; break;
     case AVM_IMG_FMT_YV1216:
@@ -82,8 +80,6 @@ static avm_image_t *img_alloc_helper(
   switch (fmt) {
     case AVM_IMG_FMT_I420:
     case AVM_IMG_FMT_YV12:
-    case AVM_IMG_FMT_AVMI420:
-    case AVM_IMG_FMT_AVMYV12:
     case AVM_IMG_FMT_I422:
     case AVM_IMG_FMT_I42016:
     case AVM_IMG_FMT_YV1216:
@@ -94,8 +90,6 @@ static avm_image_t *img_alloc_helper(
   switch (fmt) {
     case AVM_IMG_FMT_I420:
     case AVM_IMG_FMT_YV12:
-    case AVM_IMG_FMT_AVMI420:
-    case AVM_IMG_FMT_AVMYV12:
     case AVM_IMG_FMT_YV1216:
     case AVM_IMG_FMT_I42016: ycs = 1; break;
     default: ycs = 0; break;

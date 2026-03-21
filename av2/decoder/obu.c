@@ -269,6 +269,8 @@ void av2_store_xlayer_context(AV2Decoder *pbi, AV2_COMMON *cm, int xlayer_id) {
         cm->olk_refresh_frame_flags[i];
     pbi->stream_info[stream_idx].olk_co_vcl_refresh_frame_flags_buf[i] =
         cm->olk_co_vcl_refresh_frame_flags[i];
+    pbi->stream_info[stream_idx].layer_refresh_frame_flags_buf[i] =
+        cm->layer_refresh_frame_flags[i];
   }
   pbi->stream_info[stream_idx].seq_params_buf = cm->seq_params;
   for (int i = 0; i < MAX_MFH_NUM; i++) {
@@ -346,6 +348,8 @@ void av2_restore_xlayer_context(AV2Decoder *pbi, AV2_COMMON *cm,
         pbi->stream_info[stream_idx].olk_refresh_frame_flags_buf[i];
     cm->olk_co_vcl_refresh_frame_flags[i] =
         pbi->stream_info[stream_idx].olk_co_vcl_refresh_frame_flags_buf[i];
+    cm->layer_refresh_frame_flags[i] =
+        pbi->stream_info[stream_idx].layer_refresh_frame_flags_buf[i];
   }
   cm->seq_params = pbi->stream_info[stream_idx].seq_params_buf;
   for (int i = 0; i < MAX_MFH_NUM; i++) {

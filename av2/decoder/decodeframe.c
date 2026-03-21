@@ -7785,6 +7785,10 @@ static void handle_sequence_header(AV2Decoder *pbi, OBU_TYPE obu_type,
     ) {
       reset_qm_list(pbi);
     }
+
+    // Reset layer refresh frame flag at the first vcl obu.
+    for (int layer = 0; layer < MAX_NUM_MLAYERS; ++layer)
+      cm->layer_refresh_frame_flags[layer] = 0;
   }
 
   if (!keyframe_unit_in_tu) {
@@ -8163,8 +8167,13 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
       current_frame->frame_type = S_FRAME;
       cm->restricted_prediction_switch = avm_rb_read_bit(rb);
       if (cm->restricted_prediction_switch) {
-        for (int i = 0; i < REF_FRAMES; i++) {
+        int frames_to_keep = 0;
+        for (int layer_idx = 0; layer_idx < cm->mlayer_id; ++layer_idx)
+          frames_to_keep |= cm->layer_refresh_frame_flags[layer_idx];
+
+        for (int i = 0; i < cm->seq_params.ref_frames; i++) {
           if (cm->ref_frame_map[i] != NULL) {
+            if ((frames_to_keep >> i) & 0x1) continue;
             cm->ref_frame_map[i]->is_restricted = true;
             cm->ref_frame_map[i]->frame_output_done = true;
           }
@@ -8533,6 +8542,9 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
   if (pbi->obu_type == OBU_RAS_FRAME) {
     mark_reference_frames_with_long_term_ids(pbi);
   }
+
+  cm->layer_refresh_frame_flags[cm->mlayer_id] =
+      current_frame->refresh_frame_flags;
 
   features->allow_lf_sub_pu = 0;
   if (current_frame->frame_type == KEY_FRAME) {

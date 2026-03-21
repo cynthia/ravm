@@ -3008,6 +3008,11 @@ typedef struct AV2Common {
    */
   int olk_refresh_frame_flags[MAX_NUM_MLAYERS];
   /*!
+   * Accumulated refresh_frame_flags in the reference list per layer.
+   * Initialized to -1 (unset).
+   */
+  int layer_refresh_frame_flags[MAX_NUM_MLAYERS];
+  /*!
    * Accumulated refresh_frame_flags of regular VCL OBUs co-signalled with an
    * OLK in the same temporal unit, per mlayer. Initialized to -1 (unset).
    */

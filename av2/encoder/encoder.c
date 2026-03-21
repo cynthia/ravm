@@ -4953,9 +4953,15 @@ int av2_encode(AV2_COMP *const cpi, uint8_t *const dest,
 
   if (cm->restricted_prediction_switch) {
     if (current_frame->frame_type == S_FRAME) {
+      int frames_to_keep = 0;
+      for (int layer_idx = 0; layer_idx < cm->mlayer_id; ++layer_idx)
+        frames_to_keep |= cm->layer_refresh_frame_flags[layer_idx];
+
       for (int i = 0; i < cm->seq_params.ref_frames; i++) {
-        if (cm->ref_frame_map[i] != NULL)
+        if (cm->ref_frame_map[i] != NULL) {
+          if ((frames_to_keep >> i) & 0x1) continue;
           cm->ref_frame_map[i]->is_restricted = true;
+        }
       }
 #if CONFIG_G041
       // NOTE: the quantization matrices should be reset at {the first

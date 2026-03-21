@@ -50,6 +50,7 @@ class MultiLayerTest : public ::libavm_test::CodecTestWithParam<int>,
     enable_s_frame_ = false;
     start_decoding_tl1_ = 0;
     pyramid_level_one_ = false;
+    key_frame_on_ml_layers_ = 0;
   }
 
   int GetNumEmbeddedLayers() override { return num_embedded_layers_; }
@@ -59,6 +60,16 @@ class MultiLayerTest : public ::libavm_test::CodecTestWithParam<int>,
     (void)video;
     encoder->SetOption("add-sef-for-output", "1");
     frame_flags_ = 0;
+    if (key_frame_on_ml_layers_) {
+      if (key_frame_on_ml_layers_ == 2) {
+        // Place key frame on both 2 ml layers, for 2 embedded layers.
+        if (layer_frame_cnt_ >= 8 && layer_frame_cnt_ < 10)
+          frame_flags_ |= AVM_EFLAG_FORCE_KF;
+      } else if (key_frame_on_ml_layers_ == 1) {
+        // Place it on base ml only, for 2 embedded layers.
+        if (layer_frame_cnt_ == 8) frame_flags_ = AVM_EFLAG_FORCE_KF;
+      }
+    }
     if (layer_frame_cnt_ == 0) {
       encoder->Control(AVME_SET_CPUUSED, speed_);
       encoder->Control(AVME_SET_NUMBER_MLAYERS, num_embedded_layers_);
@@ -328,6 +339,7 @@ class MultiLayerTest : public ::libavm_test::CodecTestWithParam<int>,
   // Frame to start encoding the tl=1 layer.
   int start_decoding_tl1_;
   bool pyramid_level_one_;
+  int key_frame_on_ml_layers_;
 };
 
 // The pattern for 2TL is as follows, where prediction can only be within
@@ -702,13 +714,56 @@ TEST_P(MultiLayerTest, MultiLayerTest2Embedded2TemporalLag) {
 
 // 2 embedded (spatial) layers with periodic keyframe. Keyframe is inserted
 // on base ml=0 at time 4, 8, 12, 16.
-TEST_P(MultiLayerTest, DISABLED_MultiLayerTest2EmbeddedKeyFrame) {
+TEST_P(MultiLayerTest, MultiLayerTest2EmbeddedKeyFrame) {
   ::libavm_test::Y4mVideoSource video_nonsc("park_joy_90p_8_420.y4m", 0, 20);
   cfg_.g_lag_in_frames = 0;
   cfg_.kf_min_dist = 4;
   cfg_.kf_max_dist = 4;
   num_temporal_layers_ = 1;
   num_embedded_layers_ = 2;
+  decode_base_only_ = false;
+  drop_tl2_ = false;
+  enable_explicit_ref_frame_map_ = false;
+  ASSERT_NO_FATAL_FAILURE(RunLoop(&video_nonsc));
+  EXPECT_EQ(num_mismatch_, 0);
+}
+
+// No layers with keyframe inserted at frame# 8.
+TEST_P(MultiLayerTest, MultiLayerTest2EmbeddedKeyFrameEx1) {
+  ::libavm_test::Y4mVideoSource video_nonsc("park_joy_90p_8_420.y4m", 0, 20);
+  cfg_.g_lag_in_frames = 0;
+  num_temporal_layers_ = 1;
+  num_embedded_layers_ = 1;
+  key_frame_on_ml_layers_ = 1;
+  decode_base_only_ = false;
+  drop_tl2_ = false;
+  enable_explicit_ref_frame_map_ = false;
+  ASSERT_NO_FATAL_FAILURE(RunLoop(&video_nonsc));
+  EXPECT_EQ(num_mismatch_, 0);
+}
+
+// 2 embedded (spatial) layers with keyframe inserted on base ml=0 at frame# 8.
+TEST_P(MultiLayerTest, MultiLayerTest2EmbeddedKeyFrameEx2) {
+  ::libavm_test::Y4mVideoSource video_nonsc("park_joy_90p_8_420.y4m", 0, 20);
+  cfg_.g_lag_in_frames = 0;
+  num_temporal_layers_ = 1;
+  num_embedded_layers_ = 2;
+  key_frame_on_ml_layers_ = 1;
+  decode_base_only_ = false;
+  drop_tl2_ = false;
+  enable_explicit_ref_frame_map_ = false;
+  ASSERT_NO_FATAL_FAILURE(RunLoop(&video_nonsc));
+  EXPECT_EQ(num_mismatch_, 0);
+}
+
+// 2 embedded (spatial) layers with keyframe. Keyframe is inserted on
+// ml = 0, 1 (at frames 8, 9).
+TEST_P(MultiLayerTest, MultiLayerTest2EmbeddedKeyFrameEx3) {
+  ::libavm_test::Y4mVideoSource video_nonsc("park_joy_90p_8_420.y4m", 0, 20);
+  cfg_.g_lag_in_frames = 0;
+  num_temporal_layers_ = 1;
+  num_embedded_layers_ = 2;
+  key_frame_on_ml_layers_ = 2;
   decode_base_only_ = false;
   drop_tl2_ = false;
   enable_explicit_ref_frame_map_ = false;

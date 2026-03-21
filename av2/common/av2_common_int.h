@@ -682,12 +682,12 @@ typedef struct RepresentationInfo {
 } RepresentationInfo;
 
 #if CONFIG_AV2_LCR_PROFILES
-typedef struct LcrAggregateProfileTierLevelInfo {
+typedef struct LcrAggregateInfo {
   int lcr_config_idc;           // f(6)
   int lcr_aggregate_level_idx;  // f(5)
   int lcr_max_tier_flag;        // f(1)
   int lcr_max_interop;          // f(4)
-} LcrAggregateProfileTierLevelInfo;
+} LcrAggregateInfo;
 
 typedef struct LcrSeqProfileTierLevelInfo {
   int lcr_seq_profile_idc;   // f(5)
@@ -751,7 +751,7 @@ typedef struct GlobalLayerConfigurationRecord {
   int lcr_global_config_record_id;  // 1-7
   // int lcr_max_num_extended_layers_minus_1;
   int lcr_xlayer_map;
-  int lcr_aggregate_profile_tier_level_info_present_flag;
+  int lcr_aggregate_info_present_flag;
   int lcr_global_payload_present_flag;
   int lcr_seq_profile_tier_level_info_present_flag;
   int lcr_global_atlas_id_present_flag;
@@ -775,7 +775,7 @@ typedef struct GlobalLayerConfigurationRecord {
   uint32_t lcr_num_dependent_xlayer_map[MAX_NUM_XLAYERS];
   // Xlayer infor for each extended layer in this global LCR
   struct LCRXLayerInfo xlayer_info[MAX_NUM_XLAYERS];
-  struct LcrAggregateProfileTierLevelInfo aggregate_ptl;
+  struct LcrAggregateInfo aggregate_ptl;
   struct LcrSeqProfileTierLevelInfo seq_ptl[31];
 } GlobalLayerConfigurationRecord;
 

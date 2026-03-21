@@ -2070,7 +2070,7 @@ static BITSTREAM_PROFILE get_lcr_global_profile(struct AV2Decoder *pbi) {
     if (pbi->lcr_list[GLOBAL_XLAYER_ID][j].valid) {
       const struct GlobalLayerConfigurationRecord *glcr =
           &pbi->lcr_list[GLOBAL_XLAYER_ID][j].global_lcr;
-      if (glcr->lcr_aggregate_profile_tier_level_info_present_flag)
+      if (glcr->lcr_aggregate_info_present_flag)
         return (BITSTREAM_PROFILE)glcr->aggregate_ptl.lcr_max_interop;
       // Fall back to the first seq PTL if aggregate PTL is not present.
       if (glcr->lcr_seq_profile_tier_level_info_present_flag &&

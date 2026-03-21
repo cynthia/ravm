@@ -58,20 +58,23 @@ from Utils import (
 ###############################################################################
 ##### Helper Functions ########################################################
 
+
 def StartJobScript(test_cfg, job_name):
     """Create and open a new shell script file for an individual job"""
     job_file_folder = os.path.join(Path_CmdLog, test_cfg)
     if not os.path.exists(job_file_folder):
         os.makedirs(job_file_folder)
     Utils.CurrentJobFileName = os.path.join(job_file_folder, job_name + ".sh")
-    Utils.CurrentJobFile = open(Utils.CurrentJobFileName, 'wt')
+    Utils.CurrentJobFile = open(Utils.CurrentJobFileName, "wt")
     Utils.CurrentJobFile.write("#!/bin/bash\n\n")
+
 
 def WriteToJobScript(cmd):
     """Write a command to the current job shell script"""
     if Utils.CurrentJobFile:
         Utils.CurrentJobFile.write(cmd + "\n")
         Utils.CurrentJobFile.write("wait\n")
+
 
 def EndJobScript():
     """Close the current job shell script and make it executable"""
@@ -80,6 +83,7 @@ def EndJobScript():
         os.chmod(Utils.CurrentJobFileName, 0o755)
         Utils.CurrentJobFile = None
         Utils.CurrentJobFileName = None
+
 
 def CleanIntermediateFiles():
     folders = [Path_DecodedYuv, Path_CfgFiles]
@@ -356,6 +360,8 @@ def Run_Decode_Test(test_cfg, clip, codec, method, preset, LogCmdOnly=False):
                 Utils.CmdLogger.write(
                     "============== %s Job Start =================\n" % JobName
                 )
+                # Start individual shell script for this job
+                StartJobScript(test_cfg, JobName)
 
             bsfile = "%s/%s_%s_%s_%s_Preset_%s_QP_%d.obu" % (
                 path_bs,
@@ -400,6 +406,8 @@ def Run_Decode_Test(test_cfg, clip, codec, method, preset, LogCmdOnly=False):
                 Utils.CmdLogger.write(
                     "============== %s Job End ===================\n\n" % JobName
                 )
+                # End individual shell script for this job
+                EndJobScript()
     else:
         Utils.Logger.error(
             "decode function can only be used with Parallel Gop Encoding mode"

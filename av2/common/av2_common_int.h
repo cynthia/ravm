@@ -681,13 +681,12 @@ typedef struct RepresentationInfo {
   int lcr_chroma_format_idc;
 } RepresentationInfo;
 
-#if CONFIG_AV2_LCR_PROFILES
-typedef struct LcrAggregateInfo {
+typedef struct LcrAggregateProfileTierLevelInfo {
   int lcr_config_idc;           // f(6)
   int lcr_aggregate_level_idx;  // f(5)
   int lcr_max_tier_flag;        // f(1)
   int lcr_max_interop;          // f(4)
-} LcrAggregateInfo;
+} LcrAggregateProfileTierLevelInfo;
 
 typedef struct LcrSeqProfileTierLevelInfo {
   int lcr_seq_profile_idc;   // f(5)
@@ -751,7 +750,7 @@ typedef struct GlobalLayerConfigurationRecord {
   int lcr_global_config_record_id;  // 1-7
   // int lcr_max_num_extended_layers_minus_1;
   int lcr_xlayer_map;
-  int lcr_aggregate_info_present_flag;
+  int lcr_aggregate_profile_tier_level_info_present_flag;
   int lcr_global_payload_present_flag;
   int lcr_seq_profile_tier_level_info_present_flag;
   int lcr_global_atlas_id_present_flag;
@@ -775,7 +774,7 @@ typedef struct GlobalLayerConfigurationRecord {
   uint32_t lcr_num_dependent_xlayer_map[MAX_NUM_XLAYERS];
   // Xlayer infor for each extended layer in this global LCR
   struct LCRXLayerInfo xlayer_info[MAX_NUM_XLAYERS];
-  struct LcrAggregateInfo aggregate_ptl;
+  struct LcrAggregateProfileTierLevelInfo aggregate_ptl;
   struct LcrSeqProfileTierLevelInfo seq_ptl[31];
 } GlobalLayerConfigurationRecord;
 
@@ -804,77 +803,6 @@ typedef struct LayerConfigurationRecord {
   struct LocalLayerConfigurationRecord local_lcr;
   int lcr_extension_present_flag;
 } LayerConfigurationRecord;
-#else
-
-typedef struct XLayerColorInfo {
-  int layer_color_description_idc[MAX_LCR_TYPES][MAX_NUM_XLAYERS];
-  int layer_color_primaries[MAX_LCR_TYPES][MAX_NUM_XLAYERS];
-  int layer_transfer_characteristics[MAX_LCR_TYPES][MAX_NUM_XLAYERS];
-  int layer_matrix_coefficients[MAX_LCR_TYPES][MAX_NUM_XLAYERS];
-  int layer_full_range_flag[MAX_LCR_TYPES][MAX_NUM_XLAYERS];
-} XLayerColorInfo;
-
-typedef struct EmbeddedLayerInfo {
-  int lcr_mlayer_map[MAX_LCR_TYPES][MAX_NUM_XLAYERS];
-  int lcr_tlayer_map[MAX_LCR_TYPES][MAX_NUM_XLAYERS][MAX_NUM_MLAYERS];
-  int lcr_layer_type[MAX_LCR_TYPES][MAX_NUM_XLAYERS][8];
-  int lcr_auxiliary_type[MAX_LCR_TYPES][MAX_NUM_XLAYERS][8];
-  int lcr_view_type[MAX_LCR_TYPES][MAX_NUM_XLAYERS][8];
-  int lcr_view_id[MAX_LCR_TYPES][MAX_NUM_XLAYERS][8];
-  int lcr_dependent_layer_map[MAX_LCR_TYPES][MAX_NUM_XLAYERS][8];
-  int lcr_atlas_segments_info_present_flag[MAX_NUM_XLAYERS][MAX_NUM_XLAYERS][8];
-  int lcr_layer_atlas_segment_id[MAX_NUM_XLAYERS][MAX_NUM_XLAYERS][8];
-  int lcr_priority_order[MAX_NUM_XLAYERS][MAX_NUM_XLAYERS][8];
-  int lcr_rendering_method[MAX_NUM_XLAYERS][MAX_NUM_XLAYERS][8];
-  int LcrMlayerID[MAX_LCR_TYPES][MAX_NUM_XLAYERS][MAX_NUM_MLAYERS];
-  int TLayerCount[MAX_LCR_TYPES][MAX_NUM_XLAYERS][MAX_NUM_MLAYERS];
-  int LcrTlayerID[MAX_LCR_TYPES][MAX_NUM_XLAYERS][MAX_NUM_TLAYERS];
-  int MLayerCount[MAX_LCR_TYPES][MAX_NUM_XLAYERS];
-} EmbeddedLayerInfo;
-
-typedef struct LayerConfigurationRecord {
-  int lcr_global_config_record_id;
-  int lcr_max_num_extended_layers_minus_1;
-  int lcr_max_profile_tier_level_info_present_flag;
-  int lcr_global_atlas_id_present_flag;
-  int dependent_atlas_id_present_flag;
-  int lcr_reserved_zero_2bits;
-  int lcr_global_atlas_id;
-  int lcr_reserved_zero_3bits;
-  int lcr_data_size_present_flag;
-  int lcr_global_purpose_id;
-  int lcr_enforce_tu_alignment_flag;
-  int lcr_enforce_tile_alignment_flag;
-
-  uint32_t lcr_data_size[MAX_NUM_XLAYERS];
-  int lcr_xLayer_id[MAX_NUM_XLAYERS];
-  uint32_t lcr_num_dependent_xlayer_map[MAX_NUM_XLAYERS];
-  int lcr_dependent_xlayers_flag;
-  int lcr_global_id[MAX_NUM_XLAYERS];
-  int lcr_local_id[MAX_NUM_XLAYERS];
-  int lcr_local_atlas_id_present_flag[MAX_NUM_XLAYERS];
-  int lcr_local_atlas_id[MAX_NUM_XLAYERS];
-  int lcr_reserved_zero_6bits;
-
-  int lcr_rep_info_present_flag[MAX_LCR_TYPES][MAX_NUM_XLAYERS];
-  int lcr_xlayer_purpose_present_flag[MAX_LCR_TYPES][MAX_NUM_XLAYERS];
-  int lcr_xlayer_color_info_present_flag[MAX_LCR_TYPES][MAX_NUM_XLAYERS];
-  int lcr_embedded_layer_info_present_flag[MAX_LCR_TYPES][MAX_NUM_XLAYERS];
-  int lcr_xlayer_purpose_id[MAX_LCR_TYPES][MAX_NUM_XLAYERS];
-  int lcr_xlayer_atlas_segment_id[MAX_NUM_XLAYERS];
-  int lcr_xlayer_priority_order[MAX_NUM_XLAYERS];
-  int lcr_xlayer_rendering_method[MAX_NUM_XLAYERS];
-  bool is_local_lcr;
-  int xlayer_id;
-  struct CroppingWindow lcr_crop;
-  struct CroppingWindow crop_win_list[MAX_NUM_XLAYERS][MAX_NUM_XLAYERS];
-  struct RepresentationInfo rep_params;
-  struct RepresentationInfo rep_list[MAX_LCR_TYPES][MAX_NUM_XLAYERS];
-  struct XLayerColorInfo xlayer_col_params;
-  struct EmbeddedLayerInfo mlayer_params;
-  int lcr_extension_present_flag;
-} LayerConfigurationRecord;
-#endif  // CONFIG_AV2_LCR_PROFILES
 
 // Each AtlasSegmentInfo represents ONE atlas OBU
 // identified by obu_xlayer_id, atlas_segment_id) pair
@@ -3455,7 +3383,6 @@ static INLINE RefCntBuffer *get_primary_ref_frame_buf(
     return cm->ref_frame_map[map_idx];
 }
 
-#if CONFIG_AV2_LCR_PROFILES
 // Looks up the EmbeddedLayerInfo for a given xlayer_id in a global LCR.
 // Returns NULL if the xlayer_id is not found or embedded layer info is absent.
 static INLINE const EmbeddedLayerInfo *get_embedded_layer_info_from_global_lcr(
@@ -3509,7 +3436,6 @@ static INLINE int check_lcr_frame_size_conformance(const AV2_COMMON *cm,
   *layer_id = mlayer_id;
   return (width > *max_w || height > *max_h);
 }
-#endif  // CONFIG_AV2_LCR_PROFILES
 
 // Returns 1 if this frame might allow mvs from some reference frame.
 static INLINE int frame_might_allow_ref_frame_mvs(const AV2_COMMON *cm) {

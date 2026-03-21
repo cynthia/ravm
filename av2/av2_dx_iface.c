@@ -808,7 +808,6 @@ static avm_codec_err_t decoder_decode(avm_codec_alg_priv_t *ctx,
 
       bool global_lcr_present = false;
       bool local_lcr_present = false;
-#if CONFIG_AV2_LCR_PROFILES
       for (int j = 0; j < MAX_NUM_LCR; j++) {
         if (pbi->lcr_list[GLOBAL_XLAYER_ID][j].valid) global_lcr_present = true;
       }
@@ -820,10 +819,6 @@ static avm_codec_err_t decoder_decode(avm_codec_alg_priv_t *ctx,
           }
         }
       }
-#else
-      global_lcr_present = !pbi->common.lcr_params.is_local_lcr;
-      local_lcr_present = pbi->common.lcr_params.is_local_lcr;
-#endif  // CONFIG_AV2_LCR_PROFILES
 
       if (!conformance_check_msdo_lcr(pbi, global_lcr_present,
                                       local_lcr_present)) {

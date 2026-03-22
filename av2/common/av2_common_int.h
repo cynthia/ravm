@@ -1258,6 +1258,8 @@ typedef struct SequenceHeader {
   int mlayer_dependency_present_flag;
   // Layer dependency structure arrays
   int tlayer_dependency_map[MAX_NUM_MLAYERS][MAX_NUM_TLAYERS][MAX_NUM_TLAYERS];
+  // M-layer dependency structure.
+  // mlayer_dependency_map[i][j] = 1 if mlayer i depends on mlayer j.
   int mlayer_dependency_map[MAX_NUM_MLAYERS][MAX_NUM_MLAYERS];
   // Flag indicating tlayer map signaling per mlayer
   int multi_tlayer_dependency_map_present_flag;
@@ -3317,25 +3319,24 @@ static INLINE int is_mlayer_scalable_and_dependent(
   }
 }
 
-// Returns true if mlayer `curr_layer_id` transitively depends on mlayer
-// `ref_layer_id`. Also returns true if both layer IDs are the same. Otherwise,
-// returns false.
+// Returns true if mlayer `layer_a` transitively depends on mlayer
+// `layer_b`. Also returns true if both layer IDs are the same.
+// Otherwise, returns false.
 static INLINE int is_mlayer_transitively_dependent(
-    const SequenceHeader *const seq, const int curr_layer_id,
-    const int ref_layer_id) {
-  if (curr_layer_id == ref_layer_id) return 1;
-  if (!seq->mlayer_dependency_present_flag) return curr_layer_id > ref_layer_id;
+    const SequenceHeader *const seq, int layer_a, int layer_b) {
+  if (layer_a == layer_b) return 1;
+  if (!seq->mlayer_dependency_present_flag) return layer_a > layer_b;
 
   int visited[MAX_NUM_MLAYERS] = { 0 };
   int queue[MAX_NUM_MLAYERS];
   int head = 0, tail = 0;
 
-  queue[tail++] = curr_layer_id;
-  visited[curr_layer_id] = 1;
+  queue[tail++] = layer_a;
+  visited[layer_a] = 1;
 
   while (head < tail) {
     int layer = queue[head++];
-    if (layer == ref_layer_id) return 1;
+    if (layer == layer_b) return 1;
     for (int i = 0; i <= seq->max_mlayer_id; i++) {
       if (seq->mlayer_dependency_map[layer][i] && !visited[i]) {
         visited[i] = 1;

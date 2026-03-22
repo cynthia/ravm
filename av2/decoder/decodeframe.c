@@ -8164,9 +8164,9 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
       if (cm->restricted_prediction_switch) {
         for (int i = 0; i < REF_FRAMES; i++) {
           if (cm->ref_frame_map[i] != NULL) {
-            int ref_mlayer_id = cm->ref_frame_map[i]->mlayer_id;
-            if (is_mlayer_transitively_dependent(&cm->seq_params, cm->mlayer_id,
-                                                 ref_mlayer_id)) {
+            if (is_mlayer_transitively_dependent(
+                    &cm->seq_params, cm->ref_frame_map[i]->mlayer_id,
+                    cm->mlayer_id)) {
               cm->ref_frame_map[i]->is_restricted = true;
               cm->ref_frame_map[i]->display_order_hint = REF_RESTRICTED_DOH;
               cm->ref_frame_map[i]->frame_output_done = true;

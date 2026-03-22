@@ -1300,8 +1300,8 @@ int av2_encode_strategy(AV2_COMP *const cpi, size_t *const size,
       if (buf == NULL) continue;
       const int frame_order =
           (cpi->oxcf.kf_cfg.sframe_dist != 0 &&
-           is_mlayer_transitively_dependent(&cm->seq_params, cm->mlayer_id,
-                                            buf->mlayer_id))
+           is_mlayer_transitively_dependent(&cm->seq_params, buf->mlayer_id,
+                                            cm->mlayer_id))
               ? (int)buf->display_order_hint_restricted
               : (int)buf->display_order_hint;
       if (frame_order == cur_frame_disp) {
@@ -1473,8 +1473,8 @@ int av2_encode_strategy(AV2_COMP *const cpi, size_t *const size,
       if (buf == NULL) continue;
       const int frame_order =
           (cpi->oxcf.kf_cfg.sframe_dist != 0 &&
-           is_mlayer_transitively_dependent(&cm->seq_params, cm->mlayer_id,
-                                            buf->mlayer_id))
+           is_mlayer_transitively_dependent(&cm->seq_params, buf->mlayer_id,
+                                            cm->mlayer_id))
               ? (int)buf->display_order_hint_restricted
               : (int)buf->display_order_hint;
       if (frame_order == cur_frame_disp && cm->mlayer_id == buf->mlayer_id) {

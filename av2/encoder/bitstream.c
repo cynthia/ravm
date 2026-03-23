@@ -5882,8 +5882,11 @@ uint32_t av2_write_obu_header(AV2LevelParams *const level_params,
 
   assert(IMPLIES(obu_type == OBU_MULTI_STREAM_DECODER_OPERATION,
                  obu_temporal == 0 && obu_layer == GLOBAL_XLAYER_ID));
+  assert(IMPLIES(obu_type == OBU_TEMPORAL_DELIMITER,
+                 obu_layer == GLOBAL_XLAYER_ID));
   int obu_header_extension_flag =
-      (obu_type != OBU_MULTI_STREAM_DECODER_OPERATION && obu_layer != 0);
+      (obu_type != OBU_MULTI_STREAM_DECODER_OPERATION &&
+       obu_type != OBU_TEMPORAL_DELIMITER && obu_layer != 0);
   avm_wb_write_bit(&wb, obu_header_extension_flag);
   avm_wb_write_literal(&wb, (int)obu_type, 5);
   avm_wb_write_literal(&wb, obu_temporal, TLAYER_BITS);

@@ -18,6 +18,10 @@
 
 #include "tools/stream_mux.h"
 
+// When 1, rewrite TD with 2-byte header (extension_flag=1, xlayer_id=GLOBAL).
+// When 0, preserve the original 1-byte TD header from the input stream.
+#define REWRITE_TD_WITH_GLOBAL_XLAYER 0
+
 // This function writes a multi-stream decoder operation OBU,
 // when multiple sub-streams are merged into one bitstream.
 static int write_multi_stream_decoder_operation_obu(uint8_t *const dst,
@@ -90,6 +94,23 @@ static void write_obu_header_with_stream_id(uint8_t *const dst,
   avm_wb_write_literal(&wb, stream_id, 5);                  // obu_xlayer
 }
 
+static bool TuHasKeyFrame(const uint8_t *data, int length) {
+  int pos = 0;
+  while (pos < length) {
+    size_t lfs = 0;
+    uint64_t obu_sz = 0;
+    if (avm_uleb_decode(data + pos, length - pos, &obu_sz, &lfs) != 0) break;
+    ObuHeader hdr;
+    memset(&hdr, 0, sizeof(hdr));
+    if (!ParseAV2ObuHeader(*(data + pos + lfs), &hdr)) break;
+    if (hdr.type == OBU_CLOSED_LOOP_KEY || hdr.type == OBU_OPEN_LOOP_KEY ||
+        hdr.type == OBU_RAS_FRAME)
+      return true;
+    pos += static_cast<int>(obu_sz) + static_cast<int>(lfs);
+  }
+  return false;
+}
+
 // This function read a temporal unit from a sub-stream,
 // writes the temporal unit with updates of xlayer_id,
 // and multiplex the temporal units into a merged bitstream.
@@ -103,8 +124,9 @@ std::vector<uint8_t> WriteTU(const uint8_t *data, int length,
   const int kMinimumBytesRequired = 1 + kObuHeaderSizeBytes;
   int consumed = 0;
   int obu_overhead = 0;
-  int msdo_signaled = 0;
   ObuHeader obu_header;
+
+  const bool tu_has_key_frame = TuHasKeyFrame(data, length);
 
   while (consumed < length) {
     const int remaining = length - consumed;
@@ -162,46 +184,52 @@ std::vector<uint8_t> WriteTU(const uint8_t *data, int length,
     std::vector<uint8_t> obu_tmp(data_ptr + length_field_size,
                                  data_ptr + obu_total_size + length_field_size);
 
-    if (!msdo_signaled &&
-        (redundant_msdo ||
-         ((obu_header.type == OBU_LAYER_CONFIGURATION_RECORD ||
-           obu_header.type == OBU_OPERATING_POINT_SET ||
-           obu_header.type == OBU_ATLAS_SEGMENT ||
-           ((obu_header.type == OBU_METADATA_SHORT ||
-             obu_header.type == OBU_METADATA_GROUP) &&
-            obu_header.obu_header_extension_flag &&
-            obu_header.obu_xlayer_id == GLOBAL_XLAYER_ID) ||
-           obu_header.type == OBU_SEQUENCE_HEADER) &&
-          seg_idx == 0))) {
-      std::vector<uint8_t> multi_stream_obu(num_streams * 2 + 4);
-      int multi_header_obu_size = write_multi_stream_decoder_operation_obu(
-          multi_stream_obu.data(), num_streams, stream_ids,
-          stream_buffer_units);
-      std::vector<uint8_t> multi_header_obu_size_data(length_field_size);
-      size_t multi_header_length_field_size = 0;
-      avm_uleb_encode(multi_header_obu_size, sizeof(multi_header_obu_size),
-                      multi_header_obu_size_data.data(),
-                      &multi_header_length_field_size);
-      tu_obus.insert(
-          tu_obus.end(), multi_header_obu_size_data.begin(),
-          multi_header_obu_size_data.begin() + multi_header_length_field_size);
-      tu_obus.insert(tu_obus.end(), multi_stream_obu.begin(),
-                     multi_stream_obu.begin() + multi_header_obu_size);
-      msdo_signaled = 1;
-    }
-
-    // Rewrite OBU header with signaling stream_id
+    // Write the temporal delimiter first, before any MSDO insertion,
+    // since the MSDO must come after the TD in the OBU order.
     if (obu_header.type == OBU_TEMPORAL_DELIMITER) {
+#if REWRITE_TD_WITH_GLOBAL_XLAYER
+      // Rewrite TD with 2-byte header: extension_flag=1, xlayer_id=31(GLOBAL)
+      // Byte 0: ext=1 | type=00010(TD) | tlayer=00 = 0x88
+      // Byte 1: mlayer=000 | xlayer=11111 = 0x1F
+      uint8_t td_obu_size = 2;  // leb128 encoding of OBU size (2 header bytes)
+      tu_obus.push_back(td_obu_size);
+      tu_obus.push_back(0x88);
+      tu_obus.push_back(0x1F);
+#else
       std::vector<uint8_t> obu_size_data(length_field_size);
       size_t coded_obu_size;
       avm_uleb_encode(obu_total_size, sizeof(obu_total_size),
                       obu_size_data.data(), &coded_obu_size);
-      if (length_field_size != coded_obu_size)
-        fprintf(stderr, "\nError: length_field_size != coded_obu_size\n");
-      tu_obus.insert(tu_obus.end(), obu_size_data.begin(), obu_size_data.end());
+      tu_obus.insert(tu_obus.end(), obu_size_data.begin(),
+                     obu_size_data.begin() + coded_obu_size);
       tu_obus.insert(tu_obus.end(), obu_tmp.begin(), obu_tmp.end());
+#endif
 
-    } else {
+      // Insert MSDO immediately after the TD when required.
+      if (redundant_msdo || tu_has_key_frame) {
+        std::vector<uint8_t> multi_stream_obu(num_streams * 2 + 4);
+        int multi_header_obu_size = write_multi_stream_decoder_operation_obu(
+            multi_stream_obu.data(), num_streams, stream_ids,
+            stream_buffer_units);
+        std::vector<uint8_t> multi_header_obu_size_data(length_field_size);
+        size_t multi_header_length_field_size = 0;
+        avm_uleb_encode(multi_header_obu_size, sizeof(multi_header_obu_size),
+                        multi_header_obu_size_data.data(),
+                        &multi_header_length_field_size);
+        tu_obus.insert(tu_obus.end(), multi_header_obu_size_data.begin(),
+                       multi_header_obu_size_data.begin() +
+                           multi_header_length_field_size);
+        tu_obus.insert(tu_obus.end(), multi_stream_obu.begin(),
+                       multi_stream_obu.begin() + multi_header_obu_size);
+      }
+
+      data_ptr += static_cast<int>(obu_total_size) +
+                  static_cast<int>(length_field_size);
+      continue;
+    }
+
+    // Rewrite OBU header with signaling stream_id
+    {
       std::vector<uint8_t> obu_size_data(length_field_size + 1);
       size_t coded_obu_size;
       avm_uleb_encode(obu_total_size - obu_header_size + 2,
@@ -256,9 +284,9 @@ int main(int argc, const char *argv[]) {
 
   for (int i = 0; i < num_streams; ++i) {
     int stream_id = atoi(argv[arg_offset + i * 3 + 2]);
-    if (stream_id > 7) {
-      fprintf(stderr,
-              "The value of stream_id cannot exceed the max value (7)\n");
+    if (stream_id < 0 || stream_id >= (1 << XLAYER_BITS)) {
+      fprintf(stderr, "The value of stream_id must be in range [0, %d]\n",
+              (1 << XLAYER_BITS) - 1);
       return -1;
     }
   }

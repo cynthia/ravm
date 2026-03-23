@@ -331,3 +331,80 @@ int obudec_read_frame_unit(struct ObuDecInputContext *obu_ctx, uint8_t **buffer,
 }
 
 void obudec_free(struct ObuDecInputContext *obu_ctx) { free(obu_ctx->buffer); }
+
+int obudec_read_temporal_unit(struct ObuDecInputContext *obu_ctx,
+                              uint8_t **buffer, size_t *bytes_read,
+                              size_t *buffer_size) {
+  FILE *f = obu_ctx->avx_ctx->file;
+  if (!f) return -1;
+
+  *buffer_size = 0;
+  *bytes_read = 0;
+
+  if (feof(f)) return 1;
+
+  size_t tu_size = 0;
+  FileOffset fpos = ftello(f);
+  uint8_t detect_buf[OBU_DETECTION_SIZE] = { 0 };
+
+  // Scan OBUs, splitting on temporal delimiters.
+  while (1) {
+    ObuHeader obu_header;
+    memset(&obu_header, 0, sizeof(obu_header));
+    uint64_t obu_size = 0;
+    size_t obu_size_bytelength = 0;
+    if (obudec_read_leb128(f, &detect_buf[0], &obu_size_bytelength,
+                           &obu_size) != 0) {
+      fprintf(stderr, "obudec: Failure reading temporal unit header\n");
+    } else if (feof(f)) {
+      if (tu_size == 0)
+        return 1;
+      else
+        break;
+    }
+
+    const int obu_header_size =
+        read_obu_header_from_file(f, (size_t)obu_size, detect_buf, &obu_header);
+    if (obu_header_size == -2) return -1;
+    if (obu_header_size == -1) return 1;
+
+    // TD starts a new TU; if we already have data, this TD belongs to the next.
+    if (obu_header.type == OBU_TEMPORAL_DELIMITER && tu_size > 0) break;
+
+    if (fseeko(f, (FileOffset)obu_size - obu_header_size, SEEK_CUR) != 0) {
+      fprintf(stderr, "obudec: Failure seeking to end of OBU.\n");
+      return -1;
+    }
+    tu_size += (obu_size + obu_size_bytelength);
+  }  // while
+  if (fseeko(f, fpos, SEEK_SET) != 0) {
+    fprintf(stderr, "obudec: Failure restoring file position indicator.\n");
+    return -1;
+  }
+
+#if defined AVM_MAX_ALLOCABLE_MEMORY
+  if (tu_size > AVM_MAX_ALLOCABLE_MEMORY) {
+    fprintf(stderr, "obudec: Temporal Unit size exceeds max alloc size.\n");
+    return -1;
+  }
+#endif
+  if (tu_size > 0) {
+    uint8_t *new_buffer = (uint8_t *)realloc(*buffer, tu_size);
+    if (!new_buffer) {
+      free(*buffer);
+      fprintf(stderr, "obudec: Out of memory.\n");
+      return -1;
+    }
+    *buffer = new_buffer;
+  }
+  *bytes_read = tu_size;
+  *buffer_size = tu_size;
+
+  if (!feof(f)) {
+    if (fread(*buffer, sizeof(uint8_t), tu_size, f) != tu_size) {
+      fprintf(stderr, "obudec: Failed to read full temporal unit\n");
+      return -1;
+    }
+  }
+  return 0;
+}

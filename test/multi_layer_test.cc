@@ -639,6 +639,7 @@ TEST_P(MultiLayerTest, MultiLayerTest2EmbeddedLagEx1) {
   enable_buffer_refresh_test_ = false;
   pyramid_level_one_ = true;
   ASSERT_NO_FATAL_FAILURE(RunLoop(&video_nonsc));
+  EXPECT_EQ(num_mismatch_, 0);
 }
 
 // Test the case of nonzero lag for 2 embedded layers (ml), for both show (S)
@@ -660,6 +661,7 @@ TEST_P(MultiLayerTest, MultiLayerTest2EmbeddedLagEx2) {
   enable_buffer_refresh_test_ = false;
   pyramid_level_one_ = false;
   ASSERT_NO_FATAL_FAILURE(RunLoop(&video_nonsc));
+  EXPECT_EQ(num_mismatch_, 0);
 }
 
 // Test the case of nonzero lag for 2 embedded layers (ml) with OLK (fwd kf)
@@ -679,6 +681,7 @@ TEST_P(MultiLayerTest, MultiLayerTest2EmbeddedLagFwdKfEx1) {
   enable_buffer_refresh_test_ = false;
   pyramid_level_one_ = true;
   ASSERT_NO_FATAL_FAILURE(RunLoop(&video_nonsc));
+  EXPECT_EQ(num_mismatch_, 0);
 }
 
 // 2 temporal layers with nonzero lag. Under the test control
@@ -695,6 +698,7 @@ TEST_P(MultiLayerTest, MultiLayerTest2TemporalLag) {
   enable_buffer_refresh_test_ = false;
   pyramid_level_one_ = false;
   ASSERT_NO_FATAL_FAILURE(RunLoop(&video_nonsc));
+  EXPECT_EQ(num_mismatch_, 0);
 }
 
 // 2 embedded and 2 temporal layers with nonzero lag, under the test control
@@ -710,6 +714,7 @@ TEST_P(MultiLayerTest, MultiLayerTest2Embedded2TemporalLag) {
   enable_buffer_refresh_test_ = false;
   pyramid_level_one_ = false;
   ASSERT_NO_FATAL_FAILURE(RunLoop(&video_nonsc));
+  EXPECT_EQ(num_mismatch_, 0);
 }
 
 // 2 embedded (spatial) layers with periodic keyframe. Keyframe is inserted

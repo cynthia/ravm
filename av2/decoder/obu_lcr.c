@@ -37,8 +37,8 @@ static void validate_lcr_auxiliary_type(int lcr_aux_type, int layer_id,
   }
 }
 
-static void read_lcr_aggregate_profile_tier_level_info(
-    struct LcrAggregateProfileTierLevelInfo *ptl,
+static void read_lcr_aggregate_info(
+    struct LcrAggregateInfo *ptl,
     struct avm_read_bit_buffer *rb) {
   ptl->lcr_config_idc = avm_rb_read_literal(rb, CONFIG_BITS);
   ptl->lcr_aggregate_level_idx = avm_rb_read_literal(rb, LEVEL_BITS);
@@ -240,7 +240,7 @@ static void read_lcr_global_info(struct AV2Decoder *pbi,
       glcr->LcrMaxNumXLayerCount++;
     }
   }
-  glcr->lcr_aggregate_profile_tier_level_info_present_flag = avm_rb_read_bit(rb);
+  glcr->lcr_aggregate_info_present_flag = avm_rb_read_bit(rb);
   glcr->lcr_seq_profile_tier_level_info_present_flag = avm_rb_read_bit(rb);
   glcr->lcr_global_payload_present_flag = avm_rb_read_bit(rb);
   glcr->lcr_dependent_xlayers_flag = avm_rb_read_bit(rb);
@@ -254,8 +254,8 @@ static void read_lcr_global_info(struct AV2Decoder *pbi,
     glcr->lcr_reserved_zero_3bits = avm_rb_read_literal(rb, 3);
   glcr->lcr_reserved_zero_5bits = avm_rb_read_literal(rb, 5);
 
-  if (glcr->lcr_aggregate_profile_tier_level_info_present_flag)
-    read_lcr_aggregate_profile_tier_level_info(&glcr->aggregate_ptl, rb);
+  if (glcr->lcr_aggregate_info_present_flag)
+    read_lcr_aggregate_info(&glcr->aggregate_ptl, rb);
 
   if (glcr->lcr_seq_profile_tier_level_info_present_flag) {
     for (int i = 0; i < glcr->LcrMaxNumXLayerCount; i++) {

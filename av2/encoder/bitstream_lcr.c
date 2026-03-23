@@ -34,8 +34,8 @@
 #include "av2/encoder/bitstream.h"
 #include "av2/encoder/tokenize.h"
 
-static void write_lcr_aggregate_profile_tier_level_info(
-    struct LcrAggregateProfileTierLevelInfo *ptl,
+static void write_lcr_aggregate_info(
+    struct LcrAggregateInfo *ptl,
     struct avm_write_bit_buffer *wb) {
   avm_wb_write_literal(wb, ptl->lcr_config_idc, 6);
   avm_wb_write_literal(wb, ptl->lcr_aggregate_level_idx, 5);
@@ -199,7 +199,7 @@ static int write_lcr_global_info(struct LayerConfigurationRecord *lcr_params,
 
   avm_wb_write_literal(wb, glcr->lcr_global_config_record_id, 3);
   avm_wb_write_literal(wb, glcr->lcr_xlayer_map, 31);
-  avm_wb_write_bit(wb, glcr->lcr_aggregate_profile_tier_level_info_present_flag);
+  avm_wb_write_bit(wb, glcr->lcr_aggregate_info_present_flag);
   avm_wb_write_bit(wb, glcr->lcr_seq_profile_tier_level_info_present_flag);
   avm_wb_write_bit(wb, glcr->lcr_global_payload_present_flag);
   avm_wb_write_bit(wb, glcr->lcr_dependent_xlayers_flag);
@@ -213,8 +213,8 @@ static int write_lcr_global_info(struct LayerConfigurationRecord *lcr_params,
     avm_wb_write_literal(wb, glcr->lcr_reserved_zero_3bits, 3);
   avm_wb_write_literal(wb, glcr->lcr_reserved_zero_5bits, 5);
 
-  if (glcr->lcr_aggregate_profile_tier_level_info_present_flag)
-    write_lcr_aggregate_profile_tier_level_info(&glcr->aggregate_ptl, wb);
+  if (glcr->lcr_aggregate_info_present_flag)
+    write_lcr_aggregate_info(&glcr->aggregate_ptl, wb);
 
   if (glcr->lcr_seq_profile_tier_level_info_present_flag) {
     for (int i = 0; i < glcr->LcrMaxNumXLayerCount; i++) {

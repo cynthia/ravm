@@ -34,19 +34,16 @@ extern "C" {
  */
 #define AVM_IMAGE_ABI_VERSION (9) /**<\hideinitializer*/
 
-#define AVM_IMG_FMT_PLANAR 0x100  /**< Image is a planar format. */
-#define AVM_IMG_FMT_UV_FLIP 0x200 /**< V plane precedes U in memory. */
-/** 0x400 used to signal alpha channel, skipping for backwards compatibility. */
-#define AVM_IMG_FMT_HIGHBITDEPTH 0x800 /**< Image uses 16bit framebuffer. */
+#define AVM_IMG_FMT_UV_FLIP 0x100      /**< V plane precedes U in memory. */
+#define AVM_IMG_FMT_HIGHBITDEPTH 0x200 /**< Image uses 16bit framebuffer. */
 
 /*!\brief List of supported image formats */
 typedef enum avm_img_fmt {
   AVM_IMG_FMT_NONE,
-  AVM_IMG_FMT_YV12 =
-      AVM_IMG_FMT_PLANAR | AVM_IMG_FMT_UV_FLIP | 1, /**< planar YVU */
-  AVM_IMG_FMT_I420 = AVM_IMG_FMT_PLANAR | 2,
-  AVM_IMG_FMT_I422 = AVM_IMG_FMT_PLANAR | 3,
-  AVM_IMG_FMT_I444 = AVM_IMG_FMT_PLANAR | 4,
+  AVM_IMG_FMT_YV12 = AVM_IMG_FMT_UV_FLIP | 1, /**< planar YVU */
+  AVM_IMG_FMT_I420 = 2,
+  AVM_IMG_FMT_I422 = 3,
+  AVM_IMG_FMT_I444 = 4,
   AVM_IMG_FMT_I42016 = AVM_IMG_FMT_I420 | AVM_IMG_FMT_HIGHBITDEPTH,
   AVM_IMG_FMT_YV1216 = AVM_IMG_FMT_YV12 | AVM_IMG_FMT_HIGHBITDEPTH,
   AVM_IMG_FMT_I42216 = AVM_IMG_FMT_I422 | AVM_IMG_FMT_HIGHBITDEPTH,
@@ -377,7 +374,6 @@ typedef struct avm_image {
   unsigned int y_chroma_shift; /**< subsampling order, Y */
 
 /* Image data pointers. */
-#define AVM_PLANE_PACKED 0  /**< To be used for all packed formats */
 #define AVM_PLANE_Y 0       /**< Y (Luminance) plane */
 #define AVM_PLANE_U 1       /**< U (Chroma) plane */
 #define AVM_PLANE_V 2       /**< V (Chroma) plane */
@@ -385,7 +381,7 @@ typedef struct avm_image {
   int stride[3];            /**< stride between rows for each plane */
   size_t sz;                /**< data size */
 
-  int bps; /**< bits per sample (for packed formats) */
+  int bps; /**< bits per sample (counting all planes) */
 
   int tlayer_id; /**< tlayer id of image */
   int mlayer_id; /**< mlayer id of image */

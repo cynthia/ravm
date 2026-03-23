@@ -5255,8 +5255,10 @@ static AVM_INLINE void write_uncompressed_header(
       // will be 0.
       avm_wb_write_literal(wb, current_frame->long_term_id + 1,
                            seq_params->number_of_bits_for_lt_frame_id);
-    } else if ((cpi->is_ras_frame == 1 || obu_type == OBU_OPEN_LOOP_KEY) &&
-               seq_params->number_of_bits_for_lt_frame_id != 0) {
+    }
+
+    if ((cpi->is_ras_frame == 1 || obu_type == OBU_OPEN_LOOP_KEY) &&
+        seq_params->number_of_bits_for_lt_frame_id != 0) {
       avm_wb_write_literal(wb, cm->num_ref_key_frames, 3);
       for (int i = 0; i < cm->num_ref_key_frames; i++) {
         avm_wb_write_literal(wb, cm->ref_long_term_ids[i],

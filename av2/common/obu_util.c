@@ -57,11 +57,18 @@ static avm_codec_err_t read_obu_header(struct avm_read_bit_buffer *rb,
     header->obu_xlayer_id = avm_rb_read_literal(rb, XLAYER_BITS);
   } else {
     header->obu_mlayer_id = 0;
-    if (header->type == OBU_MULTI_STREAM_DECODER_OPERATION)
+    if (header->type == OBU_MULTI_STREAM_DECODER_OPERATION ||
+        header->type == OBU_TEMPORAL_DELIMITER)
       header->obu_xlayer_id = GLOBAL_XLAYER_ID;
     else
       header->obu_xlayer_id = 0;
   }
+
+  if (header->type == OBU_TEMPORAL_DELIMITER) {
+    if (header->obu_xlayer_id != GLOBAL_XLAYER_ID)
+      return AVM_CODEC_CORRUPT_FRAME;
+  }
+
   return AVM_CODEC_OK;
 }
 

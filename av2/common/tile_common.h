@@ -67,8 +67,8 @@ static const int av2_tile_width_scaling_factor[2][SEQ_LEVEL_MAX] = {
   { 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
     4, 4, 8, 8, 8, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0 },  // 22-30 reserved
   // Tier 1
-  { 4, 4, 4,  4,  4,  4,  4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
-    4, 4, 16, 16, 16, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0 }  // 22-30 reserved
+  { 4, 4, 4,  4,  4,  4,  4, 4, 4, 4, 4, 4, 4, 4, 8, 8,
+    8, 8, 16, 16, 16, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0 }  // 22-30 reserved
 };
 
 // Tile area scaling factors for different levels and tiers

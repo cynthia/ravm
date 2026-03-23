@@ -1298,9 +1298,12 @@ int av2_encode_strategy(AV2_COMP *const cpi, size_t *const size,
     for (int frame = 0; frame < cm->seq_params.ref_frames; frame++) {
       const RefCntBuffer *const buf = cm->ref_frame_map[frame];
       if (buf == NULL) continue;
-      const int frame_order = cpi->oxcf.kf_cfg.sframe_dist != 0
-                                  ? (int)buf->display_order_hint_restricted
-                                  : (int)buf->display_order_hint;
+      const int frame_order =
+          (cpi->oxcf.kf_cfg.sframe_dist != 0 &&
+           is_mlayer_transitively_dependent(&cm->seq_params, buf->mlayer_id,
+                                            cm->mlayer_id))
+              ? (int)buf->display_order_hint_restricted
+              : (int)buf->display_order_hint;
       if (frame_order == cur_frame_disp) {
         is_olk_overlay =
             (cm->olk_refresh_frame_flags[cm->mlayer_id] >> frame) & 1;
@@ -1468,9 +1471,12 @@ int av2_encode_strategy(AV2_COMP *const cpi, size_t *const size,
     for (int frame = 0; frame < cm->seq_params.ref_frames; frame++) {
       const RefCntBuffer *const buf = cm->ref_frame_map[frame];
       if (buf == NULL) continue;
-      const int frame_order = cpi->oxcf.kf_cfg.sframe_dist != 0
-                                  ? (int)buf->display_order_hint_restricted
-                                  : (int)buf->display_order_hint;
+      const int frame_order =
+          (cpi->oxcf.kf_cfg.sframe_dist != 0 &&
+           is_mlayer_transitively_dependent(&cm->seq_params, buf->mlayer_id,
+                                            cm->mlayer_id))
+              ? (int)buf->display_order_hint_restricted
+              : (int)buf->display_order_hint;
       if (frame_order == cur_frame_disp && cm->mlayer_id == buf->mlayer_id) {
         frame_params.fb_idx_for_overlay = frame;
         if (buf->allow_direct_use) {

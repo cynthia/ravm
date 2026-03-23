@@ -6816,10 +6816,6 @@ static INLINE int get_disp_order_hint(AV2_COMMON *const cm, OBU_TYPE obu_type,
   }
   if (current_frame->frame_type == S_FRAME &&
       cm->restricted_prediction_switch && !cm->show_existing_frame) {
-    for (int map_idx = 0; map_idx < cm->seq_params.ref_frames; map_idx++) {
-      RefCntBuffer *buf = cm->ref_frame_map[map_idx];
-      if (buf != NULL) buf->display_order_hint = REF_RESTRICTED_DOH;
-    }
     return current_frame->order_hint;
   }
   // Derive the exact display order hint from the signaled order_hint.
@@ -8168,8 +8164,13 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
       if (cm->restricted_prediction_switch) {
         for (int i = 0; i < REF_FRAMES; i++) {
           if (cm->ref_frame_map[i] != NULL) {
-            cm->ref_frame_map[i]->is_restricted = true;
-            cm->ref_frame_map[i]->frame_output_done = true;
+            if (is_mlayer_transitively_dependent(
+                    &cm->seq_params, cm->ref_frame_map[i]->mlayer_id,
+                    cm->mlayer_id)) {
+              cm->ref_frame_map[i]->is_restricted = true;
+              cm->ref_frame_map[i]->display_order_hint = REF_RESTRICTED_DOH;
+              cm->ref_frame_map[i]->frame_output_done = true;
+            }
           }
         }
         if (!pbi->seen_restricted_switch_in_tu) {

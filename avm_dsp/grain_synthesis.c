@@ -934,7 +934,6 @@ int av2_add_film_grain(const avm_film_grain_t *params, const avm_image_t *src,
   int chroma_subsamp_y = 0;
 
   switch (src->fmt) {
-    case AVM_IMG_FMT_AVMI420:
     case AVM_IMG_FMT_I420:
       use_high_bit_depth = 0;
       chroma_subsamp_x = 1;

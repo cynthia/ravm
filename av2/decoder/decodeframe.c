@@ -8190,8 +8190,9 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
     }
     current_frame->long_term_id = -1;
     if (current_frame->frame_type == KEY_FRAME) {
-      current_frame->long_term_id =
+      const int long_term_id_plus_1 =
           avm_rb_read_literal(rb, seq_params->number_of_bits_for_lt_frame_id);
+      current_frame->long_term_id = long_term_id_plus_1 - 1;
     } else if (obu_type == OBU_RAS_FRAME || obu_type == OBU_OPEN_LOOP_KEY) {
       cm->num_ref_key_frames = 0;
       if (seq_params->number_of_bits_for_lt_frame_id != 0) {

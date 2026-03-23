@@ -7730,9 +7730,6 @@ static void reset_qm_list(AV2Decoder *pbi) {
     qmset->quantizer_matrix_num_planes = num_planes;
     qmset->is_user_defined_qm = false;
   }
-  for (int i = 0; i < NUM_CUSTOM_QMS; ++i) {
-    pbi->qm_protected[i] = 0;
-  }
 }
 
 static void handle_sequence_header(AV2Decoder *pbi, OBU_TYPE obu_type,
@@ -8177,10 +8174,6 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
           reset_qm_list(pbi);
           pbi->seen_restricted_switch_in_tu = 1;
         }
-      }
-      // clean qm_protected
-      for (int i = 0; i < NUM_CUSTOM_QMS; ++i) {
-        pbi->qm_protected[i] = 0;
       }
     } else if (obu_type == OBU_REGULAR_TIP || obu_type == OBU_LEADING_TIP ||
                cm->bridge_frame_info.is_bridge_frame) {

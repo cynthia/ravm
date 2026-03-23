@@ -2667,6 +2667,7 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
         pbi->seen_keyframe_in_this_tu = 0;
         pbi->seen_restricted_switch_in_tu = 0;
         pbi->this_is_first_vcl_obu_in_tu = 0;
+        for (int i = 0; i < NUM_CUSTOM_QMS; i++) pbi->qm_protected[i] = 0;
         break;
       case OBU_MULTI_STREAM_DECODER_OPERATION:
         decoded_payload_size =
@@ -2796,14 +2797,6 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
               obu_header.type, obu_header.obu_tlayer_id);
         }
 #endif  // CONFIG_G043
-        for (int i = 0; i < NUM_CUSTOM_QMS; i++) {
-          if (acc_qm_id_bitmap & (1 << i)) {
-            pbi->qm_protected[i] &= (obu_header.type == OBU_CLOSED_LOOP_KEY ||
-                                     obu_header.type == OBU_OPEN_LOOP_KEY ||
-                                     obu_header.type == OBU_RAS_FRAME ||
-                                     obu_header.type == OBU_SWITCH);
-          }
-        }
 
         // Drop picture unit HLS state that was derived exclusively from leading
         // frame picture units when the first regular VCL OBU is encountered.

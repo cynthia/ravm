@@ -7321,9 +7321,20 @@ int ras_frame_refresh_frame_flags_derivation(AV2Decoder *pbi) {
   return refresh_frame_flags;
 }
 
+// This function marks reference frames as valid for referencing if they are
+// present in the current RAS frame's long term ids.
+// Note that we handle the case where there are multiple RAS frames (at
+// different embedded layers) in a temporal unit, by clearing the
+// valid_for_referencing flags and current and dependent mlayer reference frames
+// only.
 void mark_reference_frames_with_long_term_ids(AV2Decoder *pbi) {
   AV2_COMMON *const cm = &pbi->common;
   for (int i = 0; i < cm->seq_params.ref_frames; i++) {
+    if (cm->ref_frame_map[i] != NULL &&
+        !is_mlayer_transitively_dependent(
+            &cm->seq_params, cm->ref_frame_map[i]->mlayer_id, cm->mlayer_id)) {
+      continue;
+    }
     pbi->valid_for_referencing[i] = 0;
     for (int j = 0; j < cm->num_ref_key_frames; j++) {
       if (cm->ref_frame_map[i] != NULL &&

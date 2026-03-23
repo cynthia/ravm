@@ -38,6 +38,15 @@ int file_is_obu(struct ObuDecInputContext *obu_ctx);
 // units such as parameter sets, metadata, QM and FGM obus.
 int obudec_read_frame_unit(struct ObuDecInputContext *obu_ctx, uint8_t **buffer,
                            size_t *bytes_read, size_t *buffer_size);
+
+// Reads one complete temporal unit (TD through next TD or EOF) from an OBU
+// elementary stream. Returns 0 on success, 1 on EOF, -1 on error.
+// Stores data in *buffer (realloc'd as needed), size in *bytes_read,
+// capacity in *buffer_size.
+int obudec_read_temporal_unit(struct ObuDecInputContext *obu_ctx,
+                              uint8_t **buffer, size_t *bytes_read,
+                              size_t *buffer_size);
+
 void obudec_free(struct ObuDecInputContext *obu_ctx);
 
 #ifdef __cplusplus

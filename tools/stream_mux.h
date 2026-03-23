@@ -108,8 +108,8 @@ bool ReadTemporalUnit(InputContext *ctx, size_t *unit_size) {
       break;
     }
     case FILE_TYPE_OBU: {
-      if (obudec_read_frame_unit(ctx->obu_ctx, &ctx->unit_buffer, unit_size,
-                                 &ctx->unit_buffer_size)) {
+      if (obudec_read_temporal_unit(ctx->obu_ctx, &ctx->unit_buffer, unit_size,
+                                    &ctx->unit_buffer_size)) {
         return false;
       }
       break;

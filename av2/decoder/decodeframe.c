@@ -8257,7 +8257,7 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
         pbi->need_resync = 0;
       }
     } else if (pbi->need_resync != 1) { /* Skip if need resync */
-      if (pbi->obu_type == OBU_RAS_FRAME) {
+      if (pbi->obu_type == OBU_RAS_FRAME && seq_params->max_mlayer_id == 0) {
         current_frame->refresh_frame_flags =
             ras_frame_refresh_frame_flags_derivation(pbi);
       } else if (frame_is_sframe(cm)) {

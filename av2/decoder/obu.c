@@ -1728,11 +1728,30 @@ static int is_coded_frame(OBU_TYPE obu_type) {
 // Returns 1 if OBU is valid for the current state, 0 if it violates rules.
 // Note: The caller is responsible for filtering out padding OBUs and reserved
 // OBUs before calling this function.
+//
+// After the global information phase, all remaining OBUs are grouped by
+// xlayer_id in strictly increasing order. Within each xlayer group the full
+// phase progression is enforced:
+//   local config (LCR -> OPS -> Atlas) -> SH -> frame unit data
+// When the xlayer_id increases, the state resets to TU_STATE_LOCAL_INFO so
+// the new xlayer group may begin with local config, SH, or frame unit data.
 int check_temporal_unit_structure(temporal_unit_state_t *state, int obu_type,
                                   int xlayer_id, int metadata_is_suffix,
-                                  int prev_obu_type) {
+                                  int prev_obu_type, int prev_xlayer_id) {
   // Validate input parameters
   if (!state) return 0;
+
+  // After the global phase, detect an xlayer_id increase and reset the
+  // per-xlayer state machine so the new group starts fresh.
+  if (*state == TU_STATE_LOCAL_INFO || *state == TU_STATE_SEQUENCE_HEADER ||
+      *state == TU_STATE_FRAME_UINT_DATA) {
+    if (xlayer_id != GLOBAL_XLAYER_ID && prev_xlayer_id != GLOBAL_XLAYER_ID &&
+        xlayer_id != prev_xlayer_id) {
+      if (xlayer_id < prev_xlayer_id) return 0;  // Must be increasing
+      // New xlayer group: reset to local info phase.
+      *state = TU_STATE_LOCAL_INFO;
+    }
+  }
 
   switch (*state) {
     case TU_STATE_START:
@@ -1789,7 +1808,7 @@ int check_temporal_unit_structure(temporal_unit_state_t *state, int obu_type,
         *state = TU_STATE_LOCAL_INFO;  // Transition from global to local
         return 1;
       } else if (obu_type == OBU_SEQUENCE_HEADER) {
-        *state = TU_STATE_SEQUENCE_HEADER;  // Transition from global to SH
+        *state = TU_STATE_SEQUENCE_HEADER;
         return 1;
       } else if (is_frame_unit(obu_type, xlayer_id)) {
         *state = TU_STATE_FRAME_UINT_DATA;
@@ -1801,18 +1820,18 @@ int check_temporal_unit_structure(temporal_unit_state_t *state, int obu_type,
 
     case TU_STATE_LOCAL_INFO:
       if (is_local_config_obu(obu_type, xlayer_id)) {
-        // Local information: LCR -> LCR -> OPS -> OPS -> ATS -> ATS
-        // 0 or more OBU_LCR
-        // 0 or more OBU_OPS
-        // 0 or more OBU_ATLAS_SEGMENT
-        if (obu_type == OBU_LAYER_CONFIGURATION_RECORD &&
-            prev_obu_type != OBU_LAYER_CONFIGURATION_RECORD) {
-          return 0;
-        } else if (obu_type == OBU_OPERATING_POINT_SET &&
-                   prev_obu_type == OBU_ATLAS_SEGMENT) {
-          return 0;
-        } else
-          return 1;
+        // Within the same xlayer group: LCR -> OPS -> Atlas (no going back).
+        if (xlayer_id == prev_xlayer_id) {
+          if (obu_type == OBU_LAYER_CONFIGURATION_RECORD &&
+              prev_obu_type != OBU_LAYER_CONFIGURATION_RECORD) {
+            return 0;
+          } else if (obu_type == OBU_OPERATING_POINT_SET &&
+                     prev_obu_type == OBU_ATLAS_SEGMENT) {
+            return 0;
+          }
+        }
+        // First OBU in a new xlayer group: any local config type is valid.
+        return 1;
       } else if (obu_type == OBU_SEQUENCE_HEADER) {
         *state = TU_STATE_SEQUENCE_HEADER;
         return 1;
@@ -1825,9 +1844,8 @@ int check_temporal_unit_structure(temporal_unit_state_t *state, int obu_type,
       }
 
     case TU_STATE_SEQUENCE_HEADER:
-      // 0 or more OBU_SEQUENCE_HEADER
       if (obu_type == OBU_SEQUENCE_HEADER) {
-        return prev_obu_type == OBU_SEQUENCE_HEADER;
+        return 1;
       } else if (is_frame_unit(obu_type, xlayer_id)) {
         *state = TU_STATE_FRAME_UINT_DATA;
         return 1;
@@ -1838,6 +1856,7 @@ int check_temporal_unit_structure(temporal_unit_state_t *state, int obu_type,
 
     case TU_STATE_FRAME_UINT_DATA:
       if (is_frame_unit(obu_type, xlayer_id)) {
+        // Within the same xlayer group: enforce existing type ordering.
         // CI -> CI -> MFH -> MFH -> (BRT, QM, FGM, METADATA_prefix,
         // METADATA_SHORT_prefix) -> coded_frame -> METADATA_suffix,
         // METADATA_SHORT_suffix)
@@ -2574,9 +2593,9 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
     // reserved OBUs in this check.
     if (avm_obu_type_is_valid(obu_header.type) &&
         obu_header.type != OBU_PADDING) {
-      if (!check_temporal_unit_structure(&tu_validation_state, obu_header.type,
-                                         obu_header.obu_xlayer_id,
-                                         metadata_is_suffix, prev_obu_type)) {
+      if (!check_temporal_unit_structure(
+              &tu_validation_state, obu_header.type, obu_header.obu_xlayer_id,
+              metadata_is_suffix, prev_obu_type, prev_xlayer_id)) {
         avm_internal_error(
             &cm->error, AVM_CODEC_UNSUP_BITSTREAM,
             "OBU order violation: current OBU %s with xlayer_id %d mlayer_id "

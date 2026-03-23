@@ -99,8 +99,7 @@ static avm_image_t *img_alloc_helper(
   w = align_image_dimension(d_w, xcs, size_align);
   h = align_image_dimension(d_h, ycs, size_align);
 
-  s = (fmt & AVM_IMG_FMT_PLANAR) ? w : bps * w / bit_depth;
-  s = (s + 2 * border + stride_align - 1) & ~(stride_align - 1);
+  s = (w + 2 * border + stride_align - 1) & ~(stride_align - 1);
   stride_in_bytes = s * bit_depth / 8;
 
   /* Allocate the new image */
@@ -118,9 +117,7 @@ static avm_image_t *img_alloc_helper(
 
   if (!img_data) {
     const uint64_t alloc_size =
-        (fmt & AVM_IMG_FMT_PLANAR)
-            ? (uint64_t)(h + 2 * border) * stride_in_bytes * bps / bit_depth
-            : (uint64_t)(h + 2 * border) * stride_in_bytes;
+        (uint64_t)(h + 2 * border) * stride_in_bytes * bps / bit_depth;
 
     if (alloc_size != (size_t)alloc_size) goto fail;
 
@@ -209,36 +206,30 @@ int avm_img_set_rect(avm_image_t *img, unsigned int x, unsigned int y,
     y += border;
 
     /* Calculate plane pointers */
-    if (!(img->fmt & AVM_IMG_FMT_PLANAR)) {
-      img->planes[AVM_PLANE_PACKED] =
-          img->img_data + x * img->bps / 8 + y * img->stride[AVM_PLANE_PACKED];
+    const int bytes_per_sample = (img->fmt & AVM_IMG_FMT_HIGHBITDEPTH) ? 2 : 1;
+    data = img->img_data;
+
+    img->planes[AVM_PLANE_Y] =
+        data + x * bytes_per_sample + y * img->stride[AVM_PLANE_Y];
+    data += (img->h + 2 * border) * img->stride[AVM_PLANE_Y];
+
+    unsigned int uv_border_h = border >> img->y_chroma_shift;
+    unsigned int uv_x = x >> img->x_chroma_shift;
+    unsigned int uv_y = y >> img->y_chroma_shift;
+    if (!(img->fmt & AVM_IMG_FMT_UV_FLIP)) {
+      img->planes[AVM_PLANE_U] =
+          data + uv_x * bytes_per_sample + uv_y * img->stride[AVM_PLANE_U];
+      data += ((img->h >> img->y_chroma_shift) + 2 * uv_border_h) *
+              img->stride[AVM_PLANE_U];
+      img->planes[AVM_PLANE_V] =
+          data + uv_x * bytes_per_sample + uv_y * img->stride[AVM_PLANE_V];
     } else {
-      const int bytes_per_sample =
-          (img->fmt & AVM_IMG_FMT_HIGHBITDEPTH) ? 2 : 1;
-      data = img->img_data;
-
-      img->planes[AVM_PLANE_Y] =
-          data + x * bytes_per_sample + y * img->stride[AVM_PLANE_Y];
-      data += (img->h + 2 * border) * img->stride[AVM_PLANE_Y];
-
-      unsigned int uv_border_h = border >> img->y_chroma_shift;
-      unsigned int uv_x = x >> img->x_chroma_shift;
-      unsigned int uv_y = y >> img->y_chroma_shift;
-      if (!(img->fmt & AVM_IMG_FMT_UV_FLIP)) {
-        img->planes[AVM_PLANE_U] =
-            data + uv_x * bytes_per_sample + uv_y * img->stride[AVM_PLANE_U];
-        data += ((img->h >> img->y_chroma_shift) + 2 * uv_border_h) *
-                img->stride[AVM_PLANE_U];
-        img->planes[AVM_PLANE_V] =
-            data + uv_x * bytes_per_sample + uv_y * img->stride[AVM_PLANE_V];
-      } else {
-        img->planes[AVM_PLANE_V] =
-            data + uv_x * bytes_per_sample + uv_y * img->stride[AVM_PLANE_V];
-        data += ((img->h >> img->y_chroma_shift) + 2 * uv_border_h) *
-                img->stride[AVM_PLANE_V];
-        img->planes[AVM_PLANE_U] =
-            data + uv_x * bytes_per_sample + uv_y * img->stride[AVM_PLANE_U];
-      }
+      img->planes[AVM_PLANE_V] =
+          data + uv_x * bytes_per_sample + uv_y * img->stride[AVM_PLANE_V];
+      data += ((img->h >> img->y_chroma_shift) + 2 * uv_border_h) *
+              img->stride[AVM_PLANE_V];
+      img->planes[AVM_PLANE_U] =
+          data + uv_x * bytes_per_sample + uv_y * img->stride[AVM_PLANE_U];
     }
     return 0;
   }

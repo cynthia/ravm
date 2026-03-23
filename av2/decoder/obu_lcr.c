@@ -37,9 +37,8 @@ static void validate_lcr_auxiliary_type(int lcr_aux_type, int layer_id,
   }
 }
 
-static void read_lcr_aggregate_info(
-    struct LcrAggregateInfo *ptl,
-    struct avm_read_bit_buffer *rb) {
+static void read_lcr_aggregate_info(struct LcrAggregateInfo *ptl,
+                                    struct avm_read_bit_buffer *rb) {
   ptl->lcr_config_idc = avm_rb_read_literal(rb, CONFIG_BITS);
   ptl->lcr_aggregate_level_idx = avm_rb_read_literal(rb, LEVEL_BITS);
   ptl->lcr_max_tier_flag = avm_rb_read_bit(rb);

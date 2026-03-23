@@ -34,9 +34,8 @@
 #include "av2/encoder/bitstream.h"
 #include "av2/encoder/tokenize.h"
 
-static void write_lcr_aggregate_info(
-    struct LcrAggregateInfo *ptl,
-    struct avm_write_bit_buffer *wb) {
+static void write_lcr_aggregate_info(struct LcrAggregateInfo *ptl,
+                                     struct avm_write_bit_buffer *wb) {
   avm_wb_write_literal(wb, ptl->lcr_config_idc, 6);
   avm_wb_write_literal(wb, ptl->lcr_aggregate_level_idx, 5);
   avm_wb_write_bit(wb, ptl->lcr_max_tier_flag);

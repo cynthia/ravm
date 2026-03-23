@@ -8036,6 +8036,18 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
                     cm->mlayer_id)) {
               cm->ref_frame_map[i]->is_restricted = true;
               cm->ref_frame_map[i]->display_order_hint = REF_RESTRICTED_DOH;
+              if (is_frame_eligible_for_output(cm->ref_frame_map[i])) {
+                assign_output_frame_buffer_p(
+                    &pbi->output_frames[pbi->num_output_frames++],
+                    cm->ref_frame_map[i]);
+#if CONFIG_BITSTREAM_DEBUG
+                avm_bitstream_queue_set_frame_read(
+                    derive_output_order_idx(cm, cm->ref_frame_map[i]) * 2 + 1);
+#endif  // CONFIG_BITSTREAM_DEBUG
+#if CONFIG_MISMATCH_DEBUG
+                mismatch_move_frame_idx_r(0);
+#endif  // CONFIG_MISMATCH_DEBUG
+              }
               cm->ref_frame_map[i]->frame_output_done = true;
             }
           }

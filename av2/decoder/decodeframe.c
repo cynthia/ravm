@@ -8113,6 +8113,13 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
     }
   }
 
+  if (obu_type == OBU_RAS_FRAME &&
+      seq_params->number_of_bits_for_lt_frame_id == 0) {
+    avm_internal_error(&cm->error, AVM_CODEC_UNSUP_BITSTREAM,
+                       "no OBU_RAS_FRAME shall be present when "
+                       "number_of_bits_for_lt_frame_id == 0");
+  }
+
   if (obu_type == OBU_BRIDGE_FRAME) {
     cm->bridge_frame_info.is_bridge_frame = 1;
     cm->bridge_frame_info.bridge_frame_ref_idx =

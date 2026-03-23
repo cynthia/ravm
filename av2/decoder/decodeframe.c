@@ -7770,12 +7770,6 @@ static void handle_sequence_header(AV2Decoder *pbi, OBU_TYPE obu_type,
   // much
   cm->seq_params = pbi->active_seq[xlayer_id];
 
-  if (pbi->this_is_first_vcl_obu_in_tu) {
-    if (obu_type == OBU_CLOSED_LOOP_KEY || obu_type == OBU_OPEN_LOOP_KEY) {
-      reset_qm_list(pbi);
-    }
-  }
-
   if (!keyframe_unit_in_tu) {
     if (!are_seq_headers_consistent(&cm->seq_params, seq_from_uch)) {
       avm_internal_error(&cm->error, AVM_CODEC_CORRUPT_FRAME,
@@ -8155,6 +8149,7 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
       return read_show_existing_frame(pbi, obu_type == OBU_REGULAR_SEF, rb);
     if (obu_type == OBU_CLOSED_LOOP_KEY || obu_type == OBU_OPEN_LOOP_KEY) {
       current_frame->frame_type = KEY_FRAME;
+      if (pbi->this_is_first_vcl_obu_in_tu) reset_qm_list(pbi);
     } else if (obu_type == OBU_RAS_FRAME || obu_type == OBU_SWITCH) {
       current_frame->frame_type = S_FRAME;
       cm->restricted_prediction_switch = avm_rb_read_bit(rb);
@@ -8170,10 +8165,11 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
             }
           }
         }
-        if (!pbi->seen_restricted_switch_in_tu) {
+      }
+
+      if (pbi->this_is_first_vcl_obu_in_tu) {
+        if (obu_type == OBU_RAS_FRAME || cm->restricted_prediction_switch)
           reset_qm_list(pbi);
-          pbi->seen_restricted_switch_in_tu = 1;
-        }
       }
     } else if (obu_type == OBU_REGULAR_TIP || obu_type == OBU_LEADING_TIP ||
                cm->bridge_frame_info.is_bridge_frame) {

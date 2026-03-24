@@ -1049,47 +1049,6 @@ static int read_metadata_frame_hash(AV2Decoder *const pbi,
   return 0;
 }
 
-#if !CONFIG_CWG_F438
-static void scalability_structure(struct avm_read_bit_buffer *rb) {
-  const int spatial_layers_cnt_minus_1 = avm_rb_read_literal(rb, 2);
-  const int spatial_layer_dimensions_present_flag = avm_rb_read_bit(rb);
-  const int spatial_layer_description_present_flag = avm_rb_read_bit(rb);
-  const int temporal_group_description_present_flag = avm_rb_read_bit(rb);
-  avm_rb_read_literal(rb, 3);  // reserved
-
-  if (spatial_layer_dimensions_present_flag) {
-    for (int i = 0; i <= spatial_layers_cnt_minus_1; i++) {
-      avm_rb_read_literal(rb, 16);
-      avm_rb_read_literal(rb, 16);
-    }
-  }
-  if (spatial_layer_description_present_flag) {
-    for (int i = 0; i <= spatial_layers_cnt_minus_1; i++) {
-      avm_rb_read_literal(rb, 8);
-    }
-  }
-  if (temporal_group_description_present_flag) {
-    const int temporal_group_size = avm_rb_read_literal(rb, 8);
-    for (int i = 0; i < temporal_group_size; i++) {
-      avm_rb_read_literal(rb, 3);
-      avm_rb_read_bit(rb);
-      avm_rb_read_bit(rb);
-      const int temporal_group_ref_cnt = avm_rb_read_literal(rb, 3);
-      for (int j = 0; j < temporal_group_ref_cnt; j++) {
-        avm_rb_read_literal(rb, 8);
-      }
-    }
-  }
-}
-
-static void read_metadata_scalability(struct avm_read_bit_buffer *rb) {
-  const int scalability_mode_idc = avm_rb_read_literal(rb, 8);
-  if (scalability_mode_idc == SCALABILITY_SS) {
-    scalability_structure(rb);
-  }
-}
-#endif  // !CONFIG_CWG_F438
-
 static void read_metadata_timecode(struct avm_read_bit_buffer *rb) {
   avm_rb_read_literal(rb, 5);  // counting_type f(5)
   const int full_timestamp_flag =
@@ -1219,22 +1178,14 @@ static size_t read_metadata_unit_payload(AV2Decoder *pbi, const uint8_t *data,
   } else {
     // Remaining types: TIMECODE, DECODED_FRAME_HASH, SCALABILITY.
     av2_init_read_bit_buffer(pbi, &rb, data + type_length, data + sz);
-#if !CONFIG_CWG_F438
-    if (metadata_type == OBU_METADATA_TYPE_SCALABILITY) {
-      read_metadata_scalability(&rb);
-    } else {
-#endif  // !CONFIG_CWG_F438
-      if (metadata_type == OBU_METADATA_TYPE_DECODED_FRAME_HASH) {
-        if (read_metadata_frame_hash(pbi, &rb)) {
-          return sz;
-        }
-      } else {
-        assert(metadata_type == OBU_METADATA_TYPE_TIMECODE);
-        read_metadata_timecode(&rb);
+    if (metadata_type == OBU_METADATA_TYPE_DECODED_FRAME_HASH) {
+      if (read_metadata_frame_hash(pbi, &rb)) {
+        return sz;
       }
-#if !CONFIG_CWG_F438
+    } else {
+      assert(metadata_type == OBU_METADATA_TYPE_TIMECODE);
+      read_metadata_timecode(&rb);
     }
-#endif  // !CONFIG_CWG_F438
     parsed_payload_bits = rb.bit_offset;
   }
 
@@ -1540,60 +1491,50 @@ static size_t read_metadata_short(AV2Decoder *pbi, const uint8_t *data,
   }
 
   av2_init_read_bit_buffer(pbi, &rb, data + type_length, data + sz);
-#if !CONFIG_CWG_F438
-  if (metadata_type == OBU_METADATA_TYPE_SCALABILITY) {
-    read_metadata_scalability(&rb);
-  } else {
-#endif  // !CONFIG_CWG_F438
-    if (metadata_type == OBU_METADATA_TYPE_DECODED_FRAME_HASH) {
-      if (read_metadata_frame_hash(pbi, &rb)) {
-        // Unsupported Decoded Frame Hash metadata. Ignoring the entire OBU and
-        // just checking trailing bits
-        if (get_last_nonzero_byte(data + type_length, sz - type_length) == 0) {
-          cm->error.error_code = AVM_CODEC_CORRUPT_FRAME;
-          return 0;
-        }
-        return sz;
-      }
-    } else if (metadata_type == OBU_METADATA_TYPE_BANDING_HINTS) {
-      // Banding hints metadata is variable bits, not byte-aligned
-      read_metadata_banding_hints_from_rb(pbi, &rb);
-    } else if (metadata_type == OBU_METADATA_TYPE_ICC_PROFILE) {
-      // ICC profile is byte-aligned binary data
-      // Find the last nonzero byte (should be 0x80 trailing byte)
-      const int last_nonzero_idx =
-          get_last_nonzero_byte_index(data + type_length, sz - type_length);
-      if (last_nonzero_idx < 0 ||
-          data[type_length + last_nonzero_idx] != 0x80) {
+  if (metadata_type == OBU_METADATA_TYPE_DECODED_FRAME_HASH) {
+    if (read_metadata_frame_hash(pbi, &rb)) {
+      // Unsupported Decoded Frame Hash metadata. Ignoring the entire OBU and
+      // just checking trailing bits
+      if (get_last_nonzero_byte(data + type_length, sz - type_length) == 0) {
         cm->error.error_code = AVM_CODEC_CORRUPT_FRAME;
         return 0;
       }
-      // ICC payload size excludes the trailing 0x80 byte
-      const size_t icc_payload_size = last_nonzero_idx;
-      read_metadata_icc_profile(pbi, data + type_length, icc_payload_size);
       return sz;
-    } else if (metadata_type == OBU_METADATA_TYPE_USER_DATA_UNREGISTERED) {
-      // User data unregistered is byte-aligned binary data
-      // Find the last nonzero byte (should be 0x80 trailing byte)
-      const int last_nonzero_idx =
-          get_last_nonzero_byte_index(data + type_length, sz - type_length);
-      if (last_nonzero_idx < 0 ||
-          data[type_length + last_nonzero_idx] != 0x80) {
-        cm->error.error_code = AVM_CODEC_CORRUPT_FRAME;
-        return 0;
-      }
-      // User data payload size excludes the trailing 0x80 byte
-      const size_t user_data_payload_size = last_nonzero_idx;
-      read_metadata_user_data_unregistered(pbi, data + type_length,
-                                           user_data_payload_size);
-      return sz;
-    } else {
-      assert(metadata_type == OBU_METADATA_TYPE_TIMECODE);
-      read_metadata_timecode(&rb);
     }
-#if !CONFIG_CWG_F438
+  } else if (metadata_type == OBU_METADATA_TYPE_BANDING_HINTS) {
+    // Banding hints metadata is variable bits, not byte-aligned
+    read_metadata_banding_hints_from_rb(pbi, &rb);
+  } else if (metadata_type == OBU_METADATA_TYPE_ICC_PROFILE) {
+    // ICC profile is byte-aligned binary data
+    // Find the last nonzero byte (should be 0x80 trailing byte)
+    const int last_nonzero_idx =
+        get_last_nonzero_byte_index(data + type_length, sz - type_length);
+    if (last_nonzero_idx < 0 || data[type_length + last_nonzero_idx] != 0x80) {
+      cm->error.error_code = AVM_CODEC_CORRUPT_FRAME;
+      return 0;
+    }
+    // ICC payload size excludes the trailing 0x80 byte
+    const size_t icc_payload_size = last_nonzero_idx;
+    read_metadata_icc_profile(pbi, data + type_length, icc_payload_size);
+    return sz;
+  } else if (metadata_type == OBU_METADATA_TYPE_USER_DATA_UNREGISTERED) {
+    // User data unregistered is byte-aligned binary data
+    // Find the last nonzero byte (should be 0x80 trailing byte)
+    const int last_nonzero_idx =
+        get_last_nonzero_byte_index(data + type_length, sz - type_length);
+    if (last_nonzero_idx < 0 || data[type_length + last_nonzero_idx] != 0x80) {
+      cm->error.error_code = AVM_CODEC_CORRUPT_FRAME;
+      return 0;
+    }
+    // User data payload size excludes the trailing 0x80 byte
+    const size_t user_data_payload_size = last_nonzero_idx;
+    read_metadata_user_data_unregistered(pbi, data + type_length,
+                                         user_data_payload_size);
+    return sz;
+  } else {
+    assert(metadata_type == OBU_METADATA_TYPE_TIMECODE);
+    read_metadata_timecode(&rb);
   }
-#endif  // !CONFIG_CWG_F438
   {
     // Compute remaining payload bits and skip them.
     // Subtract 1 from sz to exclude the trailing 0x80 byte, which is part of

@@ -8134,9 +8134,11 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
         }
       }
 
-      if (pbi->this_is_first_vcl_obu_in_tu) {
-        if (obu_type == OBU_RAS_FRAME || cm->restricted_prediction_switch)
+      if (!pbi->seen_restricted_switch_in_tu) {
+        if (obu_type == OBU_RAS_FRAME || cm->restricted_prediction_switch) {
           reset_qm_list(pbi);
+          pbi->seen_restricted_switch_in_tu = 1;
+        }
       }
     } else if (obu_type == OBU_REGULAR_TIP || obu_type == OBU_LEADING_TIP ||
                cm->bridge_frame_info.is_bridge_frame) {

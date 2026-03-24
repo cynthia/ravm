@@ -66,7 +66,7 @@ csv_paths = {
         "av2",
         "aom",
         "0",
-        os.path.join(CTC_RESULT_PATH, "AV2-CTC-v1.0.0-alt-anchor-r3.0"),
+        os.path.join(CTC_RESULT_PATH, "AV2-CTC-v1.0.0-alt-anchor-r4.0"),
     ],
     "libaom-v3.12.0": [
         "v3.12.0",
@@ -168,6 +168,7 @@ csv_paths = {
     ],
 }
 
+
 CONFIG = ["AI", "LD", "RA", "Still", "AS"]
 
 start_row = {
@@ -212,7 +213,9 @@ dates = {
     "v13.0.0": "12/19/2025",
     "libaom-v3.12.0": "02/10/2025",
     "libaom-v3.12.0-unconstrained": "01/10/2025",
+    "v13.0.0": "12/19/2025",
 }
+
 
 AS_formats = {
     "3840x2160": ["r", "-.", "o"],
@@ -711,6 +714,38 @@ def CalcASBDRate(tag, cfg, cls, video, anchor, test):
     return bdrate
 
 
+def HasMatchingQPs(anchor_record, test_record, cfg):
+    """Check that anchor and test records have the same number of QPs.
+    Actual QP values can differ between anchor and test.
+    For non-AS configs, require exactly 6 QPs each.
+    For AS configs, require that every resolution present in both has exactly 6 QPs each.
+    """
+    anchor_keys = set(anchor_record.keys())
+    test_keys = set(test_record.keys())
+
+    if cfg == "AS":
+        # Group keys by resolution
+        anchor_res = {}
+        test_res = {}
+        for key in anchor_keys:
+            res = re.split("_", key)[0]
+            anchor_res.setdefault(res, []).append(key)
+        for key in test_keys:
+            res = re.split("_", key)[0]
+            test_res.setdefault(res, []).append(key)
+        common_res = set(anchor_res.keys()) & set(test_res.keys())
+        if not common_res:
+            return False
+        for res in common_res:
+            if len(anchor_res[res]) != 6 or len(test_res[res]) != 6:
+                return False
+        return True
+    else:
+        if len(anchor_keys) != 6 or len(test_keys) != 6:
+            return False
+        return True
+
+
 def CalcFullBDRate(anchor, csv_files, records):
     bdrate = []
     seq_time = []
@@ -743,14 +778,26 @@ def CalcFullBDRate(anchor, csv_files, records):
 
                 if tag == anchor:
                     continue
+
+                # Skip if anchor and test don't have matching QPs
+                anchor_record = records[anchor][cfg][video]
+                test_record = records[tag][cfg][video]
+                if not HasMatchingQPs(anchor_record, test_record, cfg):
+                    print(
+                        "Warning: Skipping %s %s %s - mismatched or missing QPs "
+                        "(anchor has %d keys, test has %d keys)"
+                        % (cfg, video, tag, len(anchor_record), len(test_record))
+                    )
+                    continue
+
                 if cfg == "AS":
                     bd = CalcASBDRate(
                         tag,
                         cfg,
                         video_class,
                         video,
-                        records[anchor][cfg][video],
-                        records[tag][cfg][video],
+                        anchor_record,
+                        test_record,
                     )
                 else:
                     bd = CalcBDRate(
@@ -758,8 +805,8 @@ def CalcFullBDRate(anchor, csv_files, records):
                         cfg,
                         video_class,
                         video,
-                        records[anchor][cfg][video],
-                        records[tag][cfg][video],
+                        anchor_record,
+                        test_record,
                     )
                 bdrate.append(bd)
 
@@ -903,19 +950,15 @@ def plot_avg_bdrate_by_tag(avg_bdrate_by_tag_csv, avg_bdrate_by_tag_pdf):
         # New line charts - one chart per configuration with all 3 quality metrics
         line_colors = {
             "overall_psnr": "#1f77b4",  # Blue
-            "ssim_y": "#ff7f0e",        # Orange
-            "vmaf": "#2ca02c"           # Green
+            "ssim_y": "#ff7f0e",  # Orange
+            "vmaf": "#2ca02c",  # Green
         }
         line_labels = {
             "overall_psnr": "PSNR-Overall",
             "ssim_y": "SSIM-Y",
-            "vmaf": "VMAF"
+            "vmaf": "VMAF",
         }
-        line_markers = {
-            "overall_psnr": "o",
-            "ssim_y": "s",
-            "vmaf": "^"
-        }
+        line_markers = {"overall_psnr": "o", "ssim_y": "s", "vmaf": "^"}
 
         for cfg in df["cfg"].unique().tolist():
             fig, ax = plt.subplots(figsize=(30, 15))
@@ -935,7 +978,7 @@ def plot_avg_bdrate_by_tag(avg_bdrate_by_tag_csv, avg_bdrate_by_tag_pdf):
                     marker=line_markers[qty],
                     markersize=12,
                     linewidth=2.5,
-                    label=line_labels[qty]
+                    label=line_labels[qty],
                 )
                 # Add data labels on each point
                 for x, y in zip(x_positions, y_values):
@@ -945,7 +988,7 @@ def plot_avg_bdrate_by_tag(avg_bdrate_by_tag_csv, avg_bdrate_by_tag_pdf):
                         textcoords="offset points",
                         xytext=(0, 10),
                         ha="center",
-                        fontsize=14
+                        fontsize=14,
                     )
 
             ax.set_title(f"BDRATE Trends for {cfg} Configuration", fontsize=40)
@@ -1003,7 +1046,7 @@ def plot_avg_bdrate_by_tag_class(
         quality_labels = {
             "overall_psnr": "PSNR-Overall",
             "ssim_y": "SSIM-Y",
-            "vmaf": "VMAF"
+            "vmaf": "VMAF",
         }
 
         # Define colors for different video classes
@@ -1066,12 +1109,12 @@ def plot_avg_bdrate_by_tag_class(
                         marker=marker,
                         markersize=10,
                         linewidth=2,
-                        label=cls
+                        label=cls,
                     )
 
                 ax.set_title(
                     f"BDRATE {quality_labels[qty]} Trends by Class for {cfg} Configuration",
-                    fontsize=40
+                    fontsize=40,
                 )
                 ax.set_xlabel("Release Tag / Date", fontsize=20)
                 ax.set_ylabel("BDRATE (%)", fontsize=20)

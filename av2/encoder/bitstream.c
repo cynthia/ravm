@@ -5416,9 +5416,15 @@ static AVM_INLINE void write_uncompressed_header(
       // Shown keyframes and switch-frames automatically refreshes all reference
       // frames.  For all other frame types, we need to write
       // refresh_frame_flags.
-      if ((current_frame->frame_type == INTER_FRAME &&
-           cpi->is_ras_frame != 1) ||
-          (current_frame->frame_type == S_FRAME && cpi->is_ras_frame != 1) ||
+      // For RAS frames with max_mlayer_id == 0, the decoder derives the refresh
+      // flags. Therefore, we do not signal them in the bitstream.
+      const bool skip_refresh_flags_for_ras =
+          (cpi->is_ras_frame == 1 && seq_params->max_mlayer_id == 0);
+      const bool is_inter_or_sframe =
+          (current_frame->frame_type == INTER_FRAME ||
+           current_frame->frame_type == S_FRAME);
+
+      if ((is_inter_or_sframe && !skip_refresh_flags_for_ras) ||
           current_frame->frame_type == INTRA_ONLY_FRAME) {
         if (cm->seq_params.enable_short_refresh_frame_flags &&
             !(current_frame->frame_type == KEY_FRAME &&

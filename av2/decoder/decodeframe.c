@@ -7321,9 +7321,20 @@ int ras_frame_refresh_frame_flags_derivation(AV2Decoder *pbi) {
   return refresh_frame_flags;
 }
 
+// This function marks reference frames as valid for referencing if they are
+// present in the current RAS frame's long term ids.
+// Note that we handle the case where there are multiple RAS frames (at
+// different embedded layers) in a temporal unit, by clearing the
+// valid_for_referencing flags and current and dependent mlayer reference frames
+// only.
 void mark_reference_frames_with_long_term_ids(AV2Decoder *pbi) {
   AV2_COMMON *const cm = &pbi->common;
   for (int i = 0; i < cm->seq_params.ref_frames; i++) {
+    if (cm->ref_frame_map[i] != NULL &&
+        !is_mlayer_transitively_dependent(
+            &cm->seq_params, cm->ref_frame_map[i]->mlayer_id, cm->mlayer_id)) {
+      continue;
+    }
     pbi->valid_for_referencing[i] = 0;
     for (int j = 0; j < cm->num_ref_key_frames; j++) {
       if (cm->ref_frame_map[i] != NULL &&
@@ -8025,6 +8036,18 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
                     cm->mlayer_id)) {
               cm->ref_frame_map[i]->is_restricted = true;
               cm->ref_frame_map[i]->display_order_hint = REF_RESTRICTED_DOH;
+              if (is_frame_eligible_for_output(cm->ref_frame_map[i])) {
+                assign_output_frame_buffer_p(
+                    &pbi->output_frames[pbi->num_output_frames++],
+                    cm->ref_frame_map[i]);
+#if CONFIG_BITSTREAM_DEBUG
+                avm_bitstream_queue_set_frame_read(
+                    derive_output_order_idx(cm, cm->ref_frame_map[i]) * 2 + 1);
+#endif  // CONFIG_BITSTREAM_DEBUG
+#if CONFIG_MISMATCH_DEBUG
+                mismatch_move_frame_idx_r(0);
+#endif  // CONFIG_MISMATCH_DEBUG
+              }
               cm->ref_frame_map[i]->frame_output_done = true;
             }
           }
@@ -8257,7 +8280,7 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
         pbi->need_resync = 0;
       }
     } else if (pbi->need_resync != 1) { /* Skip if need resync */
-      if (pbi->obu_type == OBU_RAS_FRAME) {
+      if (pbi->obu_type == OBU_RAS_FRAME && seq_params->max_mlayer_id == 0) {
         current_frame->refresh_frame_flags =
             ras_frame_refresh_frame_flags_derivation(pbi);
       } else if (frame_is_sframe(cm)) {

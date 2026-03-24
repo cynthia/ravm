@@ -237,7 +237,6 @@ AV2Decoder *av2_decoder_create(BufferPool *const pool) {
          sizeof(pbi->last_displayable_frame_unit));
   pbi->this_is_first_keyframe_unit_in_tu = 0;
   pbi->this_is_first_vcl_obu_in_tu = 0;
-  pbi->seen_restricted_switch_in_tu = 0;
   for (int i = 0; i < MAX_NUM_MLAYERS; i++) {
     pbi->num_displayable_frame_unit[i] = 0;
   }

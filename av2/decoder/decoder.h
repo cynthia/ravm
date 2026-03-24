@@ -557,13 +557,6 @@ typedef struct AV2Decoder {
    */
   int seen_keyframe_in_this_tu;
   /*!
-   * Indicates if a restricted switch frame (OBU_RAS_FRAME or OBU_SWITCH with
-   * restricted_prediction_switch=1) has been seen in the current Temporal Unit.
-   * Reset to 0 when a Temporal Delimiter is encountered. Used to ensure
-   * reset_qm_list is called only on the first restricted switch frame in a TU.
-   */
-  int seen_restricted_switch_in_tu;
-  /*!
    * Display order hint of the last OLK encountered. If the OLK is a shown
    * frame (implicit_output_picture=1), this is set to the OLK's own
    * display_order_hint. If the OLK is hidden (implicit_output_picture=0 and

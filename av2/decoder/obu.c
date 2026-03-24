@@ -2545,7 +2545,6 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
         pbi->next_start_tile = 0;
         pbi->seen_vcl_obu_in_this_tu = 0;
         pbi->seen_keyframe_in_this_tu = 0;
-        pbi->seen_restricted_switch_in_tu = 0;
         pbi->this_is_first_vcl_obu_in_tu = 0;
         for (int i = 0; i < NUM_CUSTOM_QMS; i++) pbi->qm_protected[i] = 0;
         break;

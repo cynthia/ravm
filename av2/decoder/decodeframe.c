@@ -7618,6 +7618,12 @@ static void reset_qm_list(AV2Decoder *pbi) {
   // reset QM to default: for both OLK and CLK
   const int num_planes = av2_num_planes(cm);
   for (int qm_pos = 0; qm_pos < NUM_CUSTOM_QMS; qm_pos++) {
+    if ((pbi->obu_type == OBU_SWITCH || pbi->obu_type == OBU_RAS_FRAME) &&
+        pbi->qm_list[qm_pos].qm_mlayer_id != -1 &&
+        !is_mlayer_transitively_dependent(
+            &cm->seq_params, pbi->qm_list[qm_pos].qm_mlayer_id, cm->mlayer_id))
+      continue;
+
     // qm_protected[qm_pos] == 1 indicates the pbi->qm_list[qm_pos] is signalled
     // with CLK/OLK. those quantizer matrices are not reset to the predefined.
     if (pbi->qm_protected[qm_pos]) continue;
@@ -8024,13 +8030,8 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
           }
         }
       }
-
-      if (!pbi->seen_restricted_switch_in_tu) {
-        if (obu_type == OBU_RAS_FRAME || cm->restricted_prediction_switch) {
-          reset_qm_list(pbi);
-          pbi->seen_restricted_switch_in_tu = 1;
-        }
-      }
+      if (obu_type == OBU_RAS_FRAME || cm->restricted_prediction_switch)
+        reset_qm_list(pbi);
     } else if (obu_type == OBU_REGULAR_TIP || obu_type == OBU_LEADING_TIP ||
                cm->bridge_frame_info.is_bridge_frame) {
       current_frame->frame_type = INTER_FRAME;

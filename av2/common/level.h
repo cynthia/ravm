@@ -184,9 +184,7 @@ typedef struct AV2LevelParams {
   AV2LevelInfo *level_info[MAX_NUM_OPERATING_POINTS];
   // Count the number of OBU_FRAME and OBU_FRAME_HEADER for level calculation.
   int frame_header_count;
-#if CONFIG_F428_MULTISTREAM
   double multi_stream_scaling_x;
-#endif  // CONFIG_F428_MULTISTREAM
 } AV2LevelParams;
 
 static INLINE int is_in_operating_point(int operating_point, int tlayer_id,
@@ -196,9 +194,7 @@ static INLINE int is_in_operating_point(int operating_point, int tlayer_id,
   return ((operating_point >> tlayer_id) & 1) &&
          ((operating_point >> (mlayer_id + MAX_NUM_TLAYERS)) & 1);
 }
-#if CONFIG_F428_MULTISTREAM
 int level_to_sub_stream_level_index(AV2_LEVEL level, double scaling_factor_x);
-#endif  // CONFIG_F428_MULTISTREAM
 
 void av2_init_level_info(struct AV2_COMP *cpi);
 
@@ -229,12 +225,8 @@ void av2_decoder_model_process_frame(const struct AV2_COMP *const cpi,
 double av2_get_max_bitrate_for_level(AV2_LEVEL level_index, int tier,
                                      BITSTREAM_PROFILE profile,
                                      int subsampling_x, int subsampling_y,
-                                     int monochrome
-#if CONFIG_F428_MULTISTREAM
-                                     ,
-                                     double multi_stream_scaling_x
-#endif  //  CONFIG_F428_MULTISTREAM
-);
+                                     int monochrome,
+                                     double multi_stream_scaling_x);
 
 // Get max number of tiles and tile columns for given level.
 void av2_get_max_tiles_for_level(AV2_LEVEL level_index, int *const max_tiles,

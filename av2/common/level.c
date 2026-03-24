@@ -497,23 +497,14 @@ static const char level_string[SEQ_LEVEL_MAX + 1][9] = {
 
 static double get_max_bitrate(const AV2LevelSpec *const level_spec, int tier,
                               BITSTREAM_PROFILE profile, int subsampling_x,
-                              int subsampling_y, int monochrome
-#if CONFIG_F428_MULTISTREAM
-                              ,
-                              double multistream_scalling_x
-#endif  // CONFIG_F428_MULTISTREAM
-) {
+                              int subsampling_y, int monochrome,
+                              double multistream_scalling_x) {
   if (level_spec->level < SEQ_LEVEL_4_0) tier = 0;
-#if CONFIG_F428_MULTISTREAM
   const double scale =
       multistream_scalling_x == 0.0 ? 1 : multistream_scalling_x;
   const double bitrate_basis =
       (tier ? level_spec->high_mbps / scale : level_spec->main_mbps / scale) *
       1e6;
-#else
-  const double bitrate_basis =
-      (tier ? level_spec->high_mbps : level_spec->main_mbps) * 1e6;
-#endif  // CONFIG_F428_MULTISTREAM
   uint32_t chroma_format_idc = CHROMA_FORMAT_420;
   av2_get_chroma_format_idc(subsampling_x, subsampling_y, monochrome,
                             &chroma_format_idc);
@@ -560,12 +551,8 @@ static double get_max_frame_symbol_count(const AV2LevelSpec *const level_spec,
                                          int tier, BITSTREAM_PROFILE profile,
                                          double frame_parsing_time,
                                          int subsampling_x, int subsampling_y,
-                                         int monochrome
-#if CONFIG_F428_MULTISTREAM
-                                         ,
-                                         double multi_stream_scaling_x
-#endif  //  CONFIG_F428_MULTISTREAM
-) {
+                                         int monochrome,
+                                         double multi_stream_scaling_x) {
   if (level_spec->level < SEQ_LEVEL_4_0) tier = 0;
   const double min_comp_basis =
       (tier ? level_spec->high_cr : level_spec->main_cr);
@@ -577,36 +564,22 @@ static double get_max_frame_symbol_count(const AV2LevelSpec *const level_spec,
       get_profile_scaling_factor(profile, chroma_format_idc);
   double picture_size_profile_factor =
       picture_size_profile_factor_table[profile_scaling_factor];
-#if CONFIG_F428_MULTISTREAM
   double scale = multi_stream_scaling_x == 0 ? 1 : multi_stream_scaling_x;
   double max_frame_symbol_count =
       frame_parsing_time * (level_spec->max_decode_rate / scale) *
       picture_size_profile_factor * (8 / (9 * min_comp_basis) + 1 / 48);
-#else
-  double max_frame_symbol_count =
-      frame_parsing_time * level_spec->max_decode_rate *
-      picture_size_profile_factor * (8 / (9 * min_comp_basis) + 1 / 48);
-#endif  //  CONFIG_F428_MULTISTREAM
   return max_frame_symbol_count;
 }
 
 double av2_get_max_bitrate_for_level(AV2_LEVEL level_index, int tier,
                                      BITSTREAM_PROFILE profile,
                                      int subsampling_x, int subsampling_y,
-                                     int monochrome
-#if CONFIG_F428_MULTISTREAM
-                                     ,
-                                     double multi_stream_scaling_x
-#endif  //  CONFIG_F428_MULTISTREAM
-) {
+                                     int monochrome,
+                                     double multi_stream_scaling_x) {
   assert(is_valid_seq_level_idx(level_index));
   return get_max_bitrate(&av2_level_defs[level_index], tier, profile,
-                         subsampling_x, subsampling_y, monochrome
-#if CONFIG_F428_MULTISTREAM
-                         ,
-                         multi_stream_scaling_x
-#endif  //  CONFIG_F428_MULTISTREAM
-  );
+                         subsampling_x, subsampling_y, monochrome,
+                         multi_stream_scaling_x);
 }
 
 void av2_get_max_tiles_for_level(AV2_LEVEL level_index, int *const max_tiles,
@@ -815,15 +788,10 @@ void av2_decoder_model_init(const AV2_COMP *const cpi, AV2_LEVEL level,
 
   const AV2_COMMON *const cm = &cpi->common;
   const SequenceHeader *const seq_params = &cm->seq_params;
-  decoder_model->bit_rate =
-      get_max_bitrate(av2_level_defs + level, cpi->tier[op_index],
-                      seq_params->seq_profile_idc, seq_params->subsampling_x,
-                      seq_params->subsampling_y, seq_params->monochrome
-#if CONFIG_F428_MULTISTREAM
-                      ,
-                      cpi->level_params.multi_stream_scaling_x
-#endif  //  CONFIG_F428_MULTISTREAM
-      );
+  decoder_model->bit_rate = get_max_bitrate(
+      av2_level_defs + level, cpi->tier[op_index], seq_params->seq_profile_idc,
+      seq_params->subsampling_x, seq_params->subsampling_y,
+      seq_params->monochrome, cpi->level_params.multi_stream_scaling_x);
 
   // TODO(huisu or anyone): implement SCHEDULE_MODE.
   decoder_model->mode = RESOURCE_MODE;
@@ -908,13 +876,11 @@ void av2_decoder_model_process_frame(const AV2_COMP *const cpi,
 
   const AV2_COMMON *const cm = &cpi->common;
   const SequenceHeader *const seq_params = &cm->seq_params;
-#if CONFIG_F428_MULTISTREAM
   const AV2LevelParams *const level_params = &cpi->level_params;
   const double multi_stream_scaling_x =
       level_params->multi_stream_scaling_x == 0
           ? 1.0
           : level_params->multi_stream_scaling_x;
-#endif  //  CONFIG_F428_MULTISTREAM
   const int luma_pic_size = cm->width * cm->height;
   const int show_existing_frame = cm->show_existing_frame;
   const int show_frame = cm->immediate_output_picture || show_existing_frame;
@@ -951,12 +917,8 @@ void av2_decoder_model_process_frame(const AV2_COMP *const cpi,
 
     decoder_model->max_decode_rate =
         AVMMAX(decoder_model->max_decode_rate, this_decode_rate);
-#if CONFIG_F428_MULTISTREAM
     const int scaled =
         (int)((level_spec->max_tiles / multi_stream_scaling_x) * 120.0 * dt);
-#else
-    const int scaled = (int)(level_spec->max_tiles * 120.0 * dt);
-#endif  //  CONFIG_F428_MULTISTREAM
     int max_tile_limit = AVMMIN(level_spec->max_tiles, AVMMAX(1, scaled));
 
     decoder_model->max_tile_rate_satisfy =
@@ -976,12 +938,7 @@ void av2_decoder_model_process_frame(const AV2_COMP *const cpi,
     double frame_symbol_count_limit = get_max_frame_symbol_count(
         av2_level_defs + level, cpi->tier[0], seq_params->seq_profile_idc, dt,
         seq_params->subsampling_x, seq_params->subsampling_y,
-        seq_params->monochrome
-#if CONFIG_F428_MULTISTREAM
-        ,
-        multi_stream_scaling_x
-#endif  //  CONFIG_F428_MULTISTREAM
-    );
+        seq_params->monochrome, multi_stream_scaling_x);
     decoder_model->frame_symbol_count_satisfy =
         decoder_model->frame_symbol_count_satisfy &&
         (cm->features.frame_symbol_count <= frame_symbol_count_limit);
@@ -1105,7 +1062,6 @@ void av2_decoder_model_process_frame(const AV2_COMP *const cpi,
     }
   }
 }
-#if CONFIG_F428_MULTISTREAM
 // Get the index of the level parameter entry in av2_substream_level_defs for
 // sub-stream case given the level and the scaling factor.
 // Should we define the behavior for levels below 4.0?
@@ -1115,7 +1071,6 @@ int level_to_sub_stream_level_index(AV2_LEVEL level, double scaling_factor_x) {
   int offset = scaling_factor_x == 1.5 ? 0 : (scaling_factor_x == 4.0 ? 1 : 2);
   return 3 * level_base + offset;
 }
-#endif  // CONFIG_F428_MULTISTREAM
 
 void av2_init_level_info(AV2_COMP *cpi) {
   for (int op_index = 0; op_index < MAX_NUM_OPERATING_POINTS; ++op_index) {
@@ -1182,19 +1137,15 @@ static void get_temporal_parallel_params(int scalability_mode_idc,
 #define MAX_TILE_SIZE_HEADER_RATE_PRODUCT 547430400
 
 static TARGET_LEVEL_FAIL_ID check_level_constraints(
-#if CONFIG_F428_MULTISTREAM
-    const AV2_COMP *const cpi,
-#endif
-    const AV2LevelInfo *const level_info, AV2_LEVEL level, int tier,
-    int is_still_picture, BITSTREAM_PROFILE profile, int check_bitrate,
-    int subsampling_x, int subsampling_y, int monochrome) {
+    const AV2_COMP *const cpi, const AV2LevelInfo *const level_info,
+    AV2_LEVEL level, int tier, int is_still_picture, BITSTREAM_PROFILE profile,
+    int check_bitrate, int subsampling_x, int subsampling_y, int monochrome) {
   const DECODER_MODEL *const decoder_model = &level_info->decoder_models[level];
   const DECODER_MODEL_STATUS decoder_model_status = decoder_model->status;
   if (decoder_model_status != DECODER_MODEL_OK &&
       decoder_model_status != DECODER_MODEL_DISABLED) {
     return DECODER_MODEL_FAIL;
   }
-#if CONFIG_F428_MULTISTREAM
   bool is_multi_stream = cpi->level_params.multi_stream_scaling_x == 1.5 ||
                          cpi->level_params.multi_stream_scaling_x == 4.0 ||
                          cpi->level_params.multi_stream_scaling_x == 9.0;
@@ -1206,13 +1157,11 @@ static TARGET_LEVEL_FAIL_ID check_level_constraints(
           : 0;
   const AV2SubstreamLevelSpec *const target_sub_stream_level_spec =
       &av2_substream_level_defs[multi_stream_idx];
-#endif  //  CONFIG_F428_MULTISTREAM
   const AV2LevelSpec *const level_spec = &level_info->level_spec;
   const AV2LevelSpec *const target_level_spec = &av2_level_defs[level];
   const AV2LevelStats *const level_stats = &level_info->level_stats;
   TARGET_LEVEL_FAIL_ID fail_id = TARGET_LEVEL_OK;
   do {
-#if CONFIG_F428_MULTISTREAM
     const int max_picture_size =
         is_multi_stream ? (target_sub_stream_level_spec->max_v_size_x *
                            target_sub_stream_level_spec->max_h_size_x)
@@ -1229,41 +1178,22 @@ static TARGET_LEVEL_FAIL_ID check_level_constraints(
     const int max_tiles =
         (int)(target_level_spec->max_tiles / multi_stream_scaling_x);
     if (level_spec->max_picture_size > max_picture_size) {
-#else
-    if (level_spec->max_picture_size > target_level_spec->max_picture_size) {
-#endif  //  CONFIG_F428_MULTISTREAM
       fail_id = LUMA_PIC_SIZE_TOO_LARGE;
       break;
     }
-#if CONFIG_F428_MULTISTREAM
     if (level_spec->max_h_size > max_h_size) {
-#else
-    if (level_spec->max_h_size > target_level_spec->max_h_size) {
-#endif  //  CONFIG_F428_MULTISTREAM
       fail_id = LUMA_PIC_H_SIZE_TOO_LARGE;
       break;
     }
-#if CONFIG_F428_MULTISTREAM
     if (level_spec->max_v_size > max_v_size) {
-#else
-    if (level_spec->max_v_size > target_level_spec->max_v_size) {
-#endif  //  CONFIG_F428_MULTISTREAM
       fail_id = LUMA_PIC_V_SIZE_TOO_LARGE;
       break;
     }
-#if CONFIG_F428_MULTISTREAM
     if (level_spec->max_tile_cols > max_tile_cols) {
-#else
-    if (level_spec->max_tile_cols > target_level_spec->max_tile_cols) {
-#endif  //  CONFIG_F428_MULTISTREAM
       fail_id = TOO_MANY_TILE_COLUMNS;
       break;
     }
-#if CONFIG_F428_MULTISTREAM
     if (level_spec->max_tiles > max_tiles) {
-#else
-    if (level_spec->max_tiles > target_level_spec->max_tiles) {
-#endif  //  CONFIG_F428_MULTISTREAM
       fail_id = TOO_MANY_TILES;
       break;
     }
@@ -1312,7 +1242,6 @@ static TARGET_LEVEL_FAIL_ID check_level_constraints(
       break;
     }
     if (!is_still_picture) {
-#if CONFIG_F428_MULTISTREAM
       const int max_header_rate =
           is_multi_stream ? target_sub_stream_level_spec->max_header_rate_x
                           : target_level_spec->max_header_rate;
@@ -1322,27 +1251,14 @@ static TARGET_LEVEL_FAIL_ID check_level_constraints(
           (double)target_level_spec->max_decode_rate / multi_stream_scaling_x;
 
       if (level_spec->max_header_rate > (max_header_rate * (1 + (tier * 2)))) {
-#else
-      if (level_spec->max_header_rate >
-          (target_level_spec->max_header_rate * (1 + (tier * 2)))) {
-#endif  //  CONFIG_F428_MULTISTREAM
         fail_id = FRAME_HEADER_RATE_TOO_HIGH;
         break;
       }
-#if CONFIG_F428_MULTISTREAM
       if (decoder_model->max_display_rate > max_display_rate) {
-#else
-      if (decoder_model->max_display_rate >
-          (double)target_level_spec->max_display_rate) {
-#endif  //  CONFIG_F428_MULTISTREAM
         fail_id = DISPLAY_RATE_TOO_HIGH;
         break;
       }
-#if CONFIG_F428_MULTISTREAM
       if (decoder_model->max_decode_rate > max_decode_rate) {
-#else
-      if (decoder_model->max_decode_rate > target_level_spec->max_decode_rate) {
-#endif  //  CONFIG_F428_MULTISTREAM
         fail_id = DECODE_RATE_TOO_HIGH;
         break;
       }
@@ -1364,14 +1280,9 @@ static TARGET_LEVEL_FAIL_ID check_level_constraints(
 
     if (check_bitrate) {
       // Check average bitrate instead of max_bitrate.
-      const double bitrate_limit =
-          get_max_bitrate(target_level_spec, tier, profile, subsampling_x,
-                          subsampling_y, monochrome
-#if CONFIG_F428_MULTISTREAM
-                          ,
-                          cpi->level_params.multi_stream_scaling_x
-#endif  //  CONFIG_F428_MULTISTREAM
-          );
+      const double bitrate_limit = get_max_bitrate(
+          target_level_spec, tier, profile, subsampling_x, subsampling_y,
+          monochrome, cpi->level_params.multi_stream_scaling_x);
       const double avg_bitrate = level_stats->total_compressed_size * 8.0 /
                                  level_stats->total_time_encoded;
       if (avg_bitrate > bitrate_limit) {
@@ -1566,11 +1477,7 @@ double av2_get_compression_ratio(const AV2_COMMON *const cm,
 void av2_update_level_info(AV2_COMP *cpi, size_t size, int64_t ts_start,
                            int64_t ts_end) {
   AV2_COMMON *const cm = &cpi->common;
-#if CONFIG_F428_MULTISTREAM
   AV2LevelParams *const level_params = &cpi->level_params;
-#else
-  const AV2LevelParams *const level_params = &cpi->level_params;
-#endif  // CONFIG_F428_MULTISTREAM
   const int upscaled_width = cm->width;
   const int width = cm->width;
   const int height = cm->height;
@@ -1612,10 +1519,8 @@ void av2_update_level_info(AV2_COMP *cpi, size_t size, int64_t ts_start,
     AV2LevelInfo *const level_info = level_params->level_info[i];
     assert(level_info != NULL);
     AV2LevelStats *const level_stats = &level_info->level_stats;
-#if CONFIG_F428_MULTISTREAM
     // update the multitream scaling factor.
     level_params->multi_stream_scaling_x = 0;
-#endif  //  CONFIG_F428_MULTISTREAM
     level_stats->max_tile_size =
         AVMMAX(level_stats->max_tile_size, max_tile_size);
     level_stats->max_tile_width =
@@ -1669,10 +1574,7 @@ void av2_update_level_info(AV2_COMP *cpi, size_t size, int64_t ts_start,
       assert(is_valid_seq_level_idx(target_level));
       const int tier = cpi->tier[i];
       const TARGET_LEVEL_FAIL_ID fail_id = check_level_constraints(
-#if CONFIG_F428_MULTISTREAM
-          cpi,
-#endif  //  CONFIG_F428_MULTISTREAM
-          level_info, target_level, tier, is_still_picture, profile, 0,
+          cpi, level_info, target_level, tier, is_still_picture, profile, 0,
           cm->seq_params.subsampling_x, cm->seq_params.subsampling_y,
           cm->seq_params.monochrome);
       if (fail_id != TARGET_LEVEL_OK) {
@@ -1701,10 +1603,7 @@ avm_codec_err_t av2_get_seq_level_idx(const AV2_COMP *cpi,
     for (int level = 0; level < SEQ_LEVELS; ++level) {
       if (!is_valid_seq_level_idx(level)) continue;
       const TARGET_LEVEL_FAIL_ID fail_id = check_level_constraints(
-#if CONFIG_F428_MULTISTREAM
-          cpi,
-#endif
-          level_info, level, tier, is_still_picture, profile, 1,
+          cpi, level_info, level, tier, is_still_picture, profile, 1,
           seq_params->subsampling_x, seq_params->subsampling_y,
           seq_params->monochrome);
       if (fail_id == TARGET_LEVEL_OK) {

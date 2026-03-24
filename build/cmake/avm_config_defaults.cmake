@@ -138,13 +138,8 @@ set_avm_config_var(CONFIG_PARAKIT_COLLECT_DATA 0
 # AV2 experiment flags.
 set_avm_config_var(CONFIG_DIP_EXT_PRUNING 1 "AV2 DIP TFLite pruning.")
 
-# Source of throughput analysis : CWG - B065
 set_avm_config_var(CONFIG_THROUGHPUT_ANALYSIS 0
                    "AV2 experiment flag to measure throughput.")
-
-# CWG-F428
-set_avm_config_var(CONFIG_F428_MULTISTREAM 1
-                   "Level restriction with multistream mode ON.")
 
 set_avm_config_var(
   CONFIG_QM_DEBUG 0

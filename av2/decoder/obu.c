@@ -658,12 +658,16 @@ static uint32_t read_sequence_header_obu(AV2Decoder *pbi, int xlayer_id,
 }
 
 static uint32_t read_multi_frame_header_obu(AV2Decoder *pbi,
+                                            uint32_t *acc_mfh_id_bitmap,
                                             struct avm_read_bit_buffer *rb) {
   AV2_COMMON *const cm = &pbi->common;
   const uint32_t saved_bit_offset = rb->bit_offset;
 
   const uint32_t cur_mfh_id = av2_read_multi_frame_header(cm, rb);
   assert(cur_mfh_id < MAX_MFH_NUM);
+  if (acc_mfh_id_bitmap) {
+    *acc_mfh_id_bitmap |= (1 << cur_mfh_id);
+  }
 
   size_t bits_before_ext = rb->bit_offset - saved_bit_offset;
   cm->mfh_params[cur_mfh_id].mfh_extension_present_flag = avm_rb_read_bit(rb);
@@ -2332,6 +2336,7 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
   // acc_fgm_id_bitmap accumulates fgm_id_bitmap in FGM OBU to check if film
   // grain models signalled before a coded frame have the same fgm_id
   uint32_t acc_fgm_id_bitmap = 0;
+  uint32_t acc_mfh_id_bitmap = 0;
   int prev_obu_xlayer_id = -1;
   // prev_obu_type, prev_xlayer_id and tu_validation_state are used to compare
   // obus in this "data"
@@ -2642,7 +2647,8 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
         if (cm->error.error_code != AVM_CODEC_OK) return -1;
         break;
       case OBU_MULTI_FRAME_HEADER:
-        decoded_payload_size = read_multi_frame_header_obu(pbi, &rb);
+        decoded_payload_size =
+            read_multi_frame_header_obu(pbi, &acc_mfh_id_bitmap, &rb);
         if (cm->error.error_code != AVM_CODEC_OK) return -1;
         break;
       case OBU_CLOSED_LOOP_KEY:
@@ -2681,10 +2687,8 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
                                           [leading_mlayer_id]
                                           [OBU_CONTENT_INTERPRETATION])
             cm->ci_from_leading[leading_mlayer_id] = true;
-          if (pbi->obus_in_frame_unit_data[obu_header.obu_tlayer_id]
-                                          [leading_mlayer_id]
-                                          [OBU_MULTI_FRAME_HEADER])
-            cm->mfh_from_leading[cm->cur_mfh_id] = true;
+          for (int i = 0; i < MAX_MFH_NUM; i++)
+            if (acc_mfh_id_bitmap & (1 << i)) cm->mfh_from_leading[i] = true;
           if (pbi->obus_in_frame_unit_data[obu_header.obu_tlayer_id]
                                           [leading_mlayer_id]
                                           [OBU_BUFFER_REMOVAL_TIMING])
@@ -2733,10 +2737,7 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
           cm->ci_from_leading[regular_mlayer_id] = false;
 
           for (int i = 0; i < MAX_MFH_NUM; i++) {
-            if (cm->mfh_from_leading[i] &&
-                !pbi->obus_in_frame_unit_data[obu_header.obu_tlayer_id]
-                                             [regular_mlayer_id]
-                                             [OBU_MULTI_FRAME_HEADER]) {
+            if (cm->mfh_from_leading[i] && !(acc_mfh_id_bitmap & (1 << i))) {
               cm->mfh_valid[i] = false;
             }
             cm->mfh_from_leading[i] = false;

@@ -374,6 +374,43 @@ static bool msdo_config_equal(const MsdoConfig *a, const MsdoConfig *b) {
   return true;
 }
 
+avm_codec_err_t flush_all_xlayer_frames(struct AV2Decoder *pbi, AV2_COMMON *cm,
+                                        bool release_dpb) {
+  BufferPool *const pool = cm->buffer_pool;
+  int saved_xlayer_id = cm->xlayer_id;
+  avm_codec_err_t err = AVM_CODEC_OK;
+
+  for (int xlayer = 0; xlayer < AVM_MAX_NUM_STREAMS; xlayer++) {
+    if (xlayer == GLOBAL_XLAYER_ID) continue;  // Global context is not a stream
+    if (pbi->xlayer_id_map[xlayer] > 0) {
+      if (xlayer != cm->xlayer_id) {
+        av2_store_xlayer_context(pbi, cm, cm->xlayer_id);
+        cm->xlayer_id = xlayer;
+        av2_restore_xlayer_context(pbi, cm, xlayer);
+      }
+      size_t num_before = pbi->num_output_frames;
+      err = flush_remaining_frames(pbi, INT_MAX);
+      if (err != AVM_CODEC_OK) break;
+      for (size_t j = num_before; j < pbi->num_output_frames; j++) {
+        decrease_ref_count(pbi->output_frames[j], pool);
+      }
+      if (release_dpb) {
+        for (int r = 0; r < REF_FRAMES; r++) {
+          decrease_ref_count(cm->ref_frame_map[r], pool);
+          cm->ref_frame_map[r] = NULL;
+        }
+      }
+    }
+  }
+
+  if (cm->xlayer_id != saved_xlayer_id) {
+    av2_store_xlayer_context(pbi, cm, cm->xlayer_id);
+    cm->xlayer_id = saved_xlayer_id;
+    av2_restore_xlayer_context(pbi, cm, saved_xlayer_id);
+  }
+  return err;
+}
+
 static uint32_t read_multi_stream_decoder_operation_obu(
     AV2Decoder *pbi, struct avm_read_bit_buffer *rb) {
   AV2_COMMON *const cm = &pbi->common;
@@ -439,10 +476,16 @@ static uint32_t read_multi_stream_decoder_operation_obu(
   bool config_changed =
       !has_previous || !msdo_config_equal(&prev_config, &new_config);
 
-  // Only free if stream_info exists AND config changed
+  // Flush remaining frames from all active streams before switching config
   if (pbi->stream_info != NULL && config_changed) {
+    flush_all_xlayer_frames(pbi, cm, true);
     avm_free(pbi->stream_info);
     pbi->stream_info = NULL;
+
+    // Reset xlayer_id_map so only the new segment's layers are active
+    for (int i = 0; i < AVM_MAX_NUM_STREAMS; i++) {
+      pbi->xlayer_id_map[i] = 0;
+    }
   }
 
   // Only allocate if stream_info is NULL (first time OR after freeing due to
@@ -2264,10 +2307,38 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
   ObuHeader obu_header;
   memset(&obu_header, 0, sizeof(obu_header));
 
-  // Enable multi_stream_mode if MSDO is present OR if Global LCR with
-  // multiple extended layers (LcrMaxNumXLayerCount > 1) is present
-  if (pbi->msdo_is_present_in_tu || pbi->glcr_is_present_in_tu)
+  // Enable multi_stream_mode if MSDO is present in the current TU.
+  // Use obus_in_frame_unit_data which is populated before decode, rather than
+  // msdo_is_present_in_tu which reflects the previous TU at this point.
+  if (pbi->obus_in_frame_unit_data[0][0][OBU_MULTI_STREAM_DECODER_OPERATION] ||
+      pbi->glcr_is_present_in_tu)
     pbi->multi_stream_mode = 1;
+
+  // Reset multi_stream_mode at a random access point TU without MSDO.
+  // obus_in_frame_unit_data reflects the current frame unit (populated before
+  // decode).
+  if (pbi->multi_stream_mode) {
+    int tid = pbi->current_tlayer_id;
+    int mid = pbi->current_mlayer_id;
+    if (tid >= 0 && mid >= 0 &&
+        pbi->obus_in_frame_unit_data[0][0][OBU_TEMPORAL_DELIMITER] &&
+        !pbi->obus_in_frame_unit_data[0][0]
+                                     [OBU_MULTI_STREAM_DECODER_OPERATION] &&
+        (pbi->obus_in_frame_unit_data[tid][mid][OBU_CLOSED_LOOP_KEY] ||
+         pbi->obus_in_frame_unit_data[tid][mid][OBU_OPEN_LOOP_KEY] ||
+         pbi->obus_in_frame_unit_data[tid][mid][OBU_RAS_FRAME])) {
+      // Flush and reset like a config change
+      if (pbi->stream_info != NULL) {
+        flush_all_xlayer_frames(pbi, cm, true);
+        avm_free(pbi->stream_info);
+        pbi->stream_info = NULL;
+      }
+      cm->num_streams = 0;
+      for (int i = 0; i < AVM_MAX_NUM_STREAMS; i++) pbi->xlayer_id_map[i] = 0;
+
+      pbi->multi_stream_mode = 0;
+    }
+  }
 
   // Per-TU conformance check: validate the PREVIOUS TU's accumulated
   // xlayer/mlayer maps before resetting them for the current TU.

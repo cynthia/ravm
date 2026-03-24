@@ -7425,6 +7425,24 @@ void mark_reference_frames_with_long_term_ids(AV2Decoder *pbi) {
   }
 }
 
+void check_long_term_ids_exist(AV2Decoder *pbi) {
+  AV2_COMMON *const cm = &pbi->common;
+  for (int j = 0; j < cm->num_ref_key_frames; j++) {
+    int found = 0;
+    for (int i = 0; i < cm->seq_params.ref_frames; i++) {
+      if (cm->ref_frame_map[i] != NULL &&
+          cm->ref_long_term_ids[j] == cm->ref_frame_map[i]->long_term_id) {
+        found = 1;
+        break;
+      }
+    }
+    if (found == 0) {
+      avm_internal_error(&cm->error, AVM_CODEC_UNSUP_BITSTREAM,
+                         "Required long term reference not available");
+    }
+  }
+}
+
 static void activate_atlas_segment(AV2Decoder *pbi) {
   AV2_COMMON *const cm = &pbi->common;
   bool atlas_found = false;
@@ -8183,7 +8201,9 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
       const int long_term_id_plus_1 =
           avm_rb_read_literal(rb, seq_params->number_of_bits_for_lt_frame_id);
       current_frame->long_term_id = long_term_id_plus_1 - 1;
-    } else if (obu_type == OBU_RAS_FRAME || obu_type == OBU_OPEN_LOOP_KEY) {
+    }
+
+    if (obu_type == OBU_RAS_FRAME || obu_type == OBU_OPEN_LOOP_KEY) {
       cm->num_ref_key_frames = 0;
       if (seq_params->number_of_bits_for_lt_frame_id != 0) {
         cm->num_ref_key_frames = avm_rb_read_literal(rb, 3);
@@ -8518,6 +8538,10 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
       cm->olk_co_vcl_refresh_frame_flags[cm->mlayer_id] = 0;
     cm->olk_co_vcl_refresh_frame_flags[cm->mlayer_id] |=
         current_frame->refresh_frame_flags;
+  }
+
+  if (pbi->obu_type == OBU_RAS_FRAME || pbi->obu_type == OBU_OPEN_LOOP_KEY) {
+    check_long_term_ids_exist(pbi);
   }
 
   if (pbi->obu_type == OBU_RAS_FRAME) {

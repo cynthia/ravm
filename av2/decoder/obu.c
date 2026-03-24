@@ -2737,10 +2737,7 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
           cm->ci_from_leading[regular_mlayer_id] = false;
 
           for (int i = 0; i < MAX_MFH_NUM; i++) {
-            if (cm->mfh_from_leading[i] &&
-                !pbi->obus_in_frame_unit_data[obu_header.obu_tlayer_id]
-                                             [regular_mlayer_id]
-                                             [OBU_MULTI_FRAME_HEADER]) {
+            if (cm->mfh_from_leading[i] && !(acc_mfh_id_bitmap & (1 << i))) {
               cm->mfh_valid[i] = false;
             }
             cm->mfh_from_leading[i] = false;

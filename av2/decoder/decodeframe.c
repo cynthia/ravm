@@ -8108,6 +8108,7 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
     pbi->decoding_first_frame = 1;
     reset_frame_buffers(cm);
     cm->cur_frame->frame_output_done = 0;
+    if (pbi->this_is_first_vcl_obu_in_tu) reset_qm_list(pbi);
   } else {
     pbi->reset_decoder_state = 0;
     cm->show_existing_frame = 0;

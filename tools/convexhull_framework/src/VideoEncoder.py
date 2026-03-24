@@ -18,6 +18,7 @@ from Config import (
     AOMENC,
     AV1ENC,
     CTC_VERSION,
+    EnableECF,
     EnableOpenGOP,
     EnableTemporalFilter,
     EnableTimingInfo,
@@ -62,8 +63,11 @@ def EncodeWithAOM_AV2(
         )
     )
 
-    # config enoding bitdepth
-    if (CTC_VERSION in ["6.0", "7.0", "8.0"]) and (
+    # config encoding bitdepth
+    if EnableECF and CTC_VERSION in ["8.0"]:
+        # ECF: always encode at 10-bit (Section 6.2)
+        args += " --input-bit-depth=%d --bit-depth=10" % (clip.bit_depth)
+    elif (CTC_VERSION in ["6.0", "7.0", "8.0"]) and (
         clip.file_class in ["A2", "A4", "B1"]
     ):
         # CWG-D088
@@ -79,9 +83,36 @@ def EncodeWithAOM_AV2(
     else:
         args += " --use-16bit-internal --cq-level=%d" % QP
 
-    # For 4K clip, encode with 2 tile columns using two threads.
-    # --tile-columns value is in log2.
-    if (
+    # Tile and threading configuration
+    if EnableECF and CTC_VERSION in ["8.0"]:
+        # ECF tiling rules (Section 6.2)
+        if test_cfg == "RA":
+            if clip.width >= 3840 and clip.height >= 2160:
+                # 4K+: 4 col tiles x 4 row tiles, 16 threads
+                args += " --tile-rows=2 --tile-columns=2 --threads=16 --row-mt=0 "
+            elif clip.width >= 1920 and clip.height >= 858:
+                # FHD+: 2 col tiles x 2 row tiles, 4 threads
+                args += " --tile-rows=1 --tile-columns=1 --threads=4 --row-mt=0 "
+            else:
+                args += " --tile-rows=0 --tile-columns=0 --threads=1 --row-mt=0 "
+        elif test_cfg == "LD":
+            if clip.width >= 1920 and clip.height >= 858:
+                # FHD+: 4 col tiles x 2 row tiles, 8 threads
+                args += " --tile-rows=1 --tile-columns=2 --threads=8 --row-mt=0 "
+            elif clip.width == 1280 and clip.height == 720:
+                # 720p: 2 col tiles, 2 threads
+                args += " --tile-rows=0 --tile-columns=1 --threads=2 --row-mt=0 "
+            else:
+                args += " --tile-rows=0 --tile-columns=0 --threads=1 --row-mt=0 "
+        elif test_cfg == "AI":
+            if clip.width >= 3840 and clip.height >= 2160:
+                # 4K+: 2 col tiles, 2 threads
+                args += " --tile-rows=0 --tile-columns=1 --threads=2 --row-mt=0 "
+            else:
+                args += " --tile-rows=0 --tile-columns=0 --threads=1 --row-mt=0 "
+        else:
+            args += " --tile-rows=0 --tile-columns=0 --threads=1 --row-mt=0 "
+    elif (
         (CTC_VERSION in ["4.0"])
         and (clip.file_class in ["A2", "B1"])
         and (test_cfg == "LD")
@@ -155,8 +186,12 @@ def EncodeWithAOM_AV2(
     else:
         args += " --enable-keyframe-filtering=0 "
 
-    # CWG-D082, CWG-F222
-    if CTC_VERSION in ["8.0"]:
+    # Content-specific flags
+    if EnableECF and CTC_VERSION in ["8.0"] and clip.file_class == "ECF-6":
+        # ECF-6: screen content coding (Section 6.3)
+        args += " --tune-content=screen --enable-intrabc-ext=1 --enable-extended-sdp=0"
+    elif CTC_VERSION in ["8.0"]:
+        # CWG-D082, CWG-F222
         if clip.file_class in ["B2"]:
             args += " --tune-content=screen --enable-intrabc-ext=1"
         elif clip.file_class in ["A4", "A5"]:
@@ -201,7 +236,12 @@ def EncodeWithAOM_AV2(
     else:
         print("Unsupported Test Configuration %s" % test_cfg)
 
-    if clip.file_class == "G1" or clip.file_class == "G2":
+    # HDR encoding flags
+    if EnableECF and CTC_VERSION in ["8.0"] and clip.file_class in ["ECF-3", "ECF-4"]:
+        # ECF HDR classes (Section 6.1.3, 6.1.4)
+        args += " --color-primaries=bt2020 --transfer-characteristics=smpte2084 --matrix-coefficients=bt2020ncl"
+        args += " --chroma-sample-position=topleft "
+    elif clip.file_class == "G1" or clip.file_class == "G2":
         args += " --color-primaries=bt2020 --transfer-characteristics=smpte2084 --matrix-coefficients=bt2020ncl"
         if CTC_VERSION in ["8.0"]:
             args += " --chroma-sample-position=topleft "

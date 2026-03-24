@@ -12,11 +12,12 @@ This guide provides instructions for running AV2 Common Test Conditions (CTC) (h
 6. [Running Tests](#running-tests)
    - [Regular CTC Tests (AV2CTCTest.py)](#regular-ctc-tests-av2ctctestpy)
    - [Adaptive Streaming Tests (ConvexHullTest.py)](#adaptive-streaming-tests-convexhulltestpy)
-7. [Distributed Cluster Execution (Launch.py)](#distributed-cluster-execution-launchpy)
-8. [Analyzing Results (AV2CTCProgress.py)](#analyzing-results-av2ctcprogresspy)
-9. [Output Structure](#output-structure)
-10. [Common Workflows](#common-workflows)
-11. [Troubleshooting](#troubleshooting)
+7. [ECF (Extended Chroma Format) Testing](#ecf-extended-chroma-format-testing)
+8. [Distributed Cluster Execution (Launch.py)](#distributed-cluster-execution-launchpy)
+9. [Analyzing Results (AV2CTCProgress.py)](#analyzing-results-av2ctcprogresspy)
+10. [Output Structure](#output-structure)
+11. [Common Workflows](#common-workflows)
+12. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -25,6 +26,7 @@ This guide provides instructions for running AV2 Common Test Conditions (CTC) (h
 The AVM CTC Testing Framework is a Python-based test harness for evaluating video codec performance according to the Alliance for Open Media (AOM) Common Test Conditions. It supports:
 
 - **Multiple test configurations**: LD (Low Delay), RA (Random Access), AI (All Intra), AS (Adaptive Streaming), STILL (Still Images)
+- **Extended Chroma Format (ECF) testing**: 4:4:4, 4:2:2, HDR 4:4:4, HDR 4:2:2, YCoCg, and Screen Content
 - **Multiple codecs**: AV1, AV2, HEVC
 - **Multiple encoders**: aomenc/avmenc, SVT-AV1, HM (HEVC)
 - **Quality metrics**: PSNR, SSIM, MS-SSIM, VMAF, PSNR-HVS, CIEDE2000, CAMBI
@@ -316,6 +318,7 @@ paths:
 | `root` | Root directory for the framework. Default `".."` works for most setups. | Yes |
 | `content` | Directory containing CTC test sequences (`.y4m` files) | Yes |
 | `subjective_content` | Directory containing subjective test sequences | Only if `enable_subjective_test: true` |
+| `ecf.content_path` | Directory containing ECF test sequences (see [ECF Testing](#ecf-extended-chroma-format-testing)) | Only if `ecf.enabled: true` |
 
 > **Important**: The `content` path must point to a directory containing the AV2 CTC test sequences in `.y4m` format. Without valid test content, the framework cannot run any tests.
 
@@ -422,7 +425,7 @@ avm-ctc/tools/convexhull_framework/
 ├── src/                    # Source code
 │   ├── config.yaml         # User configuration file
 │   ├── Config.py           # Configuration loader
-│   ├── AV2CTCTest.py       # Main script for LD/RA/AI/STILL tests
+│   ├── AV2CTCTest.py       # Main script for LD/RA/AI/STILL tests (and ECF)
 │   ├── ConvexHullTest.py   # Main script for AS tests
 │   ├── Launch.py           # Submit jobs to compute cluster
 │   ├── Utils.py            # Utility functions
@@ -432,6 +435,7 @@ avm-ctc/tools/convexhull_framework/
 │   ├── EncDecUpscale.py    # Encode-decode-upscale pipeline
 │   ├── CalculateQualityMetrics.py  # Quality metric calculation
 │   ├── CheckEncoding.py    # Check encoding status
+│   ├── AV2CTCVideo.py      # Test sequence definitions (CTC + ECF)
 │   └── AV2CTCProgress.py   # BD-Rate progress analysis
 ├── test/                   # Test output directory (created automatically)
 │   ├── AV2CTC_TestCmd.log  # Command log file (when LogCmdOnly=1)
@@ -666,6 +670,144 @@ The `-t` parameter specifies which tool to use for video downscaling and upscali
 | `aom` | AOM Lanczos scaler - Optimized for AV1/AV2 testing. |
 
 > **Note**: Ensure the corresponding binary is available in the `bin/` directory or configured in `config.yaml`.
+
+---
+
+## ECF (Extended Chroma Format) Testing
+
+The framework supports Extended Chroma Format (ECF) testing as defined in CTC v8.0 Section 6. ECF tests evaluate codec performance on non-4:2:0 content including 4:4:4, 4:2:2, HDR, YCoCg, and Screen Content sequences.
+
+### ECF Content Classes
+
+| Class | Description | Chroma Format | Content |
+|-------|-------------|---------------|---------|
+| ECF-1 | SDR 4:4:4 | yuv444 | 8 sequences (4K to 360p) |
+| ECF-2 | SDR 4:2:2 | yuv422 | 8 sequences (4K to 360p) |
+| ECF-3 | HDR 4:4:4 | yuv444 | 4 sequences |
+| ECF-4 | HDR 4:2:2 | yuv422 | 4 sequences |
+| ECF-5 | YCoCg | ycgco | 2 sequences |
+| ECF-6 | Screen Content / GBR | yuv444/gbrp/yuv422 | 7 sequences |
+
+### Enabling ECF Testing
+
+Set `ecf.enabled: true` in `config.yaml`:
+
+```yaml
+ecf:
+  enabled: true
+  content_path: "/path/to/ecf_test_sequences/"
+  configurations: ["AI", "RA", "LD"]
+  dataset: "ECF_TEST_SET"
+  gop_size: 33
+  frame_counts:
+    AI: 5
+    RA: 66
+    LD: 33
+  psnr_yuv_weights:
+    "444":
+      psnr_y_weight: 4.0
+      psnr_u_weight: 1.0
+      psnr_v_weight: 1.0
+    "422":
+      psnr_y_weight: 8.0
+      psnr_u_weight: 1.0
+      psnr_v_weight: 1.0
+  template: "AOM_CWG_Regular_CTC_ECF_v2.2_Anchor_cmt_1f8a.xlsm"
+```
+
+> **Important**: When ECF is enabled, the framework switches to ECF test sequences, configurations, and parameters. Regular CTC tests (LD/RA/AI/AS/STILL with 4:2:0 content) are not run. Disable ECF (`ecf.enabled: false`) to return to regular CTC testing.
+
+### ECF vs Regular CTC Differences
+
+| Parameter | Regular CTC | ECF |
+|-----------|------------|-----|
+| Configurations | LD, RA, AI, AS, STILL | AI, RA, LD only |
+| GOP size | 65 | 33 |
+| Frame counts (RA/LD) | 130 | 66 / 33 |
+| Frame counts (AI) | 30 (or 15) | 5 |
+| Bit depth | Varies by content | Always 10-bit encoding |
+| PSNR-YUV weights (4:4:4) | Y:U:V = 14:1:1 | Y:U:V = 4:1:1 |
+| PSNR-YUV weights (4:2:2) | N/A | Y:U:V = 8:1:1 |
+| Parallel GOP encoding | RA only, 65-frame GOPs | RA only, 33-frame GOPs |
+
+### ECF Tiling and Threading Rules
+
+ECF uses resolution-based tiling rules (CTC v8.0 Section 6.2), different from the class-based rules in regular CTC:
+
+**RA configuration:**
+
+| Resolution | tile-rows | tile-columns | threads |
+|------------|-----------|--------------|---------|
+| 4K+ (w>=3840 or h>=2160) | 2 | 2 | 16 |
+| FHD+ (w>=1920 or h>=858) | 1 | 1 | 4 |
+| Below FHD | 0 | 0 | 1 |
+
+**LD configuration:**
+
+| Resolution | tile-rows | tile-columns | threads |
+|------------|-----------|--------------|---------|
+| FHD+ (w>=1920 or h>=858) | 1 | 2 | 8 |
+| 720p (w>=1280 or h>=720) | 0 | 1 | 2 |
+| Below 720p | 0 | 0 | 1 |
+
+**AI configuration:**
+
+| Resolution | tile-rows | tile-columns | threads |
+|------------|-----------|--------------|---------|
+| 4K+ (w>=3840 or h>=2160) | 0 | 1 | 2 |
+| Below 4K | 0 | 0 | 1 |
+
+### ECF-Specific Encoder Flags
+
+- **ECF-6 (Screen Content)**: Adds `--tune-content=screen --enable-intrabc-ext=1 --enable-extended-sdp=0`
+- **ECF-3/ECF-4 (HDR)**: Adds `--color-primaries=bt2020 --transfer-characteristics=smpte2084 --matrix-coefficients=bt2020ncl --chroma-sample-position=topleft`
+
+### ECF Content Directory Structure
+
+ECF test sequences should be organized by class under the `ecf.content_path`:
+
+```
+ecf_test_sequences/
+├── ECF-1/    # SDR 4:4:4 sequences (.y4m)
+├── ECF-2/    # SDR 4:2:2 sequences (.y4m)
+├── ECF-3/    # HDR 4:4:4 sequences (.y4m)
+├── ECF-4/    # HDR 4:2:2 sequences (.y4m)
+├── ECF-5/    # YCoCg sequences (.y4m)
+└── ECF-6/    # Screen Content / GBR sequences (.y4m)
+```
+
+### Running ECF Tests
+
+The ECF test workflow is the same as regular CTC tests — use `AV2CTCTest.py` with the same commands. The framework automatically uses ECF settings when `ecf.enabled: true`.
+
+```bash
+cd src
+
+# Step 1: Edit config.yaml to enable ECF and set content path
+# ecf:
+#   enabled: true
+#   content_path: "/path/to/ecf_sequences/"
+
+# Step 2: Generate encoding commands
+python AV2CTCTest.py -f encode -c av2 -m aom -p 0 --LogCmdOnly 1
+
+# Step 3: Submit to cluster
+python Launch.py AV2CTC_TestCmd.log
+
+# Step 4: For RA with parallel GOP encoding, concatenate after encoding completes
+python AV2CTCTest.py -f concatenate -c av2 -m aom -p 0
+
+# Step 5: Decode (for RA parallel GOP)
+python AV2CTCTest.py -f decode -c av2 -m aom -p 0 --LogCmdOnly 1
+python Launch.py AV2CTC_TestCmd.log
+
+# Step 6: Generate summary
+python AV2CTCTest.py -f summary -c av2 -m aom -p 0
+```
+
+### ECF Report Template
+
+When ECF is enabled, `AV2CTCProgress.py` uses the ECF-specific Excel template (`CTC_ECFXLSTemplate`) instead of the regular CTC template. Ensure the template file (e.g., `AOM_CWG_Regular_CTC_ECF_v2.2_Anchor_cmt_1f8a.xlsm`) is placed in the `bin/` directory.
 
 ---
 

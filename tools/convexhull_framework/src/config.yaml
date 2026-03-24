@@ -180,6 +180,41 @@ quality:
   interpolate_pieces: 8
 
 # =============================================================================
+# Extended Chroma Format (ECF) Configuration
+# =============================================================================
+ecf:
+  # Enable ECF testing mode
+  enabled: false
+  # Path to ECF test sequences
+  content_path: "<path_to_ecf_test_sequences>"
+  # Test configurations for ECF (no AS or STILL)
+  configurations: ["AI", "RA", "LD"]
+  # Dataset identifier for ECF
+  dataset: "ECF_TEST_SET"
+  # ECF GOP size (33 frames per GOP, vs 65 for regular CTC)
+  gop_size: 33
+  # ECF frame counts per configuration
+  frame_counts:
+    AI: 5
+    RA: 66
+    LD: 33
+  # PSNR-YUV combination weights per chroma format
+  # These differ from regular 4:2:0 CTC weights
+  psnr_yuv_weights:
+    # 4:4:4 contents: Y=4/6, U=1/6, V=1/6
+    "444":
+      psnr_y_weight: 4.0
+      psnr_u_weight: 1.0
+      psnr_v_weight: 1.0
+    # 4:2:2 contents: Y=8/10, U=1/10, V=1/10
+    "422":
+      psnr_y_weight: 8.0
+      psnr_u_weight: 1.0
+      psnr_v_weight: 1.0
+  # ECF report template
+  template: "AOM_CWG_Regular_CTC_ECF_v2.2_Anchor_cmt_1f8a.xlsm"
+
+# =============================================================================
 # Logging Configuration
 # =============================================================================
 logging:

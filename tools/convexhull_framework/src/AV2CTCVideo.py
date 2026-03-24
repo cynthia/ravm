@@ -345,6 +345,66 @@ Y4M_CLIPs = {
     ),
 }
 
+ECF_TEST_SET = {
+    "AI": ["ECF-1", "ECF-2", "ECF-3", "ECF-4", "ECF-5", "ECF-6"],
+    "RA": ["ECF-1", "ECF-2", "ECF-3", "ECF-4", "ECF-5", "ECF-6"],
+    "LD": ["ECF-1", "ECF-2", "ECF-3", "ECF-4", "ECF-5", "ECF-6"],
+}
+
+ECF_Y4M_CLIPs = {
+    # ECF-1: 4:4:4 chroma subsampling (Table 14)
+    "ECF-1": [
+        "CrowdRun_SDR_3840x2160p50_yuv444p10.y4m",
+        "MeridianTalk_SDR_3840x2160p5994_yuv444p10.y4m",
+        "Neon1224_SDR_1920x1080p2997_yuv444p10.y4m",
+        "Smithy_SDR_1920x1080p50_yuv444p10.y4m",
+        "SparksElevator_SDR_1280x720p5994_yuv444p10.y4m",
+        "STARCRAFT_SDR_1280x720p60_yuv444p.y4m",
+        "MotorCycle_SDR_640x360p2997_yuv444p.y4m",
+        "NocturneStairs_SDR_640x360_yuv444p10.y4m",
+    ],
+    # ECF-2: 4:2:2 chroma subsampling (Table 15)
+    "ECF-2": [
+        "SolLevanteDragons_SDR_3840x2160p24_yuv422p10.y4m",
+        "Waterfall_SDR_3840x2160p50_yuv422p10.y4m",
+        "DinnerSceneCropped_SDR_1920x1080p2997_yuv422p10.y4m",
+        "WaterFlyover_SDR_1920x1080p50_yuv422p10.y4m",
+        "EuroTruckSimulator2_SDR_1280x720p60_yuv422p.y4m",
+        "PierSeaSide_SDR_1280x720pp2997_yuv422p10.y4m",
+        "ControlledBurn_SDR_640x360p30_yuv422p.y4m",
+        "ParkJoy_SDR_640x360p50_yuv422p10.y4m",
+    ],
+    # ECF-3: HDR 4:4:4 content (Table 16)
+    "ECF-3": [
+        "CosmosTreeTrunk_HDR_2048x858p24_yuv444p10.y4m",
+        "MeridianFace_HDR_1920x1080p5994_yuv444p10.y4m",
+        "MeridianShore_HDR_3840x2160p5994_yuv444p10.y4m",
+        "SparksWelding_HDR_4096x2160_5994_yuv444p10.y4m",
+    ],
+    # ECF-4: HDR 4:2:2 content (Table 17)
+    "ECF-4": [
+        "NocturneDance_HDR_3840x2160p60_yuv422p10.y4m",
+        "SolLevanteFace_HDR_3840x2160p24_yuv422p10.y4m",
+        "CosmosCaterpillar_HDR_2048x858p24_yuv422p10.y4m",
+        "NocturneRoom_HDR_1920x1080p60_yuv422p10.y4m",
+    ],
+    # ECF-5: YCoCg content (Table 18)
+    "ECF-5": [
+        "MeridianLighting_SDR_3840x2160p5994_ycgco_re.y4m",
+        "CosmosSheepRun_SDR_2048x858p24_ycgco_re.y4m",
+    ],
+    # ECF-6: SCC content / GBR (Table 19)
+    "ECF-6": [
+        "AppBrowsing_SDR_2048x2732p120_yuv444p.y4m",
+        "BigBuckBunnyStudio_SDR_1920x1080p60_gbrp.y4m",
+        "MapsGoldenGateBridge_SDR_1920x2560p60_yuv444p.y4m",
+        "MeridianCarMixedAVMTV_SDR_1920x1080p5994_yuv444p10.y4m",
+        "MissionControlClip3_SDR_1920x1080p60_yuv444p.y4m",
+        "PhotoBrowsing_2048x2732p2400_yuv444_130frames_cropped.y4m",
+        "Spreadsheet_SDR_1920x1080p30_yuv422p.y4m",
+    ],
+}
+
 AS_Downscaled_Clips = {
     "BoxingPractice_3840x2160_5994fps_10bit_420": [
         "/A1_4k_1440p/BoxingPractice_2560x1440_5994fps_10bit_420.y4m",

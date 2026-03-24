@@ -119,8 +119,11 @@ print_summary() {
     echo -e "  ${YELLOW}deactivate${NC}"
     echo -e "\nTo run the CTC tests:"
     echo -e "  ${YELLOW}cd $SCRIPT_DIR/src${NC}"
-    echo -e "  ${YELLOW}python AV2CTCTest.py -f encode ...${NC}"
-    echo -e "  ${YELLOW}python ConvexHullTest.py -f convexhull ...${NC}"
+    echo -e "  ${YELLOW}python AV2CTCTest.py -f encode ...${NC}         # Regular CTC (LD/RA/AI/STILL)"
+    echo -e "  ${YELLOW}python ConvexHullTest.py -f convexhull ...${NC}  # Adaptive Streaming (AS)"
+    echo -e "\nFor ECF (Extended Chroma Format) testing:"
+    echo -e "  Set ${YELLOW}ecf.enabled: true${NC} in ${YELLOW}src/config.yaml${NC}"
+    echo -e "  See ${YELLOW}USER_GUIDE.md${NC} for ECF configuration details"
     echo -e "\n${GREEN}==============================================================================${NC}"
 }
 

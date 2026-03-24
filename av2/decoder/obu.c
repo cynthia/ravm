@@ -222,13 +222,7 @@ void av2_store_xlayer_context(AV2Decoder *pbi, AV2_COMMON *cm, int xlayer_id) {
     pbi->stream_info[stream_idx].mfh_params_buf[i] = cm->mfh_params[i];
   }
 
-#if CONFIG_AV2_LCR_PROFILES
   // Global OBUs (xlayer_id=31) excluded from per-layer save/restore
-#else
-  for (int i = 0; i < MAX_NUM_LCR; i++) {
-    pbi->stream_info[stream_idx].lcr_list_buf[i] = pbi->lcr_list[i];
-  }
-#endif  // CONFIG_AV2_LCR_PROFILES
   pbi->stream_info[stream_idx].lcr_counter_buf = pbi->lcr_counter;
 #if !CONFIG_ANNEXF
   for (int i = 0; i < MAX_NUM_OPS_ID; i++) {
@@ -300,13 +294,7 @@ void av2_restore_xlayer_context(AV2Decoder *pbi, AV2_COMMON *cm,
     cm->mfh_params[i] = pbi->stream_info[stream_idx].mfh_params_buf[i];
   }
 
-#if CONFIG_AV2_LCR_PROFILES
   // Global OBUs (xlayer_id=31) excluded from per-layer save/restore
-#else
-  for (int i = 0; i < MAX_NUM_LCR; i++) {
-    pbi->lcr_list[i] = pbi->stream_info[stream_idx].lcr_list_buf[i];
-  }
-#endif  // CONFIG_AV2_LCR_PROFILES
   pbi->lcr_counter = pbi->stream_info[stream_idx].lcr_counter_buf;
 #if !CONFIG_ANNEXF
   for (int i = 0; i < MAX_NUM_OPS_ID; i++) {
@@ -2081,7 +2069,6 @@ static BITSTREAM_PROFILE get_msdo_profile(struct AV2Decoder *pbi) {
 }
 
 static BITSTREAM_PROFILE get_lcr_global_profile(struct AV2Decoder *pbi) {
-#if CONFIG_AV2_LCR_PROFILES
   // Return the lcr_max_interop from the first valid global LCR's aggregate PTL.
   // lcr_max_interop maps directly to the IOP (0, 1, 2) which corresponds to
   // MAIN_420_10_IP0, MAIN_420_10_IP1, MAIN_420_10_IP2 respectively.
@@ -2098,13 +2085,11 @@ static BITSTREAM_PROFILE get_lcr_global_profile(struct AV2Decoder *pbi) {
             .lcr_seq_profile_idc;
     }
   }
-#endif  // CONFIG_AV2_LCR_PROFILES
   (void)pbi;
   return MAIN_420_10_IP2;  // Fallback
 }
 
 static BITSTREAM_PROFILE get_lcr_local_profile(struct AV2Decoder *pbi) {
-#if CONFIG_AV2_LCR_PROFILES
   // Return the lcr_seq_profile_idc from the first valid local LCR.
   for (int i = 0; i < GLOBAL_XLAYER_ID; i++) {
     for (int j = 0; j < MAX_NUM_LCR; j++) {
@@ -2116,7 +2101,6 @@ static BITSTREAM_PROFILE get_lcr_local_profile(struct AV2Decoder *pbi) {
       }
     }
   }
-#endif  // CONFIG_AV2_LCR_PROFILES
   (void)pbi;
   return MAIN_420_10_IP2;  // Fallback
 }
@@ -2364,7 +2348,6 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
   ObuHeader obu_header;
   memset(&obu_header, 0, sizeof(obu_header));
 
-#if CONFIG_AV2_LCR_PROFILES
   // Enable multi_stream_mode if MSDO is present OR if Global LCR with
   // multiple extended layers (LcrMaxNumXLayerCount > 1) is present
   if (pbi->msdo_is_present_in_tu || pbi->glcr_is_present_in_tu)
@@ -2419,7 +2402,6 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
     for (int x = 0; x < AVM_MAX_NUM_STREAMS; x++)
       for (int i = 0; i < MAX_NUM_MLAYERS; i++) pbi->mlayer_id_map[x][i] = 0;
   }
-#endif  // CONFIG_AV2_LCR_PROFILES
 
   pbi->seen_frame_header = 0;
   pbi->next_start_tile = 0;
@@ -2527,39 +2509,8 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
       cm->is_leading_picture = 0;
     else
       cm->is_leading_picture = -1;
-#if CONFIG_AV2_LCR_PROFILES
     pbi->xlayer_id_map[obu_header.obu_xlayer_id] = 1;
     pbi->mlayer_id_map[obu_header.obu_xlayer_id][obu_header.obu_mlayer_id] = 1;
-#else
-    if (pbi->random_accessed) {
-      bool global_lcr_present = false;
-      bool local_lcr_present = false;
-      global_lcr_present = !cm->lcr_params.is_local_lcr;
-      local_lcr_present = cm->lcr_params.is_local_lcr;
-
-      if (!conformance_check_msdo_lcr(pbi, global_lcr_present,
-                                      local_lcr_present)) {
-        avm_internal_error(
-            &cm->error, AVM_CODEC_UNSUP_BITSTREAM,
-            "An MSDO or LCR OBU in the current CVS violates the requirements "
-            "of bitstream conformance for MSDO and LCR");
-      }
-
-      // Enable multi_stream_mode if MSDO is present OR if Global LCR with
-      // multiple extended layers (LcrMaxNumXLayerCount > 1) is present
-      if (pbi->msdo_is_present_in_tu || pbi->glcr_is_present_in_tu)
-        pbi->multi_stream_mode = 1;
-      else
-        pbi->multi_stream_mode = 0;
-      for (int i = 0; i < AVM_MAX_NUM_STREAMS - 1; i++)
-        pbi->xlayer_id_map[i] = 0;
-      for (int x = 0; x < AVM_MAX_NUM_STREAMS; x++)
-        for (int i = 0; i < MAX_NUM_MLAYERS; i++) pbi->mlayer_id_map[x][i] = 0;
-    }
-
-    pbi->xlayer_id_map[obu_header.obu_xlayer_id] = 1;
-    pbi->mlayer_id_map[obu_header.obu_xlayer_id][obu_header.obu_mlayer_id] = 1;
-#endif  // CONFIG_AV2_LCR_PROFILES
 
     obu_info *const curr_obu_info = &obu_list[count_obus_with_frame_unit];
     curr_obu_info->obu_type = obu_header.type;

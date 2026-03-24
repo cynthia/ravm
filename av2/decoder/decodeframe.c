@@ -3707,7 +3707,6 @@ static AVM_INLINE void setup_render_size(AV2_COMMON *cm,
   }
 
   (void)rb;
-#if CONFIG_AV2_LCR_PROFILES
   if (cm->lcr != NULL && cm->lcr->valid) {
     struct LCRXLayerInfo *xlayer_info = NULL;
     if (cm->lcr->is_global) {
@@ -3735,24 +3734,6 @@ static AVM_INLINE void setup_render_size(AV2_COMMON *cm,
     cm->render_width = cm->width;
     cm->render_height = cm->height;
   }
-#else
-  // Note: if Local LCR information is used, then the layer_id =
-  // lcr_params.xlayer_id If Global LCR is used, then for each extended layer
-  // i.e, xlayer_info(1,n) is specified, where n is xlayer_id[i] of the i-th
-  // extended layer. Set default to use xlayer_id 31 when Global LCR is being
-  // used
-  const bool is_global_lcr = !cm->lcr_params.is_local_lcr;
-  const int xlayer_id =
-      is_global_lcr ? GLOBAL_XLAYER_ID : cm->lcr_params.xlayer_id;
-  const int xId = cm->lcr_params.lcr_xLayer_id[xlayer_id];
-  if (cm->lcr_params.lcr_rep_info_present_flag[is_global_lcr][xId]) {
-    cm->render_width = cm->lcr_params.rep_params.lcr_max_pic_width;
-    cm->render_height = cm->lcr_params.rep_params.lcr_max_pic_height;
-  } else {
-    cm->render_width = cm->width;
-    cm->render_height = cm->height;
-  }
-#endif  // CONFIG_AV2_LCR_PROFILES
 }
 
 static AVM_INLINE void resize_context_buffers(AV2_COMMON *cm, int width,
@@ -3977,7 +3958,6 @@ void av2_validate_frame_level_conformance(
   }
 }
 
-#if CONFIG_AV2_LCR_PROFILES
 static void check_lcr_frame_size_conformance_dec(AV2_COMMON *cm, int width,
                                                  int height) {
   int max_w, max_h, layer_id;
@@ -3990,7 +3970,6 @@ static void check_lcr_frame_size_conformance_dec(AV2_COMMON *cm, int width,
         width, height, max_w, max_h, layer_id);
   }
 }
-#endif  // CONFIG_AV2_LCR_PROFILES
 
 static AVM_INLINE void setup_frame_size(AV2_COMMON *cm,
                                         int frame_size_override_flag,
@@ -4032,11 +4011,9 @@ static AVM_INLINE void setup_frame_size(AV2_COMMON *cm,
     }
   }
 
-#if CONFIG_AV2_LCR_PROFILES
   if (!cm->bridge_frame_info.is_bridge_frame) {
     check_lcr_frame_size_conformance_dec(cm, width, height);
   }
-#endif  // CONFIG_AV2_LCR_PROFILES
 
   resize_context_buffers(cm, width, height);
   setup_render_size(cm, rb);
@@ -4128,9 +4105,7 @@ static AVM_INLINE void setup_frame_size_with_refs(
     avm_internal_error(&cm->error, AVM_CODEC_CORRUPT_FRAME,
                        "Invalid frame size");
 
-#if CONFIG_AV2_LCR_PROFILES
   check_lcr_frame_size_conformance_dec(cm, width, height);
-#endif  // CONFIG_AV2_LCR_PROFILES
 
   for (int i = 0; i < num_refs; ++i) {
     const RefCntBuffer *const ref_frame =
@@ -7448,21 +7423,12 @@ static void activate_atlas_segment(AV2Decoder *pbi) {
   bool atlas_found = false;
   int xlayer_id;
   int atlas_lcr_id;
-#if CONFIG_AV2_LCR_PROFILES
   xlayer_id = cm->lcr_params.xlayer_id;
   if (cm->lcr_params.is_global) {
     atlas_lcr_id = cm->lcr_params.global_lcr.lcr_global_atlas_id;
   } else {
     atlas_lcr_id = cm->lcr_params.local_lcr.lcr_local_atlas_id;
   }
-#else
-  int xlayer_id = GLOBAL_XLAYER_ID;
-  if (cm->lcr_params.is_local_lcr) xlayer_id = cm->lcr_params.xlayer_id;
-
-  int atas_lcr_id = cm->lcr_params.is_local_lcr
-                        ? cm->lcr_params.lcr_local_atlas_id[xlayer_id]
-                        : cm->lcr_params.lcr_global_atlas_id;
-#endif  // CONFIG_AV2_LCR_PROFILES
   for (int i = 0; i < pbi->atlas_counter[xlayer_id]; i++) {
     if (pbi->atlas_list[xlayer_id][i].atlas_segment_id == atlas_lcr_id) {
       pbi->active_atlas_segment_info = &pbi->atlas_list[xlayer_id][i];
@@ -7480,7 +7446,6 @@ static void activate_atlas_segment(AV2Decoder *pbi) {
 static void activate_layer_configuration_record(AV2Decoder *pbi,
                                                 int seq_lcr_id) {
   AV2_COMMON *const cm = &pbi->common;
-#if CONFIG_AV2_LCR_PROFILES
   LayerConfigurationRecord *lcr = NULL;
   // Option 1: search for a local LCR for the current layer whose
   // lcr_global_id matches seq_lcr_id. seq_lcr_id is a global LCR ID, and
@@ -7545,23 +7510,6 @@ static void activate_layer_configuration_record(AV2Decoder *pbi,
     avm_internal_error(&cm->error, AVM_CODEC_UNSUP_BITSTREAM,
                        "Unsupported LCR id in the Sequence Header.\n");
   }
-#else
-  bool lcr_found = false;
-  for (int i = 0; i < pbi->lcr_counter; i++) {
-    if (pbi->lcr_list[i].lcr_global_config_record_id == seq_lcr_id) {
-      pbi->active_lcr = &pbi->lcr_list[i];
-      lcr_found = true;
-      break;
-    }
-  }
-  if (lcr_found) {
-    cm->lcr_params = *pbi->active_lcr;
-    activate_atlas_segment(pbi);
-  } else {
-    avm_internal_error(&cm->error, AVM_CODEC_UNSUP_BITSTREAM,
-                       "Unsupported LCR id in the Sequence Header.\n");
-  }
-#endif  // CONFIG_AV2_LCR_PROFILES
 }
 
 // This function provides conformance checks for the LCR, where the mlayer and

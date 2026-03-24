@@ -911,7 +911,6 @@ static void init_config(struct AV2_COMP *cpi, AV2EncoderConfig *oxcf) {
   cpi->framerate = oxcf->input_cfg.init_framerate;
 
   //  Initialize LCR information
-#if CONFIG_AV2_LCR_PROFILES
   // Init a 2D array [xlayer_id][lcr_id]
   memset(cpi->lcr_list, 0, sizeof(cpi->lcr_list));
   // Set up default global LCR at [GLOBAL_XLAYER_ID][1]
@@ -936,19 +935,6 @@ static void init_config(struct AV2_COMP *cpi, AV2EncoderConfig *oxcf) {
   // Store the parent global LCR for fallback when the local LCR does not
   // have embedded layer info.
   cm->global_lcr_params = cpi->lcr_list[GLOBAL_XLAYER_ID][1];
-#else
-  for (int i = 0; i < MAX_NUM_LCR; i++)
-    memset(&cpi->lcr_list[i], 0, sizeof(struct LayerConfigurationRecord));
-  cm->lcr = &cpi->lcr_list[0];
-
-  cm->lcr->lcr_global_config_record_id = 1;
-  for (int i = 0; i < MAX_NUM_LCR; i++) cm->lcr->lcr_global_id[i] = 1;
-
-  // Initialize LCR params which is used by write_lcr_local_info()
-  // lcr_global_id must be non-zero since 0 is LCR_ID_UNSPECIFIED
-  cm->lcr_params.lcr_global_config_record_id = 1;
-  for (int i = 0; i < MAX_NUM_LCR; i++) cm->lcr_params.lcr_global_id[i] = 1;
-#endif  //  CONFIG_AV2_LCR_PROFILES
 
   // Initialize OPS information
   memset(&cpi->ops_list, 0, sizeof(cpi->ops_list));
@@ -1391,7 +1377,6 @@ void av2_change_config(struct AV2_COMP *cpi, const AV2EncoderConfig *oxcf) {
   cm->width = frm_dim_cfg->width;
   cm->height = frm_dim_cfg->height;
 
-#if CONFIG_AV2_LCR_PROFILES
   if (cm->lcr && cm->lcr->valid) {
     if (cm->lcr->is_global) {
       struct GlobalLayerConfigurationRecord *global_lcr = &cm->lcr->global_lcr;
@@ -1414,13 +1399,6 @@ void av2_change_config(struct AV2_COMP *cpi, const AV2EncoderConfig *oxcf) {
       }
     }
   }
-#else
-  if (cm->lcr->lcr_rep_info_present_flag[0][0] == 1) {
-    // NOTE: if LCR exist
-    cm->lcr_params.rep_params.lcr_max_pic_width = cm->width;
-    cm->lcr_params.rep_params.lcr_max_pic_height = cm->height;
-  }
-#endif  // CONFIG_AV2_LCR_PROFILES
 
   BLOCK_SIZE sb_size = cm->sb_size;
   BLOCK_SIZE new_sb_size = av2_select_sb_size(cpi);

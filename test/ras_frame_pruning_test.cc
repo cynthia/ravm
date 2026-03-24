@@ -52,6 +52,7 @@ static PacketInfo GetPacketInfo(const std::vector<uint8_t> &data) {
     if (avm_read_obu_header_and_size(ptr, remaining, &hdr, &payload_size,
                                      &bytes_read) != AVM_CODEC_OK)
       break;
+    if (remaining - bytes_read < payload_size) break;
     if (is_single_tile_vcl_obu(hdr.type) || is_multi_tile_vcl_obu(hdr.type)) {
       info.tlayer_id = hdr.obu_tlayer_id;
       info.mlayer_id = hdr.obu_mlayer_id;

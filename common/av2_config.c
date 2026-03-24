@@ -375,7 +375,7 @@ int get_av2config_from_obu(const uint8_t *buffer, size_t length,
                                    &sequence_header_length,
                                    &obu_header_length) != AVM_CODEC_OK ||
       obu_header.type != OBU_SEQUENCE_HEADER ||
-      sequence_header_length + obu_header_length > length) {
+      sequence_header_length > length - obu_header_length) {
     return -1;
   }
 
@@ -394,7 +394,7 @@ int get_av2config_from_obu(const uint8_t *buffer, size_t length,
                                      &ci_header_length,
                                      &obu_header_length) == AVM_CODEC_OK &&
         obu_header.type != OBU_CONTENT_INTERPRETATION &&
-        sequence_header_length + obu_header_length <= length) {
+        ci_header_length <= length - obu_header_length) {
       if (parse_content_intrepretation_obu(buffer + obu_header_length,
                                            ci_header_length, config) != 0) {
         fprintf(stderr, "av2c: CI OBU parse failed.\n");

@@ -85,6 +85,10 @@ static int read_multi_stream_decoder_operation(struct avm_read_bit_buffer *rb,
     (void)substream_tier_idx;
   }
 
+  const int msdo_doh_constraint_flag =
+      avm_rb_read_bit(rb);  // read msdo_doh_constraint_flag
+  (void)msdo_doh_constraint_flag;
+
   return num_streams;
 }
 

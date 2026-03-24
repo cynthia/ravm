@@ -245,7 +245,7 @@ static void read_lcr_global_info(struct AV2Decoder *pbi,
   glcr->lcr_dependent_xlayers_flag = avm_rb_read_bit(rb);
   glcr->lcr_global_atlas_id_present_flag = avm_rb_read_bit(rb);
   glcr->lcr_global_purpose_id = avm_rb_read_literal(rb, 7);
-  glcr->lcr_enforce_tu_alignment_flag = avm_rb_read_bit(rb);
+  glcr->lcr_doh_constraint_flag = avm_rb_read_bit(rb);
   glcr->lcr_enforce_tile_alignment_flag = avm_rb_read_bit(rb);
   if (glcr->lcr_global_atlas_id_present_flag)
     glcr->lcr_global_atlas_id = avm_rb_read_literal(rb, 3);

@@ -72,6 +72,8 @@ static int write_multi_stream_decoder_operation_obu(uint8_t *const dst,
     avm_wb_write_bit(&wb, 0);          // substream tier_idx
   }
 
+  avm_wb_write_bit(&wb, 1);  // msdo_doh_constraint_flag
+
   if ((wb.bit_offset % CHAR_BIT == 0)) {
     avm_wb_write_literal(&wb, 0x80, 8);
   } else {

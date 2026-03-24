@@ -5279,6 +5279,9 @@ static AVM_INLINE void write_uncompressed_header(
     }
     cm->cur_frame->immediate_output_picture = cm->immediate_output_picture;
     cm->cur_frame->implicit_output_picture = cm->implicit_output_picture;
+
+    assert(!seq_params->monotonic_output_order_flag ||
+           !cm->implicit_output_picture);
   }
   int frame_size_override_flag = 0;
 
@@ -5999,6 +6002,7 @@ uint32_t av2_write_sequence_header_obu(const SequenceHeader *seq_params,
       int n = avm_ceil_log2(seq_params->max_mlayer_id + 1);
       avm_wb_write_literal(&wb, seq_params->seq_max_mlayer_cnt - 1, n);
     }
+    avm_wb_write_bit(&wb, seq_params->monotonic_output_order_flag);
   }
 
   avm_wb_write_literal(&wb, seq_params->num_bits_width - 1, 4);

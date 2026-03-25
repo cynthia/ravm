@@ -648,9 +648,10 @@ static void set_doh_error(AV2_COMMON *const cm) {
   cm->error.error_code = AVM_CODEC_UNSUP_BITSTREAM;
   cm->error.has_detail = 1;
   snprintf(cm->error.detail, sizeof(cm->error.detail) - 1,
-           "Display order hint of an output picture is not unique"
-           " (or not ascending) relative to a previously output picture"
-           " in the same (xlayer_id, mlayer_id) layer.");
+           "Display order hint of an output picture is not ascending"
+           " relative to a previously output picture"
+           " in the same (xlayer_id %d, mlayer_id %d) layer.",
+           cm->xlayer_id, cm->mlayer_id);
 }
 
 // This function outputs frames that are ready to be output.

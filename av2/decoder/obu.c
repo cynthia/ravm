@@ -2697,9 +2697,7 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
                                           [leading_mlayer_id]
                                           [OBU_BUFFER_REMOVAL_TIMING])
             cm->brt_from_leading = true;
-        } else if (av2_is_regular_non_olk_obu(obu_header.type) &&
-                   (pbi->this_is_first_vcl_obu_in_tu == 1 ||
-                    pbi->this_is_first_keyframe_unit_in_tu == 1)) {
+        } else if (pbi->this_is_first_vcl_obu_in_tu == 1) {
           // First regular VCL Temporal unit after leading frames: drop all
           // state that came exclusively from leading frame picture unit HLS
           // OBUs and was not re-signalled in the current (regular) picture

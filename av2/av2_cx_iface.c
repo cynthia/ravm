@@ -764,7 +764,7 @@ static avm_codec_err_t validate_config(avm_codec_alg_priv_t *ctx,
   RANGE_CHECK(extra_cfg, transfer_characteristics, AVM_CICP_TC_BT_709,
               AVM_CICP_TC_HLG);
   RANGE_CHECK(extra_cfg, matrix_coefficients, AVM_CICP_MC_IDENTITY,
-              AVM_CICP_MC_ICTCP);
+              AVM_CICP_MC_YCGCO_RO);
   RANGE_CHECK(extra_cfg, color_range, 0, 1);
 
   /* Average corpus complexity is supported only in the case of single pass

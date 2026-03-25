@@ -6259,7 +6259,7 @@ void av2_rd_pick_intra_mode_sb(const struct AV2_COMP *cpi, ThreadData *td,
 
 /*!\brief Search for the best skip mode
  *
- * \ingroup av2_rd_pick_inter_mode_sb
+ * \ingroup inter_mode_search
  *
  * This function performs a rate distortion search to find the best skip mode
  * and compare the existing best mode

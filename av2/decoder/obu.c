@@ -2396,18 +2396,6 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
       }
     }
 
-    if (obu_header.type == OBU_CLOSED_LOOP_KEY ||
-        obu_header.type == OBU_OPEN_LOOP_KEY) {
-      if (!pbi->seen_keyframe_in_this_tu) {
-        pbi->this_is_first_keyframe_unit_in_tu = 1;
-        pbi->seen_keyframe_in_this_tu = 1;
-      } else {
-        pbi->this_is_first_keyframe_unit_in_tu = 0;
-      }
-    } else {
-      pbi->this_is_first_keyframe_unit_in_tu = 0;
-    }
-
     if (is_single_tile_vcl_obu(obu_header.type) ||
         is_multi_tile_vcl_obu(obu_header.type)) {
       if (!pbi->seen_vcl_obu_in_this_tu) {
@@ -2416,6 +2404,12 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
       } else {
         pbi->this_is_first_vcl_obu_in_tu = 0;
       }
+    }
+
+    if (obu_header.type == OBU_CLOSED_LOOP_KEY ||
+        obu_header.type == OBU_OPEN_LOOP_KEY) {
+      if (pbi->this_is_first_vcl_obu_in_tu)
+        pbi->this_is_first_keyframe_unit_in_tu = 1;
     }
 
     if (is_leading_vcl_obu(obu_header.type))
@@ -2549,7 +2543,6 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
         pbi->seen_frame_header = 0;
         pbi->next_start_tile = 0;
         pbi->seen_vcl_obu_in_this_tu = 0;
-        pbi->seen_keyframe_in_this_tu = 0;
         pbi->this_is_first_vcl_obu_in_tu = 0;
         for (int i = 0; i < NUM_CUSTOM_QMS; i++) pbi->qm_protected[i] = 0;
         break;

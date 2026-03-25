@@ -635,6 +635,9 @@ static int check_and_update_output_doh(AV2Decoder *pbi,
     return 0;
   }
 
+  if (frame->implicit_output_picture && !frame->immediate_output_picture) {
+    return 0;
+  }
   const int last_doh = pbi->last_output_doh[xl][ml];
 
   if (doh <= last_doh) {

@@ -419,7 +419,7 @@ static INLINE int avm_read_symbol_probdata(avm_reader *r, avm_cdf_prob *cdf,
     cdf_list[sym] = CDF_INIT_TOP - cdf[sym];
   }
   int cost_list[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-  av2_cost_tokens_from_cdf(cost_list, cdf, NULL);
+  av2_cost_tokens_from_cdf(cost_list, cdf, symLength, NULL);
 
   int ret;
   ret = avm_read_cdf_probdata(r, cdf, symLength);

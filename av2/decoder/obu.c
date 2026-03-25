@@ -2801,8 +2801,8 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
           const int num_tiles = cm->tiles.cols * cm->tiles.rows;
           const int end_tile = num_tiles - 1;
           // skip parsing and go directly to decode
-          av2_decode_tg_tiles_and_wrapup(pbi, data, data_end, p_data_end, 0,
-                                         end_tile, 0);
+          av2_decode_tg_tiles_and_wrapup(pbi, data, data + payload_size,
+                                         p_data_end, 0, end_tile, 0);
           if (cm->bridge_frame_info.is_bridge_frame) {
             *p_data_end = data + payload_size;
           }

@@ -624,6 +624,7 @@ static size_t check_frame_unit_data(struct AV2Decoder *pbi, const uint8_t *data,
   avm_codec_err_t res = AVM_CODEC_OK;
   pbi->num_obus_with_frame_unit = 0;
   const uint8_t *data_read = data;
+  size_t bytes_available = data_sz;
   ObuHeader obu_header;
   bool bfirst = true;      // True until we encounter the first VCL OBU
   bool vcl_found = false;  // Track if we've found any VCL OBU
@@ -633,13 +634,16 @@ static size_t check_frame_unit_data(struct AV2Decoder *pbi, const uint8_t *data,
   *mlayer_id = -1;
   *tlayer_id = -1;
 
-  while (data_read < data + data_sz) {
+  while (bytes_available > 0) {
     size_t payload_size = 0;
     size_t bytes_read = 0;
-    res = avm_read_obu_header_and_size(data_read, data_sz, &obu_header,
+    res = avm_read_obu_header_and_size(data_read, bytes_available, &obu_header,
                                        &payload_size, &bytes_read);
 
     if (res != AVM_CODEC_OK) return 0;
+    if (bytes_available - bytes_read < payload_size) {
+      return 0;
+    }
 
     bool is_vcl = is_single_tile_vcl_obu(obu_header.type) ||
                   is_multi_tile_vcl_obu(obu_header.type);
@@ -712,6 +716,7 @@ static size_t check_frame_unit_data(struct AV2Decoder *pbi, const uint8_t *data,
 
     // Advance to next OBU
     data_read += bytes_read + payload_size;
+    bytes_available -= bytes_read + payload_size;
   }
 
   // one frame unit in this data

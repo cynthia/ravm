@@ -2672,7 +2672,18 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
               "0, got %d.",
               obu_header.type, obu_header.obu_tlayer_id);
         }
-
+        if (obu_header.type == OBU_SWITCH || obu_header.type == OBU_RAS_FRAME) {
+          const int mid = obu_header.obu_mlayer_id;
+          for (int j = 0; j < MAX_NUM_MLAYERS; j++) {
+            if (j != mid && cm->seq_params.mlayer_dependency_map[mid][j] != 0) {
+              avm_internal_error(
+                  &cm->error, AVM_CODEC_UNSUP_BITSTREAM,
+                  "Switch frame at mlayer_id=%d depends on mlayer %d. "
+                  "Switch frames must be in independent embedded layers.",
+                  mid, j);
+            }
+          }
+        }
         // Drop picture unit HLS state that was derived exclusively from leading
         // frame picture units when the first regular VCL OBU is encountered.
         if (is_leading_vcl_obu(obu_header.type)) {

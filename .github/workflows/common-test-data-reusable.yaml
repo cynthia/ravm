@@ -35,7 +35,7 @@ jobs:
 
       - name: Build test data
         run: |
-          cmake -B avm_testdata -GNinja -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+          cmake -B avm_testdata -GNinja
           cmake --build avm_testdata --target testdata
 
       - name: Upload artifacts

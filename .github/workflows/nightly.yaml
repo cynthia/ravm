@@ -59,10 +59,7 @@ jobs:
     container:
       image: ${{ needs.vars.outputs.container-image }}
     env:
-      # CMake 4.0.0 removed compatibility with CMake < 3.5. Add
-      # -DCMAKE_POLICY_VERSION_MINIMUM=3.5 to try configuring anyway.
       CMAKE_FLAGS: >-
-        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
         -DENABLE_CCACHE=1
         -DCMAKE_BUILD_TYPE=RelWithDebInfo
         -DAVM_EXTRA_C_FLAGS="--coverage"

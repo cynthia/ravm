@@ -8052,6 +8052,9 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
             }
           }
         }
+        memset(&pbi->last_frame_unit, -1, sizeof(pbi->last_frame_unit));
+        memset(&pbi->last_displayable_frame_unit, -1,
+               sizeof(pbi->last_displayable_frame_unit));
       }
       if (obu_type == OBU_RAS_FRAME || cm->restricted_prediction_switch)
         reset_qm_list(pbi);

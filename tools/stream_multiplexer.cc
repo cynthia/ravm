@@ -113,6 +113,117 @@ static bool TuHasKeyFrame(const uint8_t *data, int length) {
   return false;
 }
 
+// Extract non-TD OBUs from a single input TU, rewriting headers with stream_id.
+// Used by the combined TU path.
+static std::vector<uint8_t> WriteStreamOBUs(const uint8_t *data, int length,
+                                            int stream_id) {
+  std::vector<uint8_t> obus;
+  const int kObuHeaderSizeBytes = 1;
+  int consumed = 0;
+  ObuHeader obu_header;
+
+  while (consumed < length) {
+    const int remaining = length - consumed;
+    size_t length_field_size = 0;
+    uint64_t obu_total_size = 0;
+
+    memset(&obu_header, 0, sizeof(obu_header));
+    if (avm_uleb_decode(data + consumed, remaining, &obu_total_size,
+                        &length_field_size) != 0) {
+      fprintf(stderr, "OBU size parsing failed at offset %d.\n", consumed);
+      break;
+    }
+
+    const uint8_t obu_header_byte = *(data + consumed + length_field_size);
+    if (!ParseAV2ObuHeader(obu_header_byte, &obu_header)) {
+      fprintf(stderr, "OBU parsing failed at offset %d.\n",
+              consumed + static_cast<int>(length_field_size));
+      break;
+    }
+
+    int obu_header_size = 1;
+    if (obu_header.obu_header_extension_flag) {
+      const uint8_t obu_header_ext_byte =
+          *(data + consumed + length_field_size + kObuHeaderSizeBytes);
+      ParseAV2ObuHeaderExtension(obu_header_ext_byte, &obu_header);
+      ++obu_header_size;
+    }
+
+    consumed +=
+        static_cast<int>(obu_total_size) + static_cast<int>(length_field_size);
+
+    // Skip TD OBUs — the combined TU path writes its own single TD.
+    if (obu_header.type == OBU_TEMPORAL_DELIMITER) continue;
+
+    // Rewrite OBU header with stream_id as xlayer_id
+    std::vector<uint8_t> obu_size_data(length_field_size + 1);
+    size_t coded_obu_size;
+    avm_uleb_encode(obu_total_size - obu_header_size + 2,
+                    sizeof(obu_total_size), obu_size_data.data(),
+                    &coded_obu_size);
+    obus.insert(obus.end(), obu_size_data.begin(),
+                obu_size_data.begin() + coded_obu_size);
+
+    std::vector<uint8_t> obu_header_data(2);
+    write_obu_header_with_stream_id(obu_header_data.data(), &obu_header,
+                                    stream_id);
+    obus.insert(obus.end(), obu_header_data.begin(), obu_header_data.end());
+
+    // Append OBU payload (after original header)
+    const uint8_t *payload_start =
+        data + (consumed - static_cast<int>(obu_total_size)) + obu_header_size;
+    int payload_size = static_cast<int>(obu_total_size) - obu_header_size;
+    obus.insert(obus.end(), payload_start, payload_start + payload_size);
+  }
+
+  return obus;
+}
+
+// Write a single combined TU containing OBUs from all streams.
+// sorted_indices provides stream indices in ascending stream_id order.
+static std::vector<uint8_t> WriteCombinedTU(
+    std::vector<std::vector<uint8_t>> &per_stream_obus,
+    const int *sorted_indices, int num_streams, int *stream_ids,
+    int *stream_buffer_units, bool any_key_frame, bool redundant_msdo) {
+  std::vector<uint8_t> tu;
+
+  // Write TD OBU
+#if REWRITE_TD_WITH_GLOBAL_XLAYER
+  uint8_t td_obu_size = 2;
+  tu.push_back(td_obu_size);
+  tu.push_back(0x88);
+  tu.push_back(0x1F);
+#else
+  // Write a minimal 1-byte TD: size=1, header byte for TD type
+  uint8_t td_header = (OBU_TEMPORAL_DELIMITER << 2);  // ext=0, tlayer=0
+  tu.push_back(1);                                    // leb128 size = 1
+  tu.push_back(td_header);
+#endif
+
+  // Insert MSDO if any stream has a key frame or redundant mode
+  if (redundant_msdo || any_key_frame) {
+    std::vector<uint8_t> multi_stream_obu(num_streams * 2 + 4);
+    int multi_header_obu_size = write_multi_stream_decoder_operation_obu(
+        multi_stream_obu.data(), num_streams, stream_ids, stream_buffer_units);
+    std::vector<uint8_t> msdo_size_data(8);
+    size_t msdo_length_field_size = 0;
+    avm_uleb_encode(multi_header_obu_size, sizeof(multi_header_obu_size),
+                    msdo_size_data.data(), &msdo_length_field_size);
+    tu.insert(tu.end(), msdo_size_data.begin(),
+              msdo_size_data.begin() + msdo_length_field_size);
+    tu.insert(tu.end(), multi_stream_obu.begin(),
+              multi_stream_obu.begin() + multi_header_obu_size);
+  }
+
+  // Append OBUs from each stream in ascending stream_id order
+  for (int j = 0; j < num_streams; ++j) {
+    const auto &obus = per_stream_obus[sorted_indices[j]];
+    tu.insert(tu.end(), obus.begin(), obus.end());
+  }
+
+  return tu;
+}
+
 // This function read a temporal unit from a sub-stream,
 // writes the temporal unit with updates of xlayer_id,
 // and multiplex the temporal units into a merged bitstream.
@@ -259,17 +370,26 @@ std::vector<uint8_t> WriteTU(const uint8_t *data, int length,
 
 int main(int argc, const char *argv[]) {
   bool redundant_msdo = false;
+  bool separate_tu = false;
   int arg_offset = 0;
 
-  // Check for --redundant-msdo flag
-  if (argc > 1 && strcmp(argv[1], "--redundant-msdo") == 0) {
-    redundant_msdo = true;
-    arg_offset = 1;
+  // Parse optional flags
+  while (arg_offset + 1 < argc) {
+    if (strcmp(argv[arg_offset + 1], "--redundant-msdo") == 0) {
+      redundant_msdo = true;
+      ++arg_offset;
+    } else if (strcmp(argv[arg_offset + 1], "--separate-tu") == 0) {
+      separate_tu = true;
+      ++arg_offset;
+    } else {
+      break;
+    }
   }
 
   if (argc - arg_offset < 3 || (argc - arg_offset - 2) % 3) {
     fprintf(stderr,
-            "command: %s [--redundant-msdo] [input file1], [stream ID 1], "
+            "command: %s [--redundant-msdo] [--separate-tu] "
+            "[input file1], [stream ID 1], "
             "[unit size 1], [input "
             "file2], [stream ID 2], [unit size 2], ... [outfile]\n",
             argv[0]);
@@ -382,27 +502,81 @@ int main(int argc, const char *argv[]) {
   int unit_number[AVM_MAX_NUM_STREAMS];
   for (int i = 0; i < num_streams; ++i) unit_number[i] = 0;
 
-  while (num_tu_read) {
-    num_tu_read = 0;
-    for (int i = 0; i < num_streams; ++i) {
-      size_t unit_size = 0;
-      if (ReadTemporalUnit(&input_ctx[i], &unit_size)) {
+  if (separate_tu) {
+    // Legacy path: one output TU per input TU, round-robin
+    while (num_tu_read) {
+      num_tu_read = 0;
+      for (int i = 0; i < num_streams; ++i) {
+        size_t unit_size = 0;
+        if (ReadTemporalUnit(&input_ctx[i], &unit_size)) {
 #if PRINT_TU_INFO
-        printf("Stream Idx %d\n", i);
-        printf("Temporal unit %d\n", unit_number[i]);
+          printf("Stream Idx %d\n", i);
+          printf("Temporal unit %d\n", unit_number[i]);
 #endif  // PRINT_TU_INFO
-        int obu_overhead_current_unit = 0;
-        segments =
-            WriteTU(input_ctx[i].unit_buffer, static_cast<int>(unit_size),
-                    &obu_overhead_current_unit, i, num_streams, stream_ids,
-                    stream_buffer_units, redundant_msdo);
+          int obu_overhead_current_unit = 0;
+          segments =
+              WriteTU(input_ctx[i].unit_buffer, static_cast<int>(unit_size),
+                      &obu_overhead_current_unit, i, num_streams, stream_ids,
+                      stream_buffer_units, redundant_msdo);
+          fwrite(segments.data(), 1, segments.size(), fout);
+#if PRINT_TU_INFO
+          printf("  TU overhead:    %d\n", obu_overhead_current_unit);
+          printf("  TU total:    %ld\n", unit_size);
+#endif  // PRINT_TU_INFO
+          ++unit_number[i];
+          ++num_tu_read;
+        }
+      }
+    }
+  } else {
+    // Combined TU path: merge corresponding TUs into a single output TU
+
+    // Pre-compute stream indices sorted by ascending stream_id
+    int sorted_indices[AVM_MAX_NUM_STREAMS];
+    for (int i = 0; i < num_streams; ++i) sorted_indices[i] = i;
+    for (int i = 0; i < num_streams - 1; ++i) {
+      for (int j = i + 1; j < num_streams; ++j) {
+        if (stream_ids[sorted_indices[j]] < stream_ids[sorted_indices[i]]) {
+          int tmp = sorted_indices[i];
+          sorted_indices[i] = sorted_indices[j];
+          sorted_indices[j] = tmp;
+        }
+      }
+    }
+
+    while (num_tu_read) {
+      num_tu_read = 0;
+      bool any_key_frame = false;
+      std::vector<std::vector<uint8_t>> per_stream_obus(num_streams);
+
+      // Phase 1: Read one TU from each active stream
+      for (int i = 0; i < num_streams; ++i) {
+        size_t unit_size = 0;
+        if (ReadTemporalUnit(&input_ctx[i], &unit_size)) {
+#if PRINT_TU_INFO
+          printf("Stream Idx %d\n", i);
+          printf("Temporal unit %d\n", unit_number[i]);
+#endif  // PRINT_TU_INFO
+          if (TuHasKeyFrame(input_ctx[i].unit_buffer,
+                            static_cast<int>(unit_size))) {
+            any_key_frame = true;
+          }
+
+          per_stream_obus[i] =
+              WriteStreamOBUs(input_ctx[i].unit_buffer,
+                              static_cast<int>(unit_size), stream_ids[i]);
+
+          ++unit_number[i];
+          ++num_tu_read;
+        }
+      }
+
+      // Phase 2: Write single combined TU
+      if (num_tu_read > 0) {
+        segments = WriteCombinedTU(per_stream_obus, sorted_indices, num_streams,
+                                   stream_ids, stream_buffer_units,
+                                   any_key_frame, redundant_msdo);
         fwrite(segments.data(), 1, segments.size(), fout);
-#if PRINT_TU_INFO
-        printf("  TU overhead:    %d\n", obu_overhead_current_unit);
-        printf("  TU total:    %ld\n", unit_size);
-#endif  // PRINT_TU_INFO
-        ++unit_number[i];
-        ++num_tu_read;
       }
     }
   }

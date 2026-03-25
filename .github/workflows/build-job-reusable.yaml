@@ -50,9 +50,7 @@ jobs:
     container:
       image: ${{ inputs.container-image }}
     env:
-      # CMake 4.0.0 removed compatibility with CMake < 3.5. Add
-      # -DCMAKE_POLICY_VERSION_MINIMUM=3.5 to try configuring anyway.
-      CMAKE_FLAGS: -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DENABLE_CCACHE=1 -DENABLE_WERROR=1 -DENABLE_DOCS=0
+      CMAKE_FLAGS: -DENABLE_CCACHE=1 -DENABLE_WERROR=1 -DENABLE_DOCS=0
       INSTALLROOT_FOLDER: installroot
       CCACHE_BASEDIR: ${{ github.workspace }}
       CCACHE_DIR: ${{ github.workspace }}/ccache

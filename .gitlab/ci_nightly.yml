@@ -14,11 +14,8 @@ default:
 Linux Nightly Build:
   stage: build
   interruptible: true
-  # CMake 4.0.0 removed compatibility with CMake < 3.5. Add
-  # -DCMAKE_POLICY_VERSION_MINIMUM=3.5 to try configuring anyway.
   variables:
     CMAKE_FLAGS: >-
-      -DCMAKE_POLICY_VERSION_MINIMUM=3.5
       -DCMAKE_BUILD_TYPE=RelWithDebInfo
       -DAVM_EXTRA_C_FLAGS="--coverage"
       -DAVM_EXTRA_CXX_FLAGS="--coverage"
@@ -358,7 +355,6 @@ Linux Sanitizers (x86_64-clang) (Memory):
         -DAVM_TARGET_CPU=generic
         -DCMAKE_C_COMPILER=clang
         -DCMAKE_CXX_COMPILER=clang++
-        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
         -DENABLE_CCACHE=1
         -DENABLE_EXAMPLES=0
     # Special handling for a transient clang compiler crash.

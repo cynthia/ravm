@@ -254,12 +254,11 @@ void av2_sbe_process_global_ops(SubBitstreamExtractionState *sbe, int ops_id,
 // Populate retention map entries for a single xlayer (Steps 4-5).
 // This is the core per-xlayer logic used by both av2_sbe_build_retention_map()
 // and av2_sbe_process_local_ops() (for late-arriving local OPS rebuilds).
-static void sbe_populate_xlayer_retention_map(
-    SubBitstreamExtractionState *sbe, struct AV2Decoder *pbi, int xid) {
+static void sbe_populate_xlayer_retention_map(SubBitstreamExtractionState *sbe,
+                                              struct AV2Decoder *pbi, int xid) {
   // Clear this xlayer's retention map entries
   for (int j = 0; j < MAX_NUM_MLAYERS; j++)
-    for (int k = 0; k < MAX_NUM_TLAYERS; k++)
-      sbe->retention_map[xid][j][k] = 0;
+    for (int k = 0; k < MAX_NUM_TLAYERS; k++) sbe->retention_map[xid][j][k] = 0;
 
   int map_populated = 0;
 

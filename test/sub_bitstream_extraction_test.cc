@@ -339,8 +339,7 @@ TEST_F(SBEApiTest, LateLocalOpsRebuildsRetentionMap) {
     for (int t = 0; t < MAX_NUM_TLAYERS; t++) {
       if (m == 0 && t == 0) continue;
       EXPECT_EQ(sbe_.retention_map[target_xid][m][t], 0)
-          << "After late OPS: xlayer 1 should NOT retain m=" << m
-          << " t=" << t;
+          << "After late OPS: xlayer 1 should NOT retain m=" << m << " t=" << t;
     }
   }
 

@@ -173,6 +173,7 @@ uint32_t read_qm_obu(AV2Decoder *pbi, int obu_tlayer_id, int obu_mlayer_id,
   bool qm_chroma_info_present_flag = avm_rb_read_bit(rb);
   const int num_planes = (qm_chroma_info_present_flag ? 3 : 1);
   if (qm_bit_map == 0) {
+    *acc_qm_id_bitmap = (1U << NUM_CUSTOM_QMS) - 1;
     av2_copy_predefined_qmatrices_to_list(pbi, num_planes);
     for (int j = 0; j < NUM_CUSTOM_QMS; j++) pbi->qm_protected[j] = 1;
   } else {

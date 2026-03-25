@@ -317,9 +317,7 @@ jobs:
         run: |
           cmake --version
 
-          # CMake 4.0.0 removed compatibility with CMake < 3.5. Add -DCMAKE_POLICY_VERSION_MINIMUM=3.5 to try configuring anyway.
           cmake -B avm_docs_build -GNinja \
-              -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
               -DENABLE_DOCS=1 \
               -DENABLE_EXAMPLES=0 \
               -DBUILD_SHARED_LIBS=0 \
@@ -345,10 +343,7 @@ jobs:
     env:
       AVM_SANITIZER_TYPE: ${{ matrix.avm-sanitizer-type }}
       SANITIZER_IGNORES_FILE: .gitlab/SanitizerIgnores.txt
-      # CMake 4.0.0 removed compatibility with CMake < 3.5. Add
-      # -DCMAKE_POLICY_VERSION_MINIMUM=3.5 to try configuring anyway.
       CMAKE_FLAGS: >-
-        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
         -DENABLE_CCACHE=1
         -DCMAKE_C_COMPILER=clang
         -DCMAKE_CXX_COMPILER=clang++
@@ -496,9 +491,7 @@ jobs:
 
           export CMAKE_BUILD_PARALLEL_LEVEL=24
 
-          # CMake 4.0.0 removed compatibility with CMake < 3.5. Add -DCMAKE_POLICY_VERSION_MINIMUM=3.5 to try configuring anyway.
           cmake -B avm_example_build \
-            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
             -DENABLE_ASSERTS=1 \
             -DENABLE_EXAMPLES=1 \
             -DBUILD_SHARED_LIBS=0

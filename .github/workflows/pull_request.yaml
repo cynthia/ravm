@@ -583,9 +583,7 @@ jobs:
               $*
           }
 
-          # CMake 4.0.0 removed compatibility with CMake < 3.5. Add
-          # -DCMAKE_POLICY_VERSION_MINIMUM=3.5 to try configuring anyway.
-          scan_build cmake -B avm_build -GNinja -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_BUILD_TYPE=Debug
+          scan_build cmake -B avm_build -GNinja -DCMAKE_BUILD_TYPE=Debug
           exit_code=0
           scan_build --status-bugs cmake --build avm_build || exit_code=$?
           if [ ${exit_code} -ne 0 ]; then

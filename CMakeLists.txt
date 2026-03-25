@@ -586,6 +586,7 @@ if(CONFIG_AV2_ENCODER)
              "cd ${CMAKE_CURRENT_SOURCE_DIR}/third_party; "
              "tar -xzf abseil-cpp.tar.gz -C ${CMAKE_BINARY_DIR}; "
              "tar -xzf eigen.tar.gz -C ${CMAKE_BINARY_DIR}; "
+             # https://github.com/intel/ARM_NEON_2_x86_SSE commit 662a859
              "tar -xzf neon2sse.tar.gz -C ${CMAKE_BINARY_DIR}; "
              "tar -xzf xnnpack.tar.gz -C ${CMAKE_BINARY_DIR}; "
              "tar -xzf ruy.tar.gz -C ${CMAKE_BINARY_DIR}; "
@@ -596,6 +597,7 @@ if(CONFIG_AV2_ENCODER)
              "tar -xzf cpuinfo.tar.gz -C ${CMAKE_BINARY_DIR}; "
              "tar -xzf protobuf.tar.gz -C ${CMAKE_BINARY_DIR}; "
              "tar -xzf flatbuffers.tar.gz -C ${CMAKE_BINARY_DIR}; "
+             # https://github.com/Maratyszcza/FP16 commit 3d2de18
              "tar -xzf fp16.tar.gz -C ${CMAKE_BINARY_DIR}; "
              "tar -xzf pthreadpool.tar.gz -C ${CMAKE_BINARY_DIR}; "
              "tar -xzf psimd.tar.gz -C ${CMAKE_BINARY_DIR}; "

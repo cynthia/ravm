@@ -588,6 +588,17 @@ typedef struct AV2Decoder {
   int num_displayable_frame_unit[MAX_NUM_MLAYERS];
 
   /*!
+   * Tracks the maximum display order hint of output pictures per
+   * (xlayer_id, mlayer_id) pair within a coded video sequence.
+   * Used to enforce:
+   *   (1) uniqueness of output OrderHint per layer (equal case), and
+   *   (2) no picture coded after an output picture X may have an OrderHint
+   *       less than the OrderHint of X in the same layer (less-than case).
+   * Initialized and reset to -1 at CVS boundaries.
+   */
+  int last_output_doh[MAX_NUM_XLAYERS][MAX_NUM_MLAYERS];
+
+  /*!
    * Indicates an OLK is encountered in any layer
    * It is initialized as 0 and set 1 when the first olk is decoded and set 0
    * when the first regular frame or the first CLK after the olk is decoded.

@@ -372,6 +372,9 @@ typedef struct RefCntBuffer {
   //    used. However, pixels from the restricted ref frame can be used.
   int is_restricted;
   int refs_restricted_status[INTER_REFS_PER_FRAME];
+  // 1 if this frame is a switch frame with restricted_prediction_switch set.
+  // Used to reset DOH epoch tracking at output time.
+  int is_restricted_switch_frame;
 } RefCntBuffer;
 
 // Store the characteristics related to each reference frame, which can be used

@@ -267,6 +267,8 @@ if(ENABLE_TESTS)
     avm_gtest STATIC
     "${AVM_ROOT}/third_party/googletest/src/googletest/src/gtest-all.cc")
   set_property(TARGET avm_gtest PROPERTY FOLDER ${AVM_IDE_TEST_FOLDER})
+  # Starting from the 1.17.0 release, GoogleTest requires at least C++17.
+  target_compile_features(avm_gtest PUBLIC cxx_std_17)
   if(MSVC OR WIN32)
     target_compile_definitions(avm_gtest PRIVATE GTEST_OS_WINDOWS=1)
   elseif(CONFIG_MULTITHREAD AND CMAKE_USE_PTHREADS_INIT)

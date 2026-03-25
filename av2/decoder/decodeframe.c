@@ -7948,7 +7948,7 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
 #endif
 
   cm->cur_mfh_id = setup_multiframe_header_id(cm, obu_type, rb);
-  if (is_leading_vcl_obu(obu_type)) {
+  if (av2_is_leading_vcl_obu(obu_type)) {
     // Tag the MFH slot referenced by this leading frame so it can be
     // invalidated at the transition to regular frames.
     if (cm->cur_mfh_id > 0 &&

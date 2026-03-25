@@ -1596,7 +1596,7 @@ static size_t read_padding(AV2_COMMON *const cm, const uint8_t *data,
   return sz;
 }
 
-int is_leading_vcl_obu(OBU_TYPE obu_type) {
+int av2_is_leading_vcl_obu(OBU_TYPE obu_type) {
   return (obu_type == OBU_LEADING_TILE_GROUP || obu_type == OBU_LEADING_SEF ||
           obu_type == OBU_LEADING_TIP);
 }
@@ -2475,7 +2475,7 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
         pbi->this_is_first_keyframe_unit_in_tu = 1;
     }
 
-    if (is_leading_vcl_obu(obu_header.type))
+    if (av2_is_leading_vcl_obu(obu_header.type))
       cm->is_leading_picture = 1;
     else if (av2_is_regular_vcl_obu(obu_header.type))
       cm->is_leading_picture = 0;
@@ -2743,7 +2743,7 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
         }
         // Drop picture unit HLS state that was derived exclusively from leading
         // frame picture units when the first regular VCL OBU is encountered.
-        if (is_leading_vcl_obu(obu_header.type)) {
+        if (av2_is_leading_vcl_obu(obu_header.type)) {
           // Tag every QM/FGM/CI/BRT signalled in the leading temporal
           // unit so we can identify and discard them at the transition.
           // MFH is tagged in read_uncompressed_header().

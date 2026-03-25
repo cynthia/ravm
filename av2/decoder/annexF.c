@@ -251,13 +251,152 @@ void av2_sbe_process_global_ops(SubBitstreamExtractionState *sbe, int ops_id,
   }
 }
 
+// Populate retention map entries for a single xlayer (Steps 4-5).
+// This is the core per-xlayer logic used by both av2_sbe_build_retention_map()
+// and av2_sbe_process_local_ops() (for late-arriving local OPS rebuilds).
+static void sbe_populate_xlayer_retention_map(
+    SubBitstreamExtractionState *sbe, struct AV2Decoder *pbi, int xid) {
+  // Clear this xlayer's retention map entries
+  for (int j = 0; j < MAX_NUM_MLAYERS; j++)
+    for (int k = 0; k < MAX_NUM_TLAYERS; k++)
+      sbe->retention_map[xid][j][k] = 0;
+
+  int map_populated = 0;
+
+  // Check if user has specified a local OPS selection for this xlayer
+  // via the --select-local-ops CLI option (or via the selected_ops for
+  // singlestream where the OPS is local).
+  int target_local_ops_id = ANNEX_F_INVALID;
+  int target_local_op_idx = ANNEX_F_INVALID;
+
+  // Priority 1: Explicit --select-local-ops for this xlayer
+  if (sbe->local_ops_selected[xid] &&
+      sbe->local_ops_id[xid] != ANNEX_F_INVALID) {
+    target_local_ops_id = sbe->local_ops_id[xid];
+    target_local_op_idx = sbe->local_op_idx[xid];
+  }
+  // Priority 2: For singlestream, --select-ops acts as local OPS selection
+  else if (!sbe->is_multistream && pbi->selected_ops_id >= 0) {
+    target_local_ops_id = pbi->selected_ops_id;
+    target_local_op_idx = pbi->selected_op_index;
+  }
+
+  // Check the ops_list for this xlayer
+  if (target_local_ops_id >= 0 && target_local_ops_id < MAX_NUM_OPS_ID) {
+    const struct OperatingPointSet *ops =
+        &pbi->ops_list[xid][target_local_ops_id];
+    if (ops->valid && ops->ops_id == target_local_ops_id &&
+        target_local_op_idx >= 0 && target_local_op_idx < ops->ops_cnt) {
+      const OperatingPoint *op = &ops->op[target_local_op_idx];
+      sbe->local_ops_selected[xid] = 1;
+      sbe->local_ops_id[xid] = target_local_ops_id;
+      sbe->local_op_idx[xid] = target_local_op_idx;
+
+      // Use ops_mlayer_map and ops_tlayer_map from the local OP
+      int mlayer_map = op->mlayer_info.ops_mlayer_map[xid];
+      for (int j = 0; j < MAX_NUM_MLAYERS; j++) {
+        if (mlayer_map & (1 << j)) {
+          int tlayer_map = op->mlayer_info.ops_tlayer_map[xid][j];
+          for (int k = 0; k < MAX_NUM_TLAYERS; k++) {
+            if (tlayer_map & (1 << k)) {
+              sbe->retention_map[xid][j][k] = 1;
+            }
+          }
+        }
+      }
+      map_populated = 1;
+    }
+  }
+
+  // Priority 3: If global OP was selected and provides mlayer info for this
+  // xlayer (ops_mlayer_info_idc >= 1), use the global OPS mlayer/tlayer maps
+  if (!map_populated && sbe->global_ops_selected) {
+    const struct OperatingPointSet *global_ops =
+        &pbi->ops_list[GLOBAL_XLAYER_ID][sbe->global_ops_id];
+    if (global_ops->valid && global_ops->ops_mlayer_info_idc >= 1 &&
+        sbe->global_op_idx >= 0 && sbe->global_op_idx < global_ops->ops_cnt) {
+      const OperatingPoint *op = &global_ops->op[sbe->global_op_idx];
+      int mlayer_map = op->mlayer_info.ops_mlayer_map[xid];
+      if (mlayer_map != 0) {
+        for (int j = 0; j < MAX_NUM_MLAYERS; j++) {
+          if (mlayer_map & (1 << j)) {
+            int tlayer_map = op->mlayer_info.ops_tlayer_map[xid][j];
+            for (int k = 0; k < MAX_NUM_TLAYERS; k++) {
+              if (tlayer_map & (1 << k)) {
+                sbe->retention_map[xid][j][k] = 1;
+              }
+            }
+          }
+        }
+        map_populated = 1;
+      }
+    }
+  }
+
+  // Priority 4: If no operating point provided mlayer/tlayer info, retain all
+  if (!map_populated) {
+    for (int j = 0; j < MAX_NUM_MLAYERS; j++) {
+      for (int k = 0; k < MAX_NUM_TLAYERS; k++) {
+        sbe->retention_map[xid][j][k] = 1;
+      }
+    }
+  }
+
+  // Step 5: Extract profile/level/tier/mlayerCnt for this xlayer.
+  // Reset to INVALID first so we re-extract from the now-available OPS data.
+  sbe->profile_idc[xid] = ANNEX_F_INVALID;
+  sbe->level_idc[xid] = ANNEX_F_INVALID;
+  sbe->tier_idc[xid] = ANNEX_F_INVALID;
+  sbe->mlayer_cnt[xid] = ANNEX_F_INVALID;
+
+  // Try global OP first
+  if (sbe->global_ops_selected) {
+    const struct OperatingPointSet *global_ops =
+        &pbi->ops_list[GLOBAL_XLAYER_ID][sbe->global_ops_id];
+    if (global_ops->valid && global_ops->ops_ptl_present_flag &&
+        sbe->global_op_idx >= 0 && sbe->global_op_idx < global_ops->ops_cnt) {
+      const OperatingPoint *op = &global_ops->op[sbe->global_op_idx];
+      if (op->ops_xlayer_map & (1 << xid)) {
+        sbe->profile_idc[xid] = op->ops_seq_profile_idc[xid];
+        sbe->level_idc[xid] = op->ops_level_idx[xid];
+        sbe->tier_idc[xid] = op->ops_tier_flag[xid];
+        sbe->mlayer_cnt[xid] = op->ops_mlayer_count[xid];
+        return;
+      }
+    }
+  }
+
+  // Try local OP
+  if (sbe->local_ops_selected[xid]) {
+    const struct OperatingPointSet *local_ops =
+        &pbi->ops_list[xid][sbe->local_ops_id[xid]];
+    if (local_ops->valid && local_ops->ops_ptl_present_flag &&
+        sbe->local_op_idx[xid] >= 0 &&
+        sbe->local_op_idx[xid] < local_ops->ops_cnt) {
+      const OperatingPoint *op = &local_ops->op[sbe->local_op_idx[xid]];
+      sbe->profile_idc[xid] = op->ops_seq_profile_idc[xid];
+      sbe->level_idc[xid] = op->ops_level_idx[xid];
+      sbe->tier_idc[xid] = op->ops_tier_flag[xid];
+      sbe->mlayer_cnt[xid] = op->ops_mlayer_count[xid];
+    }
+  }
+}
+
 // Step 4: Process local OPS OBU (obu_xlayer_id != 31).
-void av2_sbe_process_local_ops(SubBitstreamExtractionState *sbe, int xlayer_id,
+void av2_sbe_process_local_ops(SubBitstreamExtractionState *sbe,
+                               struct AV2Decoder *pbi, int xlayer_id,
                                int ops_id, int ops_cnt) {
   if (xlayer_id < 0 || xlayer_id >= MAX_NUM_XLAYERS - 1) return;
   sbe->local_ops_seen[xlayer_id] = 1;
   (void)ops_id;
   (void)ops_cnt;
+
+  // If the retention map was already built (early trigger before this xlayer's
+  // local OPS arrived), rebuild this xlayer's portion now that OPS data is
+  // available.
+  if (sbe->retention_map_ready && sbe->xlayer_is_selected[xlayer_id]) {
+    sbe_populate_xlayer_retention_map(sbe, pbi, xlayer_id);
+  }
 }
 
 // Build the complete retention map (Steps 3-5).
@@ -288,126 +427,7 @@ int av2_sbe_build_retention_map(SubBitstreamExtractionState *sbe,
   // Step 4: For each selected xlayer, build retention map entries
   for (int xid = 0; xid < MAX_NUM_XLAYERS - 1; xid++) {
     if (!sbe->xlayer_is_selected[xid]) continue;
-
-    int map_populated = 0;
-
-    // Check if user has specified a local OPS selection for this xlayer
-    // via the --select-local-ops CLI option (or via the selected_ops for
-    // singlestream where the OPS is local).
-    int target_local_ops_id = ANNEX_F_INVALID;
-    int target_local_op_idx = ANNEX_F_INVALID;
-
-    // Priority 1: Explicit --select-local-ops for this xlayer
-    if (sbe->local_ops_selected[xid] &&
-        sbe->local_ops_id[xid] != ANNEX_F_INVALID) {
-      target_local_ops_id = sbe->local_ops_id[xid];
-      target_local_op_idx = sbe->local_op_idx[xid];
-    }
-    // Priority 2: For singlestream, --select-ops acts as local OPS selection
-    else if (!sbe->is_multistream && pbi->selected_ops_id >= 0) {
-      target_local_ops_id = pbi->selected_ops_id;
-      target_local_op_idx = pbi->selected_op_index;
-    }
-
-    // Check the ops_list for this xlayer
-    if (target_local_ops_id >= 0 && target_local_ops_id < MAX_NUM_OPS_ID) {
-      const struct OperatingPointSet *ops =
-          &pbi->ops_list[xid][target_local_ops_id];
-      if (ops->valid && ops->ops_id == target_local_ops_id &&
-          target_local_op_idx >= 0 && target_local_op_idx < ops->ops_cnt) {
-        const OperatingPoint *op = &ops->op[target_local_op_idx];
-        sbe->local_ops_selected[xid] = 1;
-        sbe->local_ops_id[xid] = target_local_ops_id;
-        sbe->local_op_idx[xid] = target_local_op_idx;
-
-        // Use ops_mlayer_map and ops_tlayer_map from the local OP
-        int mlayer_map = op->mlayer_info.ops_mlayer_map[xid];
-        for (int j = 0; j < MAX_NUM_MLAYERS; j++) {
-          if (mlayer_map & (1 << j)) {
-            int tlayer_map = op->mlayer_info.ops_tlayer_map[xid][j];
-            for (int k = 0; k < MAX_NUM_TLAYERS; k++) {
-              if (tlayer_map & (1 << k)) {
-                sbe->retention_map[xid][j][k] = 1;
-              }
-            }
-          }
-        }
-        map_populated = 1;
-      }
-    }
-
-    // If global OP was selected and provides mlayer info for this xlayer
-    // (ops_mlayer_info_idc == 1), use the global OPS mlayer/tlayer maps
-    if (!map_populated && sbe->global_ops_selected) {
-      const struct OperatingPointSet *global_ops =
-          &pbi->ops_list[GLOBAL_XLAYER_ID][sbe->global_ops_id];
-      if (global_ops->valid && global_ops->ops_mlayer_info_idc >= 1 &&
-          sbe->global_op_idx >= 0 && sbe->global_op_idx < global_ops->ops_cnt) {
-        const OperatingPoint *op = &global_ops->op[sbe->global_op_idx];
-        int mlayer_map = op->mlayer_info.ops_mlayer_map[xid];
-        if (mlayer_map != 0) {
-          for (int j = 0; j < MAX_NUM_MLAYERS; j++) {
-            if (mlayer_map & (1 << j)) {
-              int tlayer_map = op->mlayer_info.ops_tlayer_map[xid][j];
-              for (int k = 0; k < MAX_NUM_TLAYERS; k++) {
-                if (tlayer_map & (1 << k)) {
-                  sbe->retention_map[xid][j][k] = 1;
-                }
-              }
-            }
-          }
-          map_populated = 1;
-        }
-      }
-    }
-
-    // If no operating point provided mlayer/tlayer info, retain all
-    if (!map_populated) {
-      for (int j = 0; j < MAX_NUM_MLAYERS; j++) {
-        for (int k = 0; k < MAX_NUM_TLAYERS; k++) {
-          sbe->retention_map[xid][j][k] = 1;
-        }
-      }
-    }
-  }
-
-  // Step 5: Extract profile/level/tier/mlayerCnt per selected xlayer
-  for (int xid = 0; xid < MAX_NUM_XLAYERS - 1; xid++) {
-    if (!sbe->xlayer_is_selected[xid]) continue;
-    if (sbe->profile_idc[xid] != ANNEX_F_INVALID) continue;  // already set
-
-    // Try global OP first
-    if (sbe->global_ops_selected) {
-      const struct OperatingPointSet *global_ops =
-          &pbi->ops_list[GLOBAL_XLAYER_ID][sbe->global_ops_id];
-      if (global_ops->valid && global_ops->ops_ptl_present_flag &&
-          sbe->global_op_idx >= 0 && sbe->global_op_idx < global_ops->ops_cnt) {
-        const OperatingPoint *op = &global_ops->op[sbe->global_op_idx];
-        // Global OPS stores per-xlayer PTL when ops_xlayer_map includes xid
-        if (op->ops_xlayer_map & (1 << xid)) {
-          sbe->profile_idc[xid] = op->ops_seq_profile_idc[xid];
-          sbe->level_idc[xid] = op->ops_level_idx[xid];
-          sbe->tier_idc[xid] = op->ops_tier_flag[xid];
-          sbe->mlayer_cnt[xid] = op->ops_mlayer_count[xid];
-          continue;
-        }
-      }
-    }
-
-    // Try local OP
-    if (sbe->local_ops_selected[xid]) {
-      const struct OperatingPointSet *local_ops =
-          &pbi->ops_list[xid][sbe->local_ops_id[xid]];
-      if (local_ops->valid && local_ops->ops_ptl_present_flag &&
-          sbe->local_op_idx[xid] >= 0 &&
-          sbe->local_op_idx[xid] < local_ops->ops_cnt) {
-        const OperatingPoint *op = &local_ops->op[sbe->local_op_idx[xid]];
-        sbe->profile_idc[xid] = op->ops_seq_profile_idc[xid];
-        sbe->level_idc[xid] = op->ops_level_idx[xid];
-        sbe->tier_idc[xid] = op->ops_tier_flag[xid];
-        sbe->mlayer_cnt[xid] = op->ops_mlayer_count[xid];
-      }
-    }
+    sbe_populate_xlayer_retention_map(sbe, pbi, xid);
   }
 
   sbe->retention_map_ready = 1;

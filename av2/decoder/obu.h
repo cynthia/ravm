@@ -16,6 +16,12 @@
 #include "avm_dsp/bitreader_buffer.h"
 #include "av2/decoder/decoder.h"
 
+// Flush remaining frames from all active xlayer streams, switching context
+// as needed. Decreases ref counts on all flushed frames. Restores the
+// original xlayer context on return.
+avm_codec_err_t flush_all_xlayer_frames(struct AV2Decoder *pbi, AV2_COMMON *cm,
+                                        bool release_dpb);
+
 // Try to decode one frame from a buffer.
 // Returns 1 if we decoded a frame,
 //         0 if we didn't decode a frame but that's okay

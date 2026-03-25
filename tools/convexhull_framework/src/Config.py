@@ -72,7 +72,23 @@ UsePCHIPInterpolation = _config["features"]["use_pchip_interpolation"]
 AS_DOWNSCALE_ON_THE_FLY = _config["features"]["as_downscale_on_the_fly"]
 
 ######################################
-# Test configuration (depends on EnableSubjectiveTest)
+# ECF (Extended Chroma Format) configuration
+######################################
+_ecf_config = _config.get("ecf", {})
+EnableECF = _ecf_config.get("enabled", False)
+ECF_ContentPath = _ecf_config.get("content_path", "")
+ECF_TEST_CONFIGURATIONS = _ecf_config.get("configurations", ["AI", "RA", "LD"])
+ECF_DATASET = _ecf_config.get("dataset", "ECF_TEST_SET")
+ECF_GOP_SIZE = _ecf_config.get("gop_size", 33)
+ECF_FrameNum = _ecf_config.get("frame_counts", {"AI": 5, "RA": 66, "LD": 33})
+ECF_PSNR_YUV_Weights = _ecf_config.get("psnr_yuv_weights", {
+    "444": {"psnr_y_weight": 4.0, "psnr_u_weight": 1.0, "psnr_v_weight": 1.0},
+    "422": {"psnr_y_weight": 8.0, "psnr_u_weight": 1.0, "psnr_v_weight": 1.0},
+})
+ECF_Template = _ecf_config.get("template", "")
+
+######################################
+# Test configuration (depends on EnableSubjectiveTest and EnableECF)
 ######################################
 if EnableSubjectiveTest:
     TEST_CONFIGURATIONS = ["RA"]
@@ -83,6 +99,17 @@ if EnableSubjectiveTest:
     EnableTimingInfo = False
     UsePerfUtil = False
     EnableMD5 = False
+elif EnableECF:
+    TEST_CONFIGURATIONS = ECF_TEST_CONFIGURATIONS
+    DATASET = ECF_DATASET
+    ContentPath = ECF_ContentPath
+    EnableTemporalFilter = _config["features"].get("enable_temporal_filter", False)
+    EnableVerificationTestConfig = _config["features"][
+        "enable_verification_test_config"
+    ]
+    EnableTimingInfo = _config["features"]["enable_timing_info"]
+    UsePerfUtil = _config["features"]["use_perf_util"]
+    EnableMD5 = _config["features"]["enable_md5"]
 else:
     TEST_CONFIGURATIONS = _config["test"]["configurations"]
     DATASET = _config["test"]["dataset"]
@@ -124,6 +151,8 @@ elif CTC_VERSION == "2.0":
 else:
     CTC_RegularXLSTemplate = os.path.join(BinPath, "AVM_CWG_Regular_CTC_v6.1.xlsm")
     CTC_ASXLSTemplate = os.path.join(BinPath, "AVM_CWG_AS_CTC_v9.6.xlsm")
+
+CTC_ECFXLSTemplate = os.path.join(BinPath, ECF_Template) if ECF_Template else ""
 
 ######################################
 # Scaling settings
@@ -181,7 +210,10 @@ HEVC_QPs = _config["encoding"]["hevc_qps"]
 ######################################
 MIN_GOP_LENGTH = _config["encoding"]["min_gop_length"]
 SUB_GOP_SIZE = _config["encoding"]["sub_gop_size"]
-GOP_SIZE = _config["encoding"]["gop_size"]
+if EnableECF:
+    GOP_SIZE = ECF_GOP_SIZE
+else:
+    GOP_SIZE = _config["encoding"]["gop_size"]
 
 ######################################
 # Quality evaluation config
@@ -209,6 +241,8 @@ InterpolatePieces = _config["quality"]["interpolate_pieces"]
 ######################################
 if EnableSubjectiveTest:
     FrameNum = {"RA": _config["subjective_frame_counts"]}
+elif EnableECF:
+    FrameNum = ECF_FrameNum
 elif (CTC_VERSION in ["7.0", "8.0"]) and (EnableVerificationTestConfig == False):
     FrameNum = _config["frame_counts_non_verification"]
 else:

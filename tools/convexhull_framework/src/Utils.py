@@ -23,8 +23,9 @@ import scipy.interpolate
 import matplotlib.pyplot as plt
 from operator import itemgetter
 from Config import LogLevels, ContentPath, Platform, Path_RDResults, QPs, PSNR_Y_WEIGHT, PSNR_U_WEIGHT, PSNR_V_WEIGHT, \
-APSNR_Y_WEIGHT, APSNR_U_WEIGHT, APSNR_V_WEIGHT, InterpolatePieces, FFMPEG, DATASET, FrameNum, EnableSubjectiveTest
-from AV2CTCVideo import Y4M_CLIPs, CTC_TEST_SET
+APSNR_Y_WEIGHT, APSNR_U_WEIGHT, APSNR_V_WEIGHT, InterpolatePieces, FFMPEG, DATASET, FrameNum, EnableSubjectiveTest, \
+EnableECF, ECF_PSNR_YUV_Weights
+from AV2CTCVideo import Y4M_CLIPs, CTC_TEST_SET, ECF_Y4M_CLIPs, ECF_TEST_SET
 from AV2SubjectiveVideo import SUBJECTIVE_CLIPS, AV2_SUBJECTIVE_TEST
 
 # Global variable for current job shell script file handle
@@ -57,6 +58,19 @@ class Clip:
         else:
             self.fps = round(self.fps_num / self.fps_denom)
         self.bit_depth = Bit_depth
+
+def _get_ecf_psnr_weights(file_name):
+    """Get ECF-specific PSNR-YUV weights based on clip chroma format."""
+    if "yuv422" in file_name or "422" in file_name:
+        w = ECF_PSNR_YUV_Weights.get("422", {})
+    else:
+        # 4:4:4, GBR, YCoCg all use 4:4:4 weights
+        w = ECF_PSNR_YUV_Weights.get("444", {})
+    psnr_yw = w.get("psnr_y_weight", 4.0)
+    psnr_uw = w.get("psnr_u_weight", 1.0)
+    psnr_vw = w.get("psnr_v_weight", 1.0)
+    # Use same weights for APSNR
+    return psnr_yw, psnr_uw, psnr_vw, psnr_yw, psnr_uw, psnr_vw
 
 class Record:
     test_cfg = ""
@@ -114,9 +128,20 @@ class Record:
         self.psnr_y = float(psnr_y)
         self.psnr_u = float(psnr_u)
         self.psnr_v = float(psnr_v)
-        self.overall_psnr = (PSNR_Y_WEIGHT * self.psnr_y +
-                             PSNR_U_WEIGHT * self.psnr_u +
-                             PSNR_V_WEIGHT * self.psnr_v) / (PSNR_Y_WEIGHT + PSNR_U_WEIGHT + PSNR_V_WEIGHT)
+        # Determine PSNR-YUV weights: ECF uses per-clip weights based on chroma format
+        if EnableECF:
+            psnr_yw, psnr_uw, psnr_vw, apsnr_yw, apsnr_uw, apsnr_vw = \
+                _get_ecf_psnr_weights(file_name)
+        else:
+            psnr_yw = PSNR_Y_WEIGHT
+            psnr_uw = PSNR_U_WEIGHT
+            psnr_vw = PSNR_V_WEIGHT
+            apsnr_yw = APSNR_Y_WEIGHT
+            apsnr_uw = APSNR_U_WEIGHT
+            apsnr_vw = APSNR_V_WEIGHT
+        self.overall_psnr = (psnr_yw * self.psnr_y +
+                             psnr_uw * self.psnr_u +
+                             psnr_vw * self.psnr_v) / (psnr_yw + psnr_uw + psnr_vw)
         self.ssim_y = float(ssim_y)
         self.ms_ssim_y = float(ms_ssim_y)
         self.vmaf_y = float(vmaf_y)
@@ -126,10 +151,10 @@ class Record:
         self.apsnr_y = float(apsnr_y)
         self.apsnr_u = float(apsnr_u)
         self.apsnr_v = float(apsnr_v)
-        self.overall_apsnr = 10 * math.log10(1 / ((APSNR_Y_WEIGHT/pow(10, (self.apsnr_y / 10)) +
-                                                   APSNR_U_WEIGHT/pow(10, (self.apsnr_u / 10)) +
-                                                   APSNR_V_WEIGHT/pow(10, (self.apsnr_v / 10))) /
-                                              (APSNR_Y_WEIGHT + APSNR_U_WEIGHT + APSNR_V_WEIGHT)))
+        self.overall_apsnr = 10 * math.log10(1 / ((apsnr_yw/pow(10, (self.apsnr_y / 10)) +
+                                                   apsnr_uw/pow(10, (self.apsnr_u / 10)) +
+                                                   apsnr_vw/pow(10, (self.apsnr_v / 10))) /
+                                              (apsnr_yw + apsnr_uw + apsnr_vw)))
         self.cambi = float(cambi)
         if not ignore_perf:
             self.enc_time = float(enc_time)
@@ -267,6 +292,11 @@ def parseY4MHeader(y4m):
         if m:
             fmt = m.group(1)
             bit_depth = int(m.group(2))
+        else:
+            # Handle 8-bit formats without bit-depth suffix (e.g., C444, C422)
+            m = re.search(r"C([0-9]+)", line)
+            if m:
+                fmt = m.group(1)
     if w == 0 or h == 0 or fps == 0:
         print("Failed to parse the input y4m file!\n")
         sys.exit()
@@ -277,12 +307,16 @@ def CreateClipList(test_cfg):
     #[filename, class, width, height, fps_num, fps_denom, bitdepth, fmt]
     if DATASET == "CTC_TEST_SET":
         test_set = CTC_TEST_SET[test_cfg]
+    elif DATASET == "ECF_TEST_SET":
+        test_set = ECF_TEST_SET[test_cfg]
     elif DATASET == "AV2_SUBJECTIVE_TEST":
         test_set = AV2_SUBJECTIVE_TEST[test_cfg]
 
     for cls in test_set:
         if DATASET == "CTC_TEST_SET":
             clips = Y4M_CLIPs[cls]
+        elif DATASET == "ECF_TEST_SET":
+            clips = ECF_Y4M_CLIPs[cls]
         elif DATASET == "AV2_SUBJECTIVE_TEST":
             clips = SUBJECTIVE_CLIPS[cls]
         for file in clips:

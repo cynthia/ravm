@@ -25,8 +25,10 @@ import Utils
 from CalcBDRate import BD_RATE
 from Config import (
     CTC_ASXLSTemplate,
+    CTC_ECFXLSTemplate,
     CTC_RegularXLSTemplate,
     DnScaleRatio,
+    EnableECF,
     InterpolatePieces,
     QPs,
     UsePCHIPInterpolation,
@@ -307,7 +309,14 @@ def FillXlsFile(csv_files):
                     continue
                 anchor_sht_name = "Anchor-%s" % cfg
                 test_sht_name = "Test-%s" % cfg
-                if cfg == "AS":
+                if EnableECF and cfg == "AI":
+                    xls_template = CTC_ECFXLSTemplate
+                    xls_file = os.path.join(
+                        CTC_RESULT_PATH,
+                        "CTC_ECF_%s-%s.xlsm" % (anchor_release, release),
+                    )
+                    shutil.copyfile(xls_template, xls_file)
+                elif cfg == "AS":
                     xls_template = CTC_ASXLSTemplate
                     xls_file = os.path.join(
                         CTC_RESULT_PATH, "CTC_AS_%s-%s.xlsm" % (anchor_release, release)

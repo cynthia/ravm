@@ -119,8 +119,11 @@ void av2_sbe_process_global_ops(SubBitstreamExtractionState *sbe, int ops_id,
                                 int ops_mlayer_info_idc);
 
 // Step 4: Process local OPS OBU (obu_xlayer_id != 31).
-// Records that a local OPS was seen for this xlayer.
-void av2_sbe_process_local_ops(SubBitstreamExtractionState *sbe, int xlayer_id,
+// Records that a local OPS was seen for this xlayer. If the retention map
+// was already built, rebuilds this xlayer's entries from the now-available
+// OPS data (fixes late-arriving local OPS in multistream bitstreams).
+void av2_sbe_process_local_ops(SubBitstreamExtractionState *sbe,
+                               struct AV2Decoder *pbi, int xlayer_id,
                                int ops_id, int ops_cnt);
 
 // Build the retention map from collected OPS/LCR data (Steps 3-5).

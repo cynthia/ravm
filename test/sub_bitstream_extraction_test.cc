@@ -262,8 +262,8 @@ TEST_F(SBEApiTest, ExtractSeqHeaderSkipsUnselectedXlayer) {
 }
 
 TEST_F(SBEApiTest, ProcessLocalOpsMarksXlayer) {
-  av2_sbe_process_local_ops(&sbe_, /*xlayer_id=*/2, /*ops_id=*/0,
-                            /*ops_cnt=*/1);
+  av2_sbe_process_local_ops(&sbe_, /*pbi=*/nullptr, /*xlayer_id=*/2,
+                            /*ops_id=*/0, /*ops_cnt=*/1);
 
   EXPECT_EQ(sbe_.local_ops_seen[2], 1);
   // Other xlayers should remain unaffected

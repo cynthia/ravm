@@ -652,6 +652,9 @@ typedef struct TileInfoSyntax {
 
 // This structure contains Buffer removal time parameters being parsed
 typedef struct {
+  // brt_from_leading==1 indicates brt_info is signalled in the leading temporal
+  // unit
+  int brt_from_leading;
   int br_ops_dependent_flag;
   int ops_id;
   int br_ops_id;
@@ -988,6 +991,9 @@ typedef struct ContentInterpretation {
   ColorInfo color_info;
   SarInfo sar_info;
   avm_timing_info_t timing_info;
+  // ci_from_leading[i]==1 indicates it is signalled in the leading temporal
+  // unit
+  bool ci_from_leading;
 } ContentInterpretation;
 
 // Multi-stream decoder operation structure.
@@ -1506,6 +1512,11 @@ typedef struct MultiFrameHeader {
    * Extension present flag
    */
   int mfh_extension_present_flag;
+  /*!
+   * mfh_from_leading[i]==1 indicates it is signalled in the leading temporal
+   * unit
+   */
+  int mfh_from_leading;
 } MultiFrameHeader;
 
 typedef struct CommonModeInfoParams CommonModeInfoParams;
@@ -2109,6 +2120,12 @@ typedef struct BridgeFrame_Info {
 
 struct quantization_matrix_set {
   /*!
+   * qm_from_leading indicates that this qm is signalled in the leading temporal
+   * unit
+   */
+  int qm_from_leading;
+
+  /*!
    * id of the quantization matrix : initialized to be -1
    * qm_id equals -1 indicates that this struct, quantization_matrix_set, is not
    * used or not set yet.
@@ -2288,6 +2305,12 @@ component
    * chroma format idc for the model stats.
    */
   int fgm_chroma_idc;
+
+  /*!
+   * fgm_from_leading indicates that this fgm is signalled in the leading
+   * temporal unit
+   */
+  int fgm_from_leading;
 };
 
 /*!
@@ -2617,12 +2640,6 @@ typedef struct AV2Common {
    * frames in the video.
    */
   BufferRemovalTimingInfo brt_info;
-  /*!
-   * brt_from_leading==1 indicates brt_info was last written by a leading frame
-   * BRT OBU. If the first regular frame TU does not carry its own BRT OBU the
-   * stale leading-frame timing data is cleared at the transition.
-   */
-  bool brt_from_leading;
 
   /*!
    * Elements part of the multi-frame header, that are applicable for multiple
@@ -2633,11 +2650,6 @@ typedef struct AV2Common {
    * Array of booleans to indicate whether mfh_params[i] has been received.
    */
   bool mfh_valid[MAX_MFH_NUM];
-  /*! mfh_from_leading[i]==1 indicates mfh_params[i] was last written by a
-   *  leading frame MFH OBU. Slots not re-signalled in the first regular frame
-   * TU are invalidated (mfh_valid[i] set to false) at the transition.
-   */
-  bool mfh_from_leading[MAX_MFH_NUM];
 
   /*!
    * Elements part of the content interpretation, when present, applicable for
@@ -2645,11 +2657,6 @@ typedef struct AV2Common {
    * at the beginning of the decoder and at the random access point
    */
   ContentInterpretation ci_params_per_layer[MAX_NUM_MLAYERS];
-  /*! ci_from_leading[i]==1 indicates ci_params_per_layer[i] was last updated by
-   * a leading frame CI OBU. If not re-signalled in the first regular frame TU,
-   * ci_params_per_layer[i] is reset to its default at the transition.
-   */
-  bool ci_from_leading[MAX_NUM_MLAYERS];
 
   /*!
    * Content Interpretation params. Used by the encoder only.

@@ -483,7 +483,8 @@ static avm_codec_err_t init_decoder(avm_codec_alg_priv_t *ctx) {
   frame_worker_data->pbi->random_accessed = false;
   frame_worker_data->pbi->random_access_point_index = -1;
   frame_worker_data->pbi->random_access_point_count = 0;
-  frame_worker_data->pbi->multi_stream_mode = 0;
+  frame_worker_data->pbi->is_multistream = 0;
+  frame_worker_data->pbi->multistream_decoder_mode = 0;
   frame_worker_data->pbi->msdo_is_present_in_tu = 0;
   init_buffer_callbacks(ctx);
   for (int i = 0; i < INTER_REFS_PER_FRAME; ++i) {

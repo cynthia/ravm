@@ -459,7 +459,7 @@ void av2_decoder_remove(AV2Decoder *pbi) {
       av2_free_qmset(pbi->qm_list[qm_pos].quantizer_matrix);
   }
 
-  if (pbi->multi_stream_mode) {
+  if (pbi->is_multistream) {
     // Release intermediate buffers to store internal variables per sub-stream
     if (pbi->stream_info != NULL) {
       avm_free(pbi->stream_info);

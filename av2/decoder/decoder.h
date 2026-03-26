@@ -529,6 +529,12 @@ typedef struct AV2Decoder {
    */
   int this_is_first_keyframe_unit_in_tu;
   /*!
+   * Tracks the xlayer_id of the last decoded frame unit. Reset to -1 when a
+   * temporal delimiter is seen. Used to detect combined TU boundaries so that
+   * last_frame_unit can be reset per-xlayer when a keyframe is encountered.
+   */
+  int last_decoded_xlayer_id;
+  /*!
    * Indicates if the current data chunk being decoded in avm_codec_decode()
    * contains the first VCL OBU of the temporal unit. A VCL OBU is any OBU
    * that carries coded picture data (CLK, OLK, tile groups, SEF, TIP,

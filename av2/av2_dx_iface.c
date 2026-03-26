@@ -845,7 +845,8 @@ static avm_codec_err_t decoder_decode(avm_codec_alg_priv_t *ctx,
     if (frame_unit_size == 0 || frame_unit_size == SIZE_MAX) {
       return AVM_CODEC_ERROR;
     }
-    bool has_td = pbi->obus_in_frame_unit_data[0][0][OBU_TEMPORAL_DELIMITER];
+    if (pbi->obus_in_frame_unit_data[0][0][OBU_TEMPORAL_DELIMITER])
+      pbi->last_decoded_xlayer_id = -1;
     bool has_key_obu =
         pbi->obus_in_frame_unit_data[tlayer_id][mlayer_id]
                                     [OBU_CLOSED_LOOP_KEY] ||
@@ -870,13 +871,18 @@ static avm_codec_err_t decoder_decode(avm_codec_alg_priv_t *ctx,
       pbi->random_accessed = false;
     }
 
-    // last_frame_unit and last_displayable_frame_unit are reset to -1
-    // when temporal delimiter and keyframe are in the input.
-    if (has_td && has_key_obu) {
-      memset(&pbi->last_frame_unit, -1, sizeof(pbi->last_frame_unit));
-      memset(&pbi->last_displayable_frame_unit, -1,
-             sizeof(pbi->last_displayable_frame_unit));
+    // Reset last_frame_unit and last_displayable_frame_unit for this xlayer
+    // when a keyframe is present in a TU (identified by the TD). In a combined
+    // TU the TD is only in the first frame unit, so last_decoded_xlayer_id
+    // tracks xlayer changes across calls to detect combined TU boundaries.
+    if (pbi->last_decoded_xlayer_id != xlayer_id && has_key_obu &&
+        xlayer_id >= 0) {
+      memset(&pbi->last_frame_unit[xlayer_id], -1,
+             sizeof(pbi->last_frame_unit[xlayer_id]));
+      memset(&pbi->last_displayable_frame_unit[xlayer_id], -1,
+             sizeof(pbi->last_displayable_frame_unit[xlayer_id]));
     }
+    pbi->last_decoded_xlayer_id = xlayer_id;
     int num_obu_here = frame_worker_data->pbi->num_obus_with_frame_unit;
     pbi->obu_list = (obu_info *)malloc(sizeof(obu_info) * num_obu_here);
     for (int obu_idx = 0; obu_idx < num_obu_here; obu_idx++) {

@@ -110,14 +110,21 @@ static void write_obu_header_extension_without_stream_id(
   avm_wb_write_literal(&wb, 0, 5);                          // obu_xlayer
 }
 
+// Build a TD OBU (1-byte header, no extension).
+static std::vector<uint8_t> BuildTdObu() {
+  std::vector<uint8_t> td;
+  uint8_t td_header = (OBU_TEMPORAL_DELIMITER << 2);  // ext=0, tlayer=0
+  td.push_back(1);                                    // leb128 size = 1
+  td.push_back(td_header);
+  return td;
+}
+
 // This function read a temporal unit from a merged bitstream,
 // writes the temporal unit into each sub-stream.
-std::vector<uint8_t> ExtractTU(const uint8_t *data, int length,
-                               int *obu_overhead_bytes, int *num_streams,
-                               int *stream_ids, int *current_stream_id) {
-  std::vector<uint8_t> tu_obus;
+void ExtractTU(const uint8_t *data, int length, int *obu_overhead_bytes,
+               int *num_streams, int *stream_ids,
+               std::vector<std::vector<uint8_t>> &per_stream_obus) {
   const uint8_t *data_ptr = data;
-
   struct avm_read_bit_buffer rb;
 
   const int kObuHeaderSizeBytes = 1;
@@ -125,6 +132,13 @@ std::vector<uint8_t> ExtractTU(const uint8_t *data, int length,
   int consumed = 0;
   int obu_overhead = 0;
   ObuHeader obu_header;
+
+  // Collect the TD OBU bytes so we can prepend to each stream's output.
+  std::vector<uint8_t> td_obu;
+
+  // Track which stream_ids we've seen OBUs for in this TU.
+  bool stream_seen[AVM_MAX_NUM_STREAMS] = {};
+
   while (consumed < length) {
     const int remaining = length - consumed;
     if (remaining < kMinimumBytesRequired) {
@@ -160,17 +174,8 @@ std::vector<uint8_t> ExtractTU(const uint8_t *data, int length,
                 static_cast<int>(consumed + length_field_size +
                                  kObuHeaderSizeBytes));
       }
-
       ++obu_overhead;
       ++obu_header_size;
-    }
-
-    if (obu_header.obu_header_extension_flag) {
-      *current_stream_id = obu_header.obu_xlayer_id;
-    } else if (obu_header.type == OBU_MULTI_STREAM_DECODER_OPERATION) {
-      *current_stream_id = 31;
-    } else {
-      *current_stream_id = 0;
     }
 
     int current_obu_length = static_cast<int>(obu_total_size) - obu_header_size;
@@ -189,51 +194,83 @@ std::vector<uint8_t> ExtractTU(const uint8_t *data, int length,
     std::vector<uint8_t> obu_tmp(data_ptr + length_field_size,
                                  data_ptr + obu_total_size + length_field_size);
 
-    // Rewrite OBU header with signaling stream_id
     if (obu_header.type == OBU_TEMPORAL_DELIMITER) {
+      // Save the TD; we'll prepend it to each stream's output later.
       std::vector<uint8_t> obu_size_data(length_field_size);
       size_t coded_obu_size;
       avm_uleb_encode(obu_total_size, sizeof(obu_total_size),
                       obu_size_data.data(), &coded_obu_size);
-      if (length_field_size != coded_obu_size)
-        fprintf(stderr, "\nError: length_field_size != coded_obu_size\n");
-      tu_obus.insert(tu_obus.end(), obu_size_data.begin(), obu_size_data.end());
-      tu_obus.insert(tu_obus.end(), obu_tmp.begin(), obu_tmp.end());
+      td_obu.insert(td_obu.end(), obu_size_data.begin(),
+                    obu_size_data.begin() + coded_obu_size);
+      td_obu.insert(td_obu.end(), obu_tmp.begin(), obu_tmp.end());
 
     } else if (obu_header.type == OBU_MULTI_STREAM_DECODER_OPERATION) {
       init_read_bit_buffer(
           &rb, data_ptr + obu_header_size + static_cast<int>(length_field_size),
           data_ptr + obu_total_size + length_field_size);
       *num_streams = read_multi_stream_decoder_operation(&rb, stream_ids);
+      per_stream_obus.resize(*num_streams);
     } else {
+      // Determine which stream this OBU belongs to.
+      int xlayer_id = 0;
+      if (obu_header.obu_header_extension_flag) {
+        xlayer_id = obu_header.obu_xlayer_id;
+      }
+
+      // Find the stream index for this xlayer_id.
+      int idx = 0;
+      for (int i = 0; i < *num_streams; ++i) {
+        if (stream_ids[i] == xlayer_id) {
+          idx = i;
+          break;
+        }
+      }
+
+      if (idx >= (int)per_stream_obus.size()) per_stream_obus.resize(idx + 1);
+
+      // If this is the first OBU for this stream in this TU, prepend a TD.
+      if (!stream_seen[idx]) {
+        stream_seen[idx] = true;
+        if (!td_obu.empty()) {
+          per_stream_obus[idx].insert(per_stream_obus[idx].end(),
+                                      td_obu.begin(), td_obu.end());
+        } else {
+          // No TD was found in the input (shouldn't happen), synthesize one.
+          auto synth_td = BuildTdObu();
+          per_stream_obus[idx].insert(per_stream_obus[idx].end(),
+                                      synth_td.begin(), synth_td.end());
+        }
+      }
+
+      // Rewrite OBU header: strip stream_id (xlayer) from header.
       std::vector<uint8_t> obu_size_data(length_field_size);
       size_t coded_obu_size;
       avm_uleb_encode(obu_total_size - (obu_header.obu_mlayer_id == 0),
                       sizeof(obu_total_size), obu_size_data.data(),
                       &coded_obu_size);
-      tu_obus.insert(tu_obus.end(), obu_size_data.begin(),
-                     obu_size_data.begin() + coded_obu_size);
+      per_stream_obus[idx].insert(per_stream_obus[idx].end(),
+                                  obu_size_data.begin(),
+                                  obu_size_data.begin() + coded_obu_size);
 
       std::vector<uint8_t> obu_header_data(1 + (obu_header.obu_mlayer_id != 0));
-
       if (!obu_header.obu_mlayer_id)
         write_obu_header_without_stream_id(obu_header_data.data(), &obu_header);
       else
         write_obu_header_extension_without_stream_id(obu_header_data.data(),
                                                      &obu_header);
 
-      tu_obus.insert(tu_obus.end(), obu_header_data.begin(),
-                     obu_header_data.end());
-      tu_obus.insert(tu_obus.end(), obu_tmp.begin() + obu_header_size,
-                     obu_tmp.end());
+      per_stream_obus[idx].insert(per_stream_obus[idx].end(),
+                                  obu_header_data.begin(),
+                                  obu_header_data.end());
+      per_stream_obus[idx].insert(per_stream_obus[idx].end(),
+                                  obu_tmp.begin() + obu_header_size,
+                                  obu_tmp.end());
     }
     data_ptr +=
         static_cast<int>(obu_total_size) + static_cast<int>(length_field_size);
   }
 
   if (obu_overhead_bytes != nullptr) *obu_overhead_bytes = obu_overhead;
-
-  return tu_obus;
 }
 
 void generate_filenames(char *base_filename, int num_files, char **file_names) {
@@ -298,8 +335,6 @@ int main(int argc, const char *argv[]) {
 #if CONFIG_WEBM_IO
   WebmInputContext webm_ctx;
 #endif
-  std::vector<uint8_t> segments;
-
   input_ctx.avx_ctx = &avx_ctx;
   input_ctx.obu_ctx = &obu_ctx;
 #if CONFIG_WEBM_IO
@@ -353,30 +388,17 @@ int main(int argc, const char *argv[]) {
   for (int i = 0; i < AVM_MAX_NUM_STREAMS; ++i) unit_number[i] = 0;
 
   while (num_tu_read) {
-    int idx = 0;
     size_t unit_size = 0;
-    int current_stream_id = -1;
     num_tu_read = 0;
     if (ReadTemporalUnit(&input_ctx, &unit_size)) {
       int updated_num_streams = num_streams;
       int obu_overhead_current_unit = 0;
-      segments = ExtractTU(input_ctx.unit_buffer, static_cast<int>(unit_size),
-                           &obu_overhead_current_unit, &updated_num_streams,
-                           stream_ids, &current_stream_id);
-      if (current_stream_id < 0)
-        fprintf(stderr,
-                "Error: the stream ID value of a frame (header) OBU shall be "
-                "equal to or greater than 0\n");
-      for (int i = 0; i < updated_num_streams; ++i) {
-        if (current_stream_id == stream_ids[i]) {
-          idx = i;
-          break;
-        }
-      }
-#if PRINT_TU_INFO
-      printf("Stream Id %d\n", current_stream_id);
-      printf("Temporal unit %d\n", unit_number[idx]);
-#endif  // PRINT_TU_INFO
+      std::vector<std::vector<uint8_t>> per_stream_obus;
+      per_stream_obus.resize(num_streams);
+
+      ExtractTU(input_ctx.unit_buffer, static_cast<int>(unit_size),
+                &obu_overhead_current_unit, &updated_num_streams, stream_ids,
+                per_stream_obus);
 
       if (updated_num_streams != num_streams) {
 #if PRINT_TU_INFO
@@ -389,9 +411,8 @@ int main(int argc, const char *argv[]) {
                   "fullfill the requirements.\n");
           return -1;
         } else if (updated_num_streams > num_streams) {
-          for (int i = num_tu_read; i < updated_num_streams; ++i) {
+          for (int i = num_streams; i < updated_num_streams; ++i) {
             fout[i] = fopen(output_file_names[i], "wb");
-
             if (fout[i] == nullptr) {
               fprintf(stderr, "Error: failed to open the output file: %s",
                       output_file_names[i]);
@@ -401,12 +422,23 @@ int main(int argc, const char *argv[]) {
         }
         num_streams = updated_num_streams;
       }
-      fwrite(segments.data(), 1, segments.size(), fout[idx]);
+
+      // Write each stream's OBUs to its output file.
+      for (int i = 0; i < num_streams; ++i) {
+        if (!per_stream_obus[i].empty()) {
+          fwrite(per_stream_obus[i].data(), 1, per_stream_obus[i].size(),
+                 fout[i]);
+#if PRINT_TU_INFO
+          printf("Stream Id %d\n", stream_ids[i]);
+          printf("Temporal unit %d\n", unit_number[i]);
+#endif  // PRINT_TU_INFO
+          ++unit_number[i];
+        }
+      }
 #if PRINT_TU_INFO
       printf("  TU overhead:    %d\n", obu_overhead_current_unit);
       printf("  TU total:    %ld\n", unit_size);
 #endif  // PRINT_TU_INFO
-      ++unit_number[idx];
       ++num_tu_read;
     }
   }

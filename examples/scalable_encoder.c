@@ -249,7 +249,7 @@ int main(int argc, char **argv) {
   cfg.enable_ops = 1;
   cfg.enable_lcr = 1;
   cfg.fwd_kf_enabled = fwd_kf_enabled;
-  if (lag > 0) {
+  if (lag > 0 && keyframe_interval > 0) {
     cfg.kf_max_dist = keyframe_interval;
     cfg.kf_min_dist = keyframe_interval;
   }

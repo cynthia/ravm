@@ -2744,10 +2744,12 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
         // Drop picture unit HLS state that was derived exclusively from leading
         // frame picture units when the first regular VCL OBU is encountered.
         if (av2_is_leading_vcl_obu(obu_header.type)) {
-          // Tag every QM/FGM/CI/BRT signalled in the leading temporal
+          // Tag every MFH/QM/FGM/CI/BRT signalled in the leading temporal
           // unit so we can identify and discard them at the transition.
-          // MFH is tagged in read_uncompressed_header().
           const int leading_mlayer_id = cm->mlayer_id;
+          for (int i = 0; i < MAX_MFH_NUM; i++)
+            if (acc_mfh_id_bitmap & (1 << i))
+              cm->mfh_params[i].mfh_from_leading = 1;
           for (int i = 0; i < NUM_CUSTOM_QMS; i++)
             if (acc_qm_id_bitmap & (1 << i)) {
               pbi->qm_list[i].qm_from_leading = 1;
@@ -2764,8 +2766,7 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
                                           [leading_mlayer_id]
                                           [OBU_BUFFER_REMOVAL_TIMING])
             cm->brt_info.brt_from_leading = true;
-        } else if (av2_is_regular_non_olk_obu(obu_header.type) &&
-                   pbi->this_is_first_vcl_obu_in_tu == 1) {
+        } else if (pbi->this_is_first_vcl_obu_in_tu == 1) {
           // SEF, TIP, SWITCH, RAS, BRIDGE, TG (not CLK)
           // MFH, QM, FGM, BRT, CI signalled in leading temporal unit cannot
           // be used. Drop state not re-signalled in the regular picture unit.
@@ -2803,7 +2804,13 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
                 &cm->ci_params_per_layer[regular_mlayer_id]);
           }
           cm->ci_params_per_layer[regular_mlayer_id].ci_from_leading = false;
-          // MFH is invalidated in read_uncompressed_header().
+          for (int i = 0; i < MAX_MFH_NUM; i++) {
+            if (cm->mfh_params[i].mfh_from_leading == 1 &&
+                !(acc_mfh_id_bitmap & (1 << i))) {
+              cm->mfh_valid[i] = false;
+            }
+            cm->mfh_params[i].mfh_from_leading = 0;
+          }
           if (cm->brt_info.brt_from_leading == 1 &&
               !pbi->obus_in_frame_unit_data[obu_header.obu_tlayer_id]
                                            [regular_mlayer_id]
@@ -2822,6 +2829,7 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
         // consecutively prior to a coded frame, such FGM OBUs will not set
         // the same FGM ID more than once.
         acc_fgm_id_bitmap = 0;
+        acc_mfh_id_bitmap = 0;
         decoded_payload_size = read_tilegroup_obu(
             pbi, &rb, data, data + payload_size, p_data_end, obu_header.type,
             obu_header.obu_xlayer_id, &curr_obu_info->first_tile_group,

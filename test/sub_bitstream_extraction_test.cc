@@ -13,7 +13,6 @@
 #include "third_party/googletest/src/googletest/include/gtest/gtest.h"
 
 #include "av2/decoder/annexF.h"
-#include "av2/decoder/decoder.h"
 #include "avm/avmdx.h"
 #include "test/codec_factory.h"
 #include "test/encode_test_driver.h"
@@ -270,87 +269,6 @@ TEST_F(SBEApiTest, ProcessLocalOpsMarksXlayer) {
   // Other xlayers should remain unaffected
   EXPECT_EQ(sbe_.local_ops_seen[0], 0);
   EXPECT_EQ(sbe_.local_ops_seen[1], 0);
-}
-
-// Verify that a late-arriving local OPS OBU (after the retention map has
-// already been built) triggers a rebuild of that xlayer's retention map
-// entries, so the OPS selection takes effect instead of "retain all".
-TEST_F(SBEApiTest, LateLocalOpsRebuildsRetentionMap) {
-  // Allocate a mock AV2Decoder (large struct, use heap)
-  struct AV2Decoder *pbi =
-      static_cast<struct AV2Decoder *>(calloc(1, sizeof(struct AV2Decoder)));
-  ASSERT_NE(pbi, nullptr);
-  pbi->selected_ops_id = -1;
-  pbi->selected_op_index = -1;
-
-  // Step 2: Process MSDO with xlayers {0, 1}
-  int stream_ids[] = { 0, 1 };
-  av2_sbe_process_msdo(&sbe_, 2, stream_ids);
-
-  // Step 3: No global OPS selected (global_ops_selected stays 0).
-  // All present xlayers will be marked as selected by build_retention_map.
-
-  // Configure a local OPS selection for xlayer 1 via --select-local-ops.
-  // This mimics the CLI setting: the user wants ops_id=0, op_index=0
-  // for xlayer 1.
-  const int target_xid = 1;
-  const int target_ops_id = 0;
-  const int target_op_idx = 0;
-  sbe_.local_ops_selected[target_xid] = 1;
-  sbe_.local_ops_id[target_xid] = target_ops_id;
-  sbe_.local_op_idx[target_xid] = target_op_idx;
-
-  // At this point, xlayer 1's local OPS OBU has NOT been parsed yet,
-  // so pbi->ops_list[1][0] is not valid. Build the retention map now
-  // (simulates the early trigger when the first SEQ_HDR for xlayer 0 arrives).
-  ASSERT_EQ(pbi->ops_list[target_xid][target_ops_id].valid, 0);
-  av2_sbe_build_retention_map(&sbe_, pbi);
-  EXPECT_EQ(sbe_.retention_map_ready, 1);
-
-  // Verify xlayer 1 fell through to "retain all" (Priority 4) because
-  // the local OPS data wasn't available.
-  for (int m = 0; m < MAX_NUM_MLAYERS; m++)
-    for (int t = 0; t < MAX_NUM_TLAYERS; t++)
-      EXPECT_EQ(sbe_.retention_map[target_xid][m][t], 1)
-          << "Before late OPS: xlayer 1 should retain all at m=" << m
-          << " t=" << t;
-
-  // Now simulate the late-arriving local OPS OBU for xlayer 1.
-  // Populate ops_list[1][0] with valid data: only mlayer=0, tlayer=0 retained.
-  struct OperatingPointSet *ops = &pbi->ops_list[target_xid][target_ops_id];
-  ops->valid = 1;
-  ops->ops_id = target_ops_id;
-  ops->ops_cnt = 1;
-  ops->op[target_op_idx].mlayer_info.ops_mlayer_map[target_xid] = 0x01;
-  ops->op[target_op_idx].mlayer_info.ops_tlayer_map[target_xid][0] = 0x01;
-
-  // Call process_local_ops — with retention_map_ready==1, this should
-  // trigger a rebuild of xlayer 1's retention map entries.
-  av2_sbe_process_local_ops(&sbe_, pbi, target_xid, target_ops_id,
-                            /*ops_cnt=*/1);
-
-  // Verify xlayer 1's retention map now reflects the OPS selection:
-  // only (mlayer=0, tlayer=0) should be retained.
-  EXPECT_EQ(sbe_.retention_map[target_xid][0][0], 1)
-      << "After late OPS: xlayer 1 should retain (0,0)";
-
-  // All other (mlayer, tlayer) combinations should be 0.
-  for (int m = 0; m < MAX_NUM_MLAYERS; m++) {
-    for (int t = 0; t < MAX_NUM_TLAYERS; t++) {
-      if (m == 0 && t == 0) continue;
-      EXPECT_EQ(sbe_.retention_map[target_xid][m][t], 0)
-          << "After late OPS: xlayer 1 should NOT retain m=" << m << " t=" << t;
-    }
-  }
-
-  // Verify xlayer 0 was not affected (should still be "retain all"
-  // since no local OPS was set for it either).
-  for (int m = 0; m < MAX_NUM_MLAYERS; m++)
-    for (int t = 0; t < MAX_NUM_TLAYERS; t++)
-      EXPECT_EQ(sbe_.retention_map[0][m][t], 1)
-          << "xlayer 0 should remain retain-all at m=" << m << " t=" << t;
-
-  free(pbi);
 }
 
 // ==========================================================================

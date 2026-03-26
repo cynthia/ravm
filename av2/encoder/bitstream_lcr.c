@@ -204,7 +204,7 @@ static int write_lcr_global_info(struct LayerConfigurationRecord *lcr_params,
   avm_wb_write_bit(wb, glcr->lcr_dependent_xlayers_flag);
   avm_wb_write_bit(wb, glcr->lcr_global_atlas_id_present_flag);
   avm_wb_write_literal(wb, glcr->lcr_global_purpose_id, 7);
-  avm_wb_write_bit(wb, glcr->lcr_enforce_tu_alignment_flag);
+  avm_wb_write_bit(wb, glcr->lcr_doh_constraint_flag);
   avm_wb_write_bit(wb, glcr->lcr_enforce_tile_alignment_flag);
   if (glcr->lcr_global_atlas_id_present_flag)
     avm_wb_write_literal(wb, glcr->lcr_global_atlas_id, 3);

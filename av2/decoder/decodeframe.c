@@ -7418,6 +7418,16 @@ static void activate_layer_configuration_record(AV2Decoder *pbi,
   if (lcr != NULL) {
     pbi->active_lcr = lcr;
     cm->lcr_params = *pbi->active_lcr;
+
+    // Conformance: when monotonic_output_order_flag is 0 in any activated
+    // sequence header, lcr_doh_constraint_flag shall be 1.
+    if (lcr->is_global && !cm->seq_params.monotonic_output_order_flag &&
+        !lcr->global_lcr.lcr_doh_constraint_flag) {
+      avm_internal_error(&cm->error, AVM_CODEC_UNSUP_BITSTREAM,
+                         "lcr_doh_constraint_flag must be 1 when "
+                         "monotonic_output_order_flag is 0");
+    }
+
     // If the activated LCR is a local LCR, also store the parent global LCR
     // so that embedded layer info can fall back to it.
     if (!lcr->is_global) {
@@ -8113,6 +8123,13 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
       cm->implicit_output_picture = 0;
     }
 
+    if (seq_params->monotonic_output_order_flag &&
+        cm->implicit_output_picture) {
+      avm_internal_error(&cm->error, AVM_CODEC_UNSUP_BITSTREAM,
+                         "implicit_output_picture must be 0 when "
+                         "monotonic_output_order_flag is 1");
+    }
+
     cm->cur_frame->immediate_output_picture = cm->immediate_output_picture;
     cm->cur_frame->implicit_output_picture = cm->implicit_output_picture;
     cm->cur_frame->frame_output_done = 0;
@@ -8163,6 +8180,39 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
       current_frame->frame_number = current_frame->order_hint;
       current_frame->display_order_hint_restricted =
           current_frame->display_order_hint;
+
+      // DOH constraint checks
+      const int msdo_doh = pbi->common.msdo_params.msdo_doh_constraint_flag;
+      const int lcr_doh =
+          (pbi->active_lcr != NULL && pbi->active_lcr->is_global &&
+           pbi->active_lcr->global_lcr.lcr_doh_constraint_flag);
+
+      // Conformance: when monotonic_output_order_flag is 0 in any activated
+      // sequence header, msdo_doh_constraint_flag shall be 1.
+      // Only applies when an MSDO OBU is present (multistream mode).
+      if (pbi->multi_stream_mode && !seq_params->monotonic_output_order_flag &&
+          !msdo_doh) {
+        avm_internal_error(&cm->error, AVM_CODEC_UNSUP_BITSTREAM,
+                           "msdo_doh_constraint_flag must be 1 when "
+                           "monotonic_output_order_flag is 0");
+      }
+
+      const int doh_active = (msdo_doh || lcr_doh);
+      if (doh_active) {
+        const int order_hint_bits =
+            seq_params->order_hint_info.order_hint_bits_minus_1 + 1;
+
+        // All pictures in a TU must use the same OrderHintBits
+        if (!pbi->doh_tu_order_hint_bits_set) {
+          pbi->doh_tu_order_hint_bits = order_hint_bits;
+          pbi->doh_tu_order_hint_bits_set = 1;
+        } else if (pbi->doh_tu_order_hint_bits != order_hint_bits) {
+          avm_internal_error(
+              &cm->error, AVM_CODEC_UNSUP_BITSTREAM,
+              "DOH constraint: all pictures in a TU must use the same "
+              "OrderHintBits");
+        }
+      }
     }
 
     if (obu_type == OBU_OPEN_LOOP_KEY) {

@@ -470,6 +470,8 @@ static uint32_t read_multi_stream_decoder_operation_obu(
     (void)substream_tier_idx;
   }
 
+  cm->msdo_params.msdo_doh_constraint_flag = avm_rb_read_bit(rb);
+
   // Check if configuration changed
   MsdoConfig new_config;
   save_msdo_config(pbi, &new_config);
@@ -556,6 +558,7 @@ static uint32_t read_sequence_header_obu(AV2Decoder *pbi, int xlayer_id,
     seq_params->max_tlayer_id = 0;
     seq_params->max_mlayer_id = 0;
     seq_params->seq_max_mlayer_cnt = 1;
+    seq_params->monotonic_output_order_flag = 1;
   } else {
     int seq_lcr_id = avm_rb_read_literal(rb, 3);
     if (seq_lcr_id > MAX_NUM_SEQ_LCR_ID) {
@@ -579,6 +582,7 @@ static uint32_t read_sequence_header_obu(AV2Decoder *pbi, int xlayer_id,
     } else {
       seq_params->seq_max_mlayer_cnt = 1;
     }
+    seq_params->monotonic_output_order_flag = avm_rb_read_bit(rb);
   }
 
   const int num_bits_width = avm_rb_read_literal(rb, 4) + 1;
@@ -2615,6 +2619,7 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
         pbi->next_start_tile = 0;
         pbi->seen_vcl_obu_in_this_tu = 0;
         pbi->this_is_first_vcl_obu_in_tu = 0;
+        pbi->doh_tu_order_hint_bits_set = 0;
         for (int i = 0; i < NUM_CUSTOM_QMS; i++) pbi->qm_protected[i] = 0;
         break;
       case OBU_MULTI_STREAM_DECODER_OPERATION:

@@ -245,7 +245,7 @@ int main(int argc, char **argv) {
   cfg.rc_max_quantizer = 210;
   cfg.g_error_resilient = 0;
   cfg.g_lag_in_frames = lag;
-  cfg.g_profile = MAIN_420_10;
+  cfg.g_profile = MAIN_420_10_IP2;
   cfg.enable_ops = 1;
   cfg.enable_lcr = 1;
   cfg.fwd_kf_enabled = fwd_kf_enabled;

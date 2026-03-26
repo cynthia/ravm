@@ -58,8 +58,8 @@ typedef enum {
  *   C_Main_444_10         | 0..5                 | 0, 1, 2                 | 0 or 1
  *
  * Notes:
- * - seq_profile_idc: Allowed profile values (0=MAIN_420_10_IP0, 1=MAIN_420_10_IP1, 2=MAIN_420_10_IP2, 3=Main_420_10,
- *                                            4=MAIN_422_10, 5=MAIN_444_10)
+ * - seq_profile_idc: Allowed profile values (0=MAIN_420_10_IP0, 1=MAIN_420_10_IP1, 2=MAIN_420_10_IP2,
+ *                                            3=MAIN_422_10, 4=MAIN_444_10, 31=Configurable)
  * - bit_depth_idc: 0=8-bit, 1=10-bit
  * - C_Main_420_10: Supports profiles 0-5, chroma 4:0:0 and 4:2:0, bit depths 8 and 10
  * - C_Main_422_10: Supports profiles 0-5, chroma 4:0:0, 4:2:0 and 4:2:2, bit depth 8 and 10
@@ -88,12 +88,39 @@ static const int seq_profile_max_mlayer_cnt[MAX_PROFILES] = {
   1,
   2,
   3,
-  MAX_NUM_MLAYERS,
-  MAX_NUM_MLAYERS,
-  MAX_NUM_MLAYERS,
+  2,
+  2,
 #if CONFIG_TESTONLY_12BIT_SUPPORT
   MAX_NUM_MLAYERS,
+#else
+  RESERVED_NUM_MLAYERS,
 #endif  // CONFIG_TESTONLY_12BIT_SUPPORT
+  RESERVED_NUM_MLAYERS,
+  RESERVED_NUM_MLAYERS,
+  RESERVED_NUM_MLAYERS,
+  RESERVED_NUM_MLAYERS,
+  RESERVED_NUM_MLAYERS,
+  RESERVED_NUM_MLAYERS,
+  RESERVED_NUM_MLAYERS,
+  RESERVED_NUM_MLAYERS,
+  RESERVED_NUM_MLAYERS,
+  RESERVED_NUM_MLAYERS,
+  RESERVED_NUM_MLAYERS,
+  RESERVED_NUM_MLAYERS,
+  RESERVED_NUM_MLAYERS,
+  RESERVED_NUM_MLAYERS,
+  RESERVED_NUM_MLAYERS,
+  RESERVED_NUM_MLAYERS,
+  RESERVED_NUM_MLAYERS,
+  RESERVED_NUM_MLAYERS,
+  RESERVED_NUM_MLAYERS,
+  RESERVED_NUM_MLAYERS,
+  RESERVED_NUM_MLAYERS,
+  RESERVED_NUM_MLAYERS,
+  RESERVED_NUM_MLAYERS,
+  RESERVED_NUM_MLAYERS,
+  RESERVED_NUM_MLAYERS,
+  MAX_NUM_MLAYERS
 };
 
 /* clang-format off */
@@ -109,18 +136,20 @@ static const int seq_profile_max_mlayer_cnt[MAX_PROFILES] = {
  *  Main_420_10_IP2                   2                  CHROMA_FORMAT_400          0 or 1                        3
  *                                                       CHROMA_FORMAT_420
  * --------------------------------------------------------------------------------------------------------------------
- *  Main_420_10                       3                  CHROMA_FORMAT_400          0 or 1                        -
- *                                                       CHROMA_FORMAT_420
- * ---------------------------------------------------------------------------------------------------------------------
- *  Main_422_10                       4                  CHROMA_FORMAT_400          0 or 1                        -
+ *  Main_422_10_IP1                   3                  CHROMA_FORMAT_400          0 or 1                        2
  *                                                       CHROMA_FORMAT_420
  *                                                       CHROMA_FORMAT_422
  * ---------------------------------------------------------------------------------------------------------------------
- *  Main_444_10                       5                  CHROMA_FORMAT_400          0 or 1                        -
+ *  Main_444_10_IP1                   4                  CHROMA_FORMAT_400          0 or 1                        2
  *                                                       CHROMA_FORMAT_420
  *                                                       CHROMA_FORMAT_444
  * ---------------------------------------------------------------------------------------------------------------------
- *  Reserved                         6-31
+ *  Reserved                         5-30
+ * ---------------------------------------------------------------------------------------------------------------------
+ *  Configurable                      31                 CHROMA_FORMAT_400          0 or 1                        -
+ *                                                       CHROMA_FORMAT_420
+ *                                                       CHROMA_FORMAT_422
+ *                                                       CHROMA_FORMAT_444
  * ---------------------------------------------------------------------------------------------------------------------
  */
 /* clang-format on */
@@ -134,6 +163,14 @@ static const int seq_profile_max_mlayer_cnt[MAX_PROFILES] = {
 
 static INLINE int av2_get_max_mlayer_cnt_from_profile(int seq_profile_idc) {
   if (seq_profile_idc < 0 || seq_profile_idc >= MAX_PROFILES) return -1;
+#if CONFIG_TESTONLY_12BIT_SUPPORT
+  if (seq_profile_idc > TEST_ONLY_12BIT_PROFILE &&
+      seq_profile_idc < CONFIGURABLE)
+    return -1;
+#else
+  if (seq_profile_idc > MAIN_444_10_IP1 && seq_profile_idc < CONFIGURABLE)
+    return -1;
+#endif
   return seq_profile_max_mlayer_cnt[seq_profile_idc];
 }
 
@@ -202,7 +239,6 @@ int av2_check_profile_interop_conformance(
     case MAIN_420_10_IP0:
     case MAIN_420_10_IP1:
     case MAIN_420_10_IP2:
-    case MAIN_420_10:
       // All 420 profiles: allow only 4:2:0 and monochrome
       err = check_chroma_format(monochrome, is_420, is_422, is_444,
                                 1 /* allow_420 */, 0 /* allow_422 */,
@@ -216,7 +252,7 @@ int av2_check_profile_interop_conformance(
             (BITSTREAM_PROFILE)profile, is_422 ? "4:2:2" : "4:4:4");
       }
       break;
-    case MAIN_422_10:
+    case MAIN_422_10_IP1:
       // 422 profile: allow 4:2:0 and 4:2:2 and monochrome
       err = check_chroma_format(monochrome, is_420, is_422, is_444,
                                 1 /* allow_420 */, 1 /* allow_422 */,
@@ -230,7 +266,7 @@ int av2_check_profile_interop_conformance(
             (BITSTREAM_PROFILE)profile);
       }
       break;
-    case MAIN_444_10:
+    case MAIN_444_10_IP1:
       // 444 profile: allow 4:2:0, 4:4:4 and monochrome
       err = check_chroma_format(monochrome, is_420, is_422, is_444,
                                 1 /* allow_420 */, 0 /* allow_422 */,
@@ -244,8 +280,11 @@ int av2_check_profile_interop_conformance(
             (BITSTREAM_PROFILE)profile);
       }
       break;
+    case CONFIGURABLE: {
+      // Supports all chroma formats
+    } break;
     default:
-      // Profile 6+ - reserved/unsupported
+      // Profile 5+ - reserved/unsupported
       return 0;
   }
   // Check if Max mlayer count is valid for IP profiles (seq_profile_idc <=2)
@@ -267,12 +306,14 @@ int av2_check_profile_interop_conformance(
  * Table A.5: Definition of ProfileScalingFactor
  * seq_profile_idc          | bit_depth_idc      |      chroma_format_idc       | ProfileScalingFactor
  * ----------------------------------------------------------------------------------------------------
- * (0, 1, 2, 3, 4, 5)            (0, 1)              CHROMA_FORMAT_400                       0
+ * (0, 1, 2)                     (0, 1)              CHROMA_FORMAT_400                       0
  *                                                   CHROMA_FORMAT_420
  * ----------------------------------------------------------------------------------------------------
- *      4                        (0, 1)              CHROMA_FORMAT_422                       1
+ *      3                        (0, 1)              CHROMA_FORMAT_422                       1
  * ----------------------------------------------------------------------------------------------------
- *      5                        (0, 1)              CHROMA_FORMAT_444                       2
+ *      4                        (0, 1)              CHROMA_FORMAT_444                       2
+ * ----------------------------------------------------------------------------------------------------
+ *      31                       (0, 1)              CHROMA_FORMAT_444                       2
  * ----------------------------------------------------------------------------------------------------
  */
 /* clang-format on */
@@ -282,20 +323,19 @@ int get_profile_scaling_factor(int seq_profile_idc, int chroma_format_idc) {
   // Note that the bit_depth_idx must be 0 or 1 for all valid combinations
 
   // All profiles (0-5) with 400 or 420 chroma format
-  if (chroma_format_idc == CHROMA_FORMAT_400 ||
-      chroma_format_idc == CHROMA_FORMAT_420) {
+  if (seq_profile_idc == MAIN_420_10_IP0 ||
+      seq_profile_idc == MAIN_420_10_IP1 ||
+      seq_profile_idc == MAIN_420_10_IP2) {
     return 0;
   }
 
   // Profile 4 with 422 chroma format
-  if (seq_profile_idc == MAIN_422_10 &&
-      chroma_format_idc == CHROMA_FORMAT_422) {
+  if (seq_profile_idc == MAIN_422_10_IP1) {
     return 1;
   }
 
   // Profile 5 with 444 chroma format
-  if (seq_profile_idc == MAIN_444_10 &&
-      chroma_format_idc == CHROMA_FORMAT_444) {
+  if (seq_profile_idc == MAIN_444_10_IP1 || seq_profile_idc == CONFIGURABLE) {
     return 2;
   }
 

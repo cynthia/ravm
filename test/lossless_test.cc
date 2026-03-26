@@ -110,7 +110,7 @@ TEST_P(LosslessTestLarge, TestLossLessEncoding) {
 TEST_P(LosslessTestLarge, TestLossLessEncoding444) {
   libavm_test::Y4mVideoSource video("rush_hour_444.y4m", 0, 3);
 
-  cfg_.g_profile = MAIN_444_10;
+  cfg_.g_profile = MAIN_444_10_IP1;
   cfg_.g_timebase = video.timebase();
   cfg_.rc_target_bitrate = 2000;
   cfg_.g_lag_in_frames = 25;

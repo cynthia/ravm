@@ -2176,7 +2176,7 @@ int main(int argc, const char **argv_) {
         stream->config.cfg.g_input_bit_depth = input.bit_depth;
       }
     }
-
+    // Probably, the interoperability point should be checked here as well.
     FOREACH_STREAM(stream, streams) {
       if (input.fmt != AVM_IMG_FMT_I420 && input.fmt != AVM_IMG_FMT_I42016) {
         /* Automatically upgrade if input is non-4:2:0 but a 4:2:0 profile
@@ -2185,32 +2185,32 @@ int main(int argc, const char **argv_) {
           case MAIN_420_10_IP0:
           case MAIN_420_10_IP1:
           case MAIN_420_10_IP2:
-          case MAIN_420_10:
             // Profiles 0 to 3 are all 420 profiles
             if (input.fmt == AVM_IMG_FMT_I444 ||
                 input.fmt == AVM_IMG_FMT_I44416) {
               if (!stream->config.cfg.monochrome) {
                 stream->config.cfg.g_profile =
-                    MAIN_444_10;  // upgrade to MAIN_444_10
+                    MAIN_444_10_IP1;  // upgrade to MAIN_444_10_IP1
                 profile_updated = 1;
               }
             } else if (input.fmt == AVM_IMG_FMT_I422 ||
                        input.fmt == AVM_IMG_FMT_I42216) {
-              stream->config.cfg.g_profile = MAIN_422_10;  // MAIN_422_10
+              stream->config.cfg.g_profile = MAIN_422_10_IP1;
               profile_updated = 1;
             }
             break;
-          case MAIN_422_10:
+          case MAIN_422_10_IP1:
             // Profile 4 is 422 profile -- upgrade to 444 if needed
             if (input.fmt == AVM_IMG_FMT_I444 ||
                 input.fmt == AVM_IMG_FMT_I44416) {
               if (!stream->config.cfg.monochrome) {
-                stream->config.cfg.g_profile = MAIN_444_10;  // Upgrade to 444
+                stream->config.cfg.g_profile =
+                    MAIN_444_10_IP1;  // Upgrade to 444
                 profile_updated = 1;
               }
             }
             break;
-          case MAIN_444_10:
+          case MAIN_444_10_IP1:
             // Do not downgrade from 444
             break;
           default: break;

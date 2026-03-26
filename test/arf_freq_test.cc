@@ -53,7 +53,7 @@ const TestVideoParam kTestVectors[] = {
   { "hantro_collage_w352h288.yuv", 352, 288, 30, 1, 8, AVM_IMG_FMT_I420,
     AVM_BITS_8, 0 },
   { "rush_hour_444.y4m", 352, 288, 30, 1, 8, AVM_IMG_FMT_I444, AVM_BITS_8,
-    MAIN_444_10 },
+    MAIN_444_10_IP1 },
   // Add list of profile 2/3 test videos here ...
 };
 

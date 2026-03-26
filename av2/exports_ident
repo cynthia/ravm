@@ -1,2 +1,3 @@
 text ifd_init
 text ifd_inspect
+text ifd_inspect_superblock

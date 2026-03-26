@@ -212,10 +212,9 @@ AV2Decoder *av2_decoder_create(BufferPool *const pool) {
   for (int i = 0; i < NUM_CUSTOM_QMS; ++i) {
     pbi->qm_protected[i] = 0;
   }
-  for (int i = 0; i < NUM_CUSTOM_QMS; ++i) pbi->qm_from_leading[i] = 0;
-  for (int i = 0; i < MAX_FGM_NUM; ++i) pbi->fgm_from_leading[i] = 0;
 
   for (int i = 0; i < NUM_CUSTOM_QMS; ++i) {
+    pbi->qm_list[i].qm_from_leading = 0;
     pbi->qm_list[i].qm_id = -1;
     pbi->qm_list[i].qm_tlayer_id = -1;
     pbi->qm_list[i].qm_mlayer_id = -1;
@@ -224,6 +223,7 @@ AV2Decoder *av2_decoder_create(BufferPool *const pool) {
     pbi->qm_list[i].quantizer_matrix_num_planes = -1;
   }
   for (int i = 0; i < MAX_FGM_NUM; ++i) {
+    pbi->fgm_list[i].fgm_from_leading = 0;
     pbi->fgm_list[i].fgm_id = -1;
     pbi->fgm_list[i].fgm_tlayer_id = -1;
     pbi->fgm_list[i].fgm_mlayer_id = -1;

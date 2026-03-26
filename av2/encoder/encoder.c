@@ -435,6 +435,7 @@ void av2_init_seq_coding_tools(AV2_COMP *cpi, SequenceHeader *seq,
       (tool_cfg->force_video_mode == 0) && (oxcf->input_cfg.limit == 1);
   seq->single_picture_header_flag = seq->still_picture;
   seq->single_picture_header_flag &= !tool_cfg->full_still_picture_hdr;
+  seq->monotonic_output_order_flag = seq->still_picture;
   seq->force_screen_content_tools = 2;
   seq->force_integer_mv = 2;
   if (seq->still_picture && seq->single_picture_header_flag) {

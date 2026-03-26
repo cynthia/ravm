@@ -650,6 +650,14 @@ typedef struct AV2Decoder {
    * Map to indicate which mlayer is present in the current CVS.
    */
   int mlayer_id_map[AVM_MAX_NUM_STREAMS][MAX_NUM_MLAYERS];
+
+  /*!
+   * DOH constraint tracking for temporal units.
+   * Used when lcr_doh_constraint_flag or msdo_doh_constraint_flag is 1.
+   */
+  int doh_tu_order_hint_bits;      // OrderHintBits of first picture in TU
+  int doh_tu_order_hint_bits_set;  // Whether doh_tu_order_hint_bits has been
+                                   // set
 } AV2Decoder;
 
 // Returns 0 on success. Sets pbi->common.error.error_code to a nonzero error

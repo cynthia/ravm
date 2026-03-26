@@ -766,7 +766,7 @@ typedef struct GlobalLayerConfigurationRecord {
   int LcrMaxNumXLayerCount;  // NUmber of xlauers in this global LCR
   int LcrXLayerID[31];       // number of xlayers in this global LCR
 
-  int lcr_enforce_tu_alignment_flag;
+  int lcr_doh_constraint_flag;
   int lcr_enforce_tile_alignment_flag;
   int lcr_reserved_zero_6bits;
   uint32_t lcr_data_size[MAX_NUM_XLAYERS];
@@ -995,6 +995,7 @@ typedef struct MultistreamDecoderOperation {
   BITSTREAM_PROFILE multistream_profile_idc;
   AV2_LEVEL multistream_level_idx;
   uint8_t multistream_tier_idx;
+  uint8_t msdo_doh_constraint_flag;
 } MultistreamDecoderOperation;
 
 // Operating point parameters
@@ -1046,14 +1047,15 @@ typedef struct SequenceHeader {
 
   OrderHintInfo order_hint_info;
 
-  uint8_t force_screen_content_tools;  // 0 - force off
-                                       // 1 - force on
-                                       // 2 - adaptive
-  uint8_t still_picture;               // Video is a single frame still picture
-  uint8_t single_picture_header_flag;  // Use reduced header for still picture
-  uint8_t force_integer_mv;            // 0 - Don't force. MV can use subpel
-                                       // 1 - force to integer
-                                       // 2 - adaptive
+  uint8_t force_screen_content_tools;   // 0 - force off
+                                        // 1 - force on
+                                        // 2 - adaptive
+  uint8_t still_picture;                // Video is a single frame still picture
+  uint8_t single_picture_header_flag;   // Use reduced header for still picture
+  uint8_t monotonic_output_order_flag;  // Output order equals decode order
+  uint8_t force_integer_mv;             // 0 - Don't force. MV can use subpel
+                                        // 1 - force to integer
+                                        // 2 - adaptive
   uint8_t enable_tcq;  // Seq: 0 - disable, 1: 8-state, 2: 8-state (frame adap)
   uint8_t enable_sdp;  // enables/disables semi-decoupled partitioning
   uint8_t enable_extended_sdp;  // enables/disables extended semi-decoupled

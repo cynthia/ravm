@@ -158,7 +158,7 @@ void av2_copy_predefined_qmatrices_to_list(AV2Decoder *pbi, int num_planes) {
 // read_qm_obu() call updates *acc_qm_id_bitmap by bitwise-ORing the
 // qm_id_bitmap from the QM OBU with *acc_qm_id_bitmap.
 uint32_t read_qm_obu(AV2Decoder *pbi, int obu_tlayer_id, int obu_mlayer_id,
-                     uint32_t *acc_qm_id_bitmap,
+                     uint32_t *acc_qm_id_bitmap, int *qm_bit_map_zero_signalled,
                      struct avm_read_bit_buffer *rb) {
   // multiple qms in one obu with id
   const uint32_t saved_bit_offset = rb->bit_offset;
@@ -173,7 +173,7 @@ uint32_t read_qm_obu(AV2Decoder *pbi, int obu_tlayer_id, int obu_mlayer_id,
   bool qm_chroma_info_present_flag = avm_rb_read_bit(rb);
   const int num_planes = (qm_chroma_info_present_flag ? 3 : 1);
   if (qm_bit_map == 0) {
-    *acc_qm_id_bitmap = (1U << NUM_CUSTOM_QMS) - 1;
+    *qm_bit_map_zero_signalled = 1;
     av2_copy_predefined_qmatrices_to_list(pbi, num_planes);
     for (int j = 0; j < NUM_CUSTOM_QMS; j++) pbi->qm_protected[j] = 1;
   } else {

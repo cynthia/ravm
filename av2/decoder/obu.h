@@ -36,7 +36,7 @@ uint32_t read_fgm_obu(AV2Decoder *pbi, const int obu_tlayer_id,
                       struct avm_read_bit_buffer *rb);
 
 uint32_t read_qm_obu(AV2Decoder *pbi, int obu_tlayer_id, int obu_mlayer_id,
-                     uint32_t *acc_qm_id_bitmap,
+                     uint32_t *acc_qm_id_bitmap, int *qm_bit_map_zero_signalled,
                      struct avm_read_bit_buffer *rb);
 
 uint32_t av2_read_buffer_removal_timing_obu(struct AV2Decoder *pbi,

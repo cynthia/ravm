@@ -2396,6 +2396,7 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
   int count_obus_with_frame_unit = 0;
   obu_info *obu_list = pbi->obu_list;
   uint32_t acc_qm_id_bitmap = 0;
+  int qm_bit_map_zero_signalled = 0;
   // acc_fgm_id_bitmap accumulates fgm_id_bitmap in FGM OBU to check if film
   // grain models signalled before a coded frame have the same fgm_id
   uint32_t acc_fgm_id_bitmap = 0;
@@ -2751,7 +2752,7 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
             if (acc_mfh_id_bitmap & (1 << i))
               cm->mfh_params[i].mfh_from_leading = 1;
           for (int i = 0; i < NUM_CUSTOM_QMS; i++)
-            if (acc_qm_id_bitmap & (1 << i)) {
+            if ((acc_qm_id_bitmap & (1 << i)) || qm_bit_map_zero_signalled) {
               pbi->qm_list[i].qm_from_leading = 1;
             }
           for (int i = 0; i < MAX_FGM_NUM; i++)
@@ -2775,7 +2776,8 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
 
           for (int i = 0; i < NUM_CUSTOM_QMS; i++) {
             struct quantization_matrix_set *qmset = &pbi->qm_list[i];
-            if (qmset->qm_from_leading == 1 && !(acc_qm_id_bitmap & (1 << i))) {
+            if (qmset->qm_from_leading == 1 && !(acc_qm_id_bitmap & (1 << i)) &&
+                !qm_bit_map_zero_signalled) {
               qmset->qm_id = -1;
               qmset->qm_mlayer_id = -1;
               qmset->qm_tlayer_id = -1;
@@ -2825,6 +2827,7 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
         // qm_bit_map equal to 0, such QM OBUs will not set the same QM ID more
         // than once.
         acc_qm_id_bitmap = 0;
+        qm_bit_map_zero_signalled = 0;
         // It is a requirement that if multiple FGM OBUs are present
         // consecutively prior to a coded frame, such FGM OBUs will not set
         // the same FGM ID more than once.
@@ -2888,7 +2891,7 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
       case OBU_QUANTIZATION_MATRIX:
         decoded_payload_size =
             read_qm_obu(pbi, obu_header.obu_tlayer_id, obu_header.obu_mlayer_id,
-                        &acc_qm_id_bitmap, &rb);
+                        &acc_qm_id_bitmap, &qm_bit_map_zero_signalled, &rb);
         if (cm->error.error_code != AVM_CODEC_OK) return -1;
         break;
       case OBU_METADATA_SHORT:

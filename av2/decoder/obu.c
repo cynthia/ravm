@@ -2705,7 +2705,7 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
               }
             }
           } else {
-            av2_sbe_process_local_ops(&pbi->sbe_state, cm->xlayer_id,
+            av2_sbe_process_local_ops(&pbi->sbe_state, pbi, cm->xlayer_id,
                                       pbi->dec_op_params.DecOpSetId,
                                       pbi->dec_op_params.DecOpCount);
           }

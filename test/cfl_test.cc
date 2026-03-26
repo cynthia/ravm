@@ -10,6 +10,7 @@
  * aomedia.org/license/patent-license/.
  */
 
+#include <array>
 #include <tuple>
 
 #include "third_party/googletest/src/googletest/include/gtest/gtest.h"

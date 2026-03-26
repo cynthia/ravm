@@ -312,6 +312,8 @@ typedef struct {
   SequenceHeader seq_params_buf;
   int seq_header_count_buf;
   bool mfh_valid_buf[MAX_MFH_NUM];
+  int decoding_first_frame;
+  int last_olk_tu_display_order_hint;
 } StreamInfo;
 
 /*!

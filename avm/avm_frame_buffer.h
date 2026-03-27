@@ -21,7 +21,6 @@
 extern "C" {
 #endif
 
-#include "config/avm_config.h"
 #include "avm/avm_integer.h"
 
 /*!\brief The maximum number of sub-streams.

@@ -26,8 +26,6 @@
 extern "C" {
 #endif
 
-#include "config/avm_config.h"
-
 /* Include controls common to both the encoder and decoder */
 #include "avm/avm.h"
 

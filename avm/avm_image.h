@@ -22,7 +22,6 @@ extern "C" {
 #endif
 
 #include "avm/avm_integer.h"
-#include "config/avm_config.h"
 
 /*!\brief Current ABI version number
  *

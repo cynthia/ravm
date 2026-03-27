@@ -678,22 +678,6 @@ static uint32_t read_sequence_header_obu(AV2Decoder *pbi, int xlayer_id,
 
   av2_read_sequence_header(rb, seq_params);
 
-  // Set doh_seen_size from the parsed order_hint_bits.
-  // Per-xlayer because different streams may have different OrderHintBits.
-  if (seq_params->order_hint_info.order_hint_bits_minus_1 >= 0) {
-    const int new_size =
-        4 << (seq_params->order_hint_info.order_hint_bits_minus_1 + 1);
-    if (xlayer_id == GLOBAL_XLAYER_ID) {
-      for (int xl = 0; xl < MAX_NUM_XLAYERS; xl++) {
-        pbi->doh_seen_size[xl] = new_size;
-        pbi->doh_seen_threshold[xl] = 3 * new_size / 4;
-      }
-    } else {
-      pbi->doh_seen_size[xlayer_id] = new_size;
-      pbi->doh_seen_threshold[xlayer_id] = 3 * new_size / 4;
-    }
-  }
-
   seq_params->film_grain_params_present = avm_rb_read_bit(rb);
 
   size_t bits_before_ext = rb->bit_offset - saved_bit_offset;
@@ -2654,12 +2638,6 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
       // last_output_doh.  Other xlayers may still be mid-sequence.
       for (int ml = 0; ml < MAX_NUM_MLAYERS; ml++)
         pbi->last_output_doh[cm->xlayer_id][ml] = -1;
-
-      // Reset doh_seen uniqueness array for this xlayer at CVS boundary.
-      memset(pbi->doh_seen[cm->xlayer_id], -1,
-             pbi->doh_seen_size[cm->xlayer_id] * sizeof(pbi->doh_seen[0][0]));
-      pbi->doh_seen_threshold[cm->xlayer_id] =
-          3 * pbi->doh_seen_size[cm->xlayer_id] / 4;
     }
 
     // Flush leading frames (doh < last_olk_tu_display_order_hint) at the start

@@ -884,6 +884,8 @@ typedef struct {
   bool enable_imp_msk_bld;
   // When enabled, video mode should be used even for single frame input.
   bool force_video_mode;
+  // When enabled, sets monotonic_output_order_flag=1 in sequence header.
+  bool monotonic_output_order;
   // Indicates if the error resiliency features should be enabled.
   bool g_error_resilient_mode;
   // Indicates if frame parallel decoding feature should be enabled.

@@ -729,6 +729,11 @@ const av2_codec_arg_definitions_t g_av2_codec_arg_defs = {
       ARG_DEF(NULL, "add-sef-for-output", 1,
               "Add SEF witout order_hint to output hidden frames"
               "(0: off (default), 1: on)"),
+  .monotonic_output_order =
+      ARG_DEF(NULL, "monotonic-output-order", 1,
+              "Set monotonic output order flag in sequence header. "
+              "Enables AV1-style output where hidden frames are shown via SEF "
+              "(0: off (default), 1: on)"),
   .target_seq_level_idx = ARG_DEF(
       NULL, "target-seq-level-idx", 1,
       "Target sequence level index. "

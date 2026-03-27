@@ -203,7 +203,8 @@ static void read_lcr_global_payload(struct GlobalLayerConfigurationRecord *glcr,
 }
 
 static void read_lcr_global_info(struct AV2Decoder *pbi,
-                                 struct avm_read_bit_buffer *rb) {
+                                 struct avm_read_bit_buffer *rb,
+                                 uint8_t *acc_lcr_id_bitmap) {
   AV2_COMMON *const cm = &pbi->common;
   int lcr_global_config_record_id = avm_rb_read_literal(rb, 3);
   if (lcr_global_config_record_id == LCR_ID_UNSPECIFIED) {
@@ -229,6 +230,8 @@ static void read_lcr_global_info(struct AV2Decoder *pbi,
   lcr->is_global = 1;
   lcr->xlayer_id = GLOBAL_XLAYER_ID;
   lcr->lcr_id = lcr_global_config_record_id;
+  lcr->lcr_from_leading = false;
+  acc_lcr_id_bitmap[GLOBAL_XLAYER_ID] |= (1 << lcr_global_config_record_id);
 
   glcr->lcr_global_config_record_id = lcr_global_config_record_id;
   glcr->lcr_xlayer_map = avm_rb_read_literal(rb, 31);
@@ -292,7 +295,8 @@ static void read_lcr_global_info(struct AV2Decoder *pbi,
 }
 
 static void read_lcr_local_info(struct AV2Decoder *pbi, int xlayer_id,
-                                struct avm_read_bit_buffer *rb) {
+                                struct avm_read_bit_buffer *rb,
+                                uint8_t *acc_lcr_id_bitmap) {
   AV2_COMMON *const cm = &pbi->common;
   int lcr_global_id = avm_rb_read_literal(rb, 3);
   if (lcr_global_id == LCR_ID_UNSPECIFIED) {
@@ -321,6 +325,8 @@ static void read_lcr_local_info(struct AV2Decoder *pbi, int xlayer_id,
   lcr->xlayer_id = xlayer_id;
   llcr->lcr_global_id = lcr_global_id;
   llcr->lcr_local_id = lcr_local_id;
+  lcr->lcr_from_leading = false;
+  acc_lcr_id_bitmap[xlayer_id] |= (1 << lcr_local_id);
 
   llcr->lcr_profile_tier_level_info_present_flag = avm_rb_read_bit(rb);
   llcr->lcr_local_atlas_id_present_flag = avm_rb_read_bit(rb);
@@ -348,14 +354,16 @@ static void read_lcr_local_info(struct AV2Decoder *pbi, int xlayer_id,
   }
 }
 
-uint32_t av2_read_layer_configuration_record_obu(
-    struct AV2Decoder *pbi, int xlayer_id, struct avm_read_bit_buffer *rb) {
+uint32_t av2_read_layer_configuration_record_obu(struct AV2Decoder *pbi,
+                                                 int xlayer_id,
+                                                 struct avm_read_bit_buffer *rb,
+                                                 uint8_t *acc_lcr_id_bitmap) {
   const uint32_t saved_bit_offset = rb->bit_offset;
   assert(rb->error_handler);
   if (xlayer_id == GLOBAL_XLAYER_ID)
-    read_lcr_global_info(pbi, rb);
+    read_lcr_global_info(pbi, rb, acc_lcr_id_bitmap);
   else
-    read_lcr_local_info(pbi, xlayer_id, rb);
+    read_lcr_local_info(pbi, xlayer_id, rb, acc_lcr_id_bitmap);
 
   size_t bits_before_ext = rb->bit_offset - saved_bit_offset;
   int lcr_extension_present_flag = avm_rb_read_bit(rb);

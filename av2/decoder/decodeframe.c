@@ -7416,6 +7416,11 @@ static void activate_layer_configuration_record(AV2Decoder *pbi,
     }
   }
   if (lcr != NULL) {
+    if (lcr->lcr_from_leading) {
+      avm_internal_error(&cm->error, AVM_CODEC_UNSUP_BITSTREAM,
+                         "LCR was signalled in a leading temporal "
+                         "unit and not re-signalled");
+    }
     pbi->active_lcr = lcr;
     cm->lcr_params = *pbi->active_lcr;
 
@@ -7679,6 +7684,13 @@ static void handle_sequence_header(AV2Decoder *pbi, OBU_TYPE obu_type,
   if (seq_from_uch->seq_header_id == -1) {
     avm_internal_error(&cm->error, AVM_CODEC_CORRUPT_FRAME,
                        "No sequence header found with id = %d", seq_header_id);
+  }
+
+  if (seq_from_uch->sh_from_leading && !av2_is_leading_vcl_obu(obu_type)) {
+    avm_internal_error(&cm->error, AVM_CODEC_UNSUP_BITSTREAM,
+                       "Sequence header %d was signalled in a "
+                       "leading temporal unit and not re-signalled",
+                       seq_header_id);
   }
 
   // SH activation

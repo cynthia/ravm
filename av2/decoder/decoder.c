@@ -715,7 +715,7 @@ int output_frame_buffers(AV2Decoder *pbi, int ref_idx) {
       }
     }
     if (output_candidate != trigger_frame) {
-      if(cm->seq_params.monotonic_output_order_flag == 0){
+      if (cm->seq_params.monotonic_output_order_flag == 0) {
         doh_error |= check_and_update_output_doh(pbi, output_candidate);
         doh_error |= check_doh_uniqueness(pbi, output_candidate);
       }
@@ -732,7 +732,7 @@ int output_frame_buffers(AV2Decoder *pbi, int ref_idx) {
     }
   } while (output_candidate != trigger_frame);
 
-  if(cm->seq_params.monotonic_output_order_flag == 0){
+  if (cm->seq_params.monotonic_output_order_flag == 0) {
     // Add the output triggering frame into the output queue.
     doh_error |= check_and_update_output_doh(pbi, trigger_frame);
     doh_error |= check_doh_uniqueness(pbi, trigger_frame);
@@ -765,7 +765,7 @@ int output_frame_buffers(AV2Decoder *pbi, int ref_idx) {
       if (is_frame_eligible_for_output(cm->ref_frame_map[i]) &&
           derive_output_order_idx(cm, cm->ref_frame_map[i]) ==
               next_frame_output_order) {
-        if(cm->seq_params.monotonic_output_order_flag == 0){
+        if (cm->seq_params.monotonic_output_order_flag == 0) {
           doh_error |= check_and_update_output_doh(pbi, cm->ref_frame_map[i]);
           doh_error |= check_doh_uniqueness(pbi, cm->ref_frame_map[i]);
         }
@@ -850,12 +850,13 @@ static void update_frame_buffers(AV2Decoder *pbi, int frame_decoded) {
       decrease_ref_count(cm->cur_frame, pool);
     }
     unlock_buffer_pool(pool);
-    if(cm->seq_params.monotonic_output_order_flag == 0){
+    if (cm->seq_params.monotonic_output_order_flag == 0) {
       if (doh_error) {
-        avm_internal_error(&cm->error, AVM_CODEC_UNSUP_BITSTREAM,
-                           "Display order hint of an output picture is not unique"
-                           " in the same (xlayer_id %d) layer.",
-                           cm->xlayer_id);
+        avm_internal_error(
+            &cm->error, AVM_CODEC_UNSUP_BITSTREAM,
+            "Display order hint of an output picture is not unique"
+            " in the same (xlayer_id %d) layer.",
+            cm->xlayer_id);
       }
     }
   } else {

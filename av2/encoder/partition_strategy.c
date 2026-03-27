@@ -976,8 +976,15 @@ void av2_prune_partitions_by_max_min_bsize(
     } else {  // only allow one of horz or vert
       assert(partition_search_state->partition_rect_allowed[HORZ] ||
              partition_search_state->partition_rect_allowed[VERT]);
-      assert(!partition_search_state->prune_rect_part[HORZ] ||
-             !partition_search_state->prune_rect_part[VERT]);
+      if (partition_search_state->prune_rect_part[HORZ] &&
+          partition_search_state->prune_rect_part[VERT]) {
+        if (partition_search_state->partition_rect_allowed[HORZ]) {
+          partition_search_state->prune_rect_part[HORZ] = false;
+        }
+        if (partition_search_state->partition_rect_allowed[VERT]) {
+          partition_search_state->prune_rect_part[VERT] = false;
+        }
+      }
       if (partition_search_state->partition_rect_allowed[HORZ] &&
           partition_search_state->partition_rect_allowed[VERT] &&
           !partition_search_state->prune_rect_part[HORZ] &&

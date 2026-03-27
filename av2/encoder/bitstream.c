@@ -6792,6 +6792,7 @@ size_t av2_write_banding_hints_metadata(
     AV2_COMP *const cpi, uint8_t *dst,
     const avm_banding_hints_metadata_t *const banding_metadata) {
   if (!cpi->source || !banding_metadata) return 0;
+  AV2_COMMON *const cm = &cpi->common;
 
   // Encode the banding metadata to payload
   uint8_t payload[256];  // Should be sufficient for banding metadata
@@ -6799,7 +6800,7 @@ size_t av2_write_banding_hints_metadata(
 
   if (avm_encode_banding_hints_metadata(banding_metadata, payload,
                                         &payload_size) != 0) {
-    avm_internal_error(&cpi->common.error, AVM_CODEC_ERROR,
+    avm_internal_error(&cm->error, AVM_CODEC_ERROR,
                        "Error encoding banding hints metadata");
     return 0;
   }
@@ -6808,18 +6809,54 @@ size_t av2_write_banding_hints_metadata(
       avm_img_metadata_alloc(OBU_METADATA_TYPE_BANDING_HINTS, payload,
                              payload_size, AVM_MIF_ANY_FRAME);
   if (!metadata) {
-    avm_internal_error(&cpi->common.error, AVM_CODEC_MEM_ERROR,
+    avm_internal_error(&cm->error, AVM_CODEC_MEM_ERROR,
                        "Error allocating banding hints metadata");
     return 0;
   }
+
+  // Set up metadata fields
+  metadata->is_suffix = 0;
+  metadata->cancel_flag = 0;
+  metadata->persistence_idc = AVM_NO_PERSISTENCE;
+  metadata->layer_idc = AVM_LAYER_CURRENT;
+  metadata->priority = 0;
+  metadata->necessity_idc = AVM_NECESSITY_ADVISORY;
+  metadata->application_id = AVM_APPID_UNDEFINED;
+
+  size_t obu_header_size = 0;
+  size_t obu_payload_size = 0;
+
+  if (cpi->oxcf.tool_cfg.use_short_metadata) {
+    // SHORT format: use av2_write_metadata_obu which writes the short metadata
+    // format (is_suffix, layer_idc, cancel_flag, persistence_idc,
+    // metadata_type, payload, trailing 0x80).
+    obu_header_size =
+        av2_write_obu_header(&cpi->level_params, OBU_METADATA_SHORT, 0, 0, dst);
+    obu_payload_size = av2_write_metadata_obu(metadata, dst + obu_header_size);
+  } else {
+    // GROUP format: write group_header + unit_header + payload + trailing 0x80
+    ObuHeader obu_header;
+    memset(&obu_header, 0, sizeof(obu_header));
+    obu_header.type = OBU_METADATA_GROUP;
+    obu_header.obu_tlayer_id = cm->tlayer_id;
+    obu_header.obu_mlayer_id = cm->mlayer_id;
+    obu_header.obu_xlayer_id = 0;
+
+    obu_header_size =
+        av2_write_obu_header(&cpi->level_params, OBU_METADATA_GROUP, 0, 0, dst);
+    obu_payload_size =
+        av2_write_metadata_group_header(dst + obu_header_size, 1, metadata);
+    obu_payload_size += av2_write_metadata_unit_header(
+        metadata, dst + obu_header_size + obu_payload_size, &obu_header);
+    obu_payload_size += av2_write_metadata_unit(
+        metadata, dst + obu_header_size + obu_payload_size);
+
+    // trailing bits
+    dst[obu_header_size + obu_payload_size] = 0x80;
+    obu_payload_size++;
+  }
+
   size_t total_bytes_written = 0;
-  OBU_TYPE obu_type = cpi->oxcf.tool_cfg.use_short_metadata
-                          ? OBU_METADATA_SHORT
-                          : OBU_METADATA_GROUP;
-  size_t obu_header_size =
-      av2_write_obu_header(&cpi->level_params, obu_type, 0, 0, dst);
-  size_t obu_payload_size =
-      av2_write_metadata_unit(metadata, dst + obu_header_size);
   size_t length_field_size =
       obu_memmove(obu_header_size, obu_payload_size, dst);
   if (av2_write_uleb_obu_size(obu_header_size, obu_payload_size, dst) ==
@@ -6827,7 +6864,7 @@ size_t av2_write_banding_hints_metadata(
     const size_t obu_size = obu_header_size + obu_payload_size;
     total_bytes_written += obu_size + length_field_size;
   } else {
-    avm_internal_error(&cpi->common.error, AVM_CODEC_ERROR,
+    avm_internal_error(&cm->error, AVM_CODEC_ERROR,
                        "Error writing banding hints metadata OBU size");
   }
   avm_img_metadata_free(metadata);
@@ -7145,6 +7182,11 @@ static int av2_pack_bitstream_internal(AV2_COMP *const cpi, uint8_t *dst,
   if (cm->immediate_output_picture)
     data += av2_write_metadata_array(cpi, data, false,
                                      cpi->oxcf.tool_cfg.use_short_metadata);
+
+  // Write banding hints metadata if available
+  if (cpi->band_metadata_present && cm->immediate_output_picture) {
+    data += av2_write_banding_hints_metadata(cpi, data, &cpi->band_metadata);
+  }
 
   if (cpi->oxcf.tool_cfg.frame_hash_metadata) {
     const avm_film_grain_t *grain_params = &cm->film_grain_params;

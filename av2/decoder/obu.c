@@ -255,6 +255,10 @@ void av2_store_xlayer_context(AV2Decoder *pbi, AV2_COMMON *cm, int xlayer_id) {
   for (int i = 0; i < MAX_MFH_NUM; i++) {
     pbi->stream_info[stream_idx].mfh_valid_buf[i] = cm->mfh_valid[i];
   }
+
+  pbi->stream_info[stream_idx].decoding_first_frame = pbi->decoding_first_frame;
+  pbi->stream_info[stream_idx].last_olk_tu_display_order_hint =
+      pbi->last_olk_tu_display_order_hint;
 }
 
 // Helper function to restore xlayer context
@@ -315,6 +319,10 @@ void av2_restore_xlayer_context(AV2Decoder *pbi, AV2_COMMON *cm,
   for (int i = 0; i < MAX_MFH_NUM; i++) {
     cm->mfh_valid[i] = pbi->stream_info[stream_idx].mfh_valid_buf[i];
   }
+
+  pbi->decoding_first_frame = pbi->stream_info[stream_idx].decoding_first_frame;
+  pbi->last_olk_tu_display_order_hint =
+      pbi->stream_info[stream_idx].last_olk_tu_display_order_hint;
 }
 
 static void init_stream_info(StreamInfo *stream_info) {
@@ -334,6 +342,8 @@ static void init_stream_info(StreamInfo *stream_info) {
   for (int i = 0; i < MAX_NUM_MLAYERS; i++) {
     av2_initialize_ci_params(&stream_info->ci_params_per_layer_buf[i]);
   }
+  stream_info->decoding_first_frame = 1;
+  stream_info->last_olk_tu_display_order_hint = -1;
 }
 
 /*!

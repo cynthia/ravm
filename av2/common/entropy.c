@@ -15,15 +15,12 @@
 #include "avm/avm_integer.h"
 #include "avm_mem/avm_mem.h"
 #include "av2/common/av2_common_int.h"
-#include "av2/common/blockd.h"
 #include "av2/common/entropy.h"
 #include "av2/common/entropymode.h"
 #include "av2/common/scan.h"
 #include "av2/common/txb_common.h"
 
 // Context tables for coefficient coding
-// TODO(hegilmez): use constant macros in defining array dimensions whenever
-// available in entropy_inits_coeffs.h
 #include "av2/common/entropy_inits_coeffs.h"
 
 static int get_q_ctx(int q) {
@@ -255,7 +252,7 @@ void av2_reset_cdf_symbol_counters(FRAME_CONTEXT *fc) {
   RESET_CDF_COUNTER(fc->intra_dip_cdf, 2);
   RESET_CDF_COUNTER(fc->intra_dip_mode_n6_cdf, 6);
   RESET_CDF_COUNTER(fc->switchable_flex_restore_cdf, 2);
-  for (int plane = 0; plane < MAX_MB_PLANE; plane++) {
+  for (int plane = 0; plane < CCSO_PLANES; plane++) {
     for (int ctx = 0; ctx < CCSO_CONTEXT; ctx++) {
       RESET_CDF_COUNTER(fc->ccso_cdf[plane][ctx], 2);
     }

@@ -28,13 +28,11 @@ extern "C" {
 
 #define TOKEN_CDF_Q_CTXS 4
 
-// Number of contexts for intra_dip_cdf.
-#define DIP_CTXS 3
-
 #define CROSS_COMPONENT_CONTEXTS 3
 #define V_TXB_SKIP_CONTEXTS 12
 #define V_TXB_SKIP_CONTEXT_OFFSET 6
 
+#define TXB_SKIP_PRED_MODE_CTXS 2
 #define TXB_SKIP_CONTEXTS 10
 
 #define FSC_TX_SIZE_CONTEXTS 3

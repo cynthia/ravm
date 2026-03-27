@@ -173,7 +173,7 @@ typedef struct macroblock_plane {
  */
 typedef struct LV_MAP_COEFF_COST {
   //! Cost to skip txfm for the current txfm block.
-  int txb_skip_cost[2][TXB_SKIP_CONTEXTS][2];
+  int txb_skip_cost[TXB_SKIP_PRED_MODE_CTXS][TXB_SKIP_CONTEXTS][2];
   //! Cost to skip txfm for the current AVM_PLANE_V txfm block.
   int v_txb_skip_cost[V_TXB_SKIP_CONTEXTS][2];
   //! Cost for encoding the base_eob level of a low-frequency chroma coefficient

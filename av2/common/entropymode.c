@@ -21,8 +21,6 @@
 #include "av2/encoder/mcomp.h"
 
 // Context tables for modes
-// TODO(@hegilmez): use constant macros in defining array dimensions whenever
-// available in entropy_inits_modes.h
 #include "av2/common/entropy_inits_modes.h"
 
 #define MAX_COLOR_CONTEXT_HASH 8

@@ -1240,6 +1240,10 @@ enum avme_enc_control_id {
    */
   AV2E_SET_ADD_SEF_FOR_HIDDEN_FRAMES = 183,
 
+  /*!\brief Codec control function to set monotonic_output_order.
+   */
+  AV2E_SET_MONOTONIC_OUTPUT_ORDER = 184,
+
 };
 
 /*!\brief avm 1-D scaling mode
@@ -1764,6 +1768,9 @@ AVM_CTRL_USE_TYPE(AV2E_SET_ENABLE_FLAG_MULTI_LAYER_LAG_TEST, int)
 
 AVM_CTRL_USE_TYPE(AV2E_SET_ADD_SEF_FOR_HIDDEN_FRAMES, int)
 #define AVME_CTRL_AV2E_SET_ADD_SEF_FOR_HIDDEN_FRAMES
+
+AVM_CTRL_USE_TYPE(AV2E_SET_MONOTONIC_OUTPUT_ORDER, int)
+#define AVME_CTRL_AV2E_SET_MONOTONIC_OUTPUT_ORDER
 /*!\endcond */
 /*! @} - end defgroup avm_encoder */
 #ifdef __cplusplus

@@ -450,6 +450,7 @@ const arg_def_t *av2_key_val_args[] = {
   &g_av2_codec_arg_defs.enable_ibp,
   &g_av2_codec_arg_defs.explicit_ref_frame_map,
   &g_av2_codec_arg_defs.add_sef_for_hidden_frames,
+  &g_av2_codec_arg_defs.monotonic_output_order,
   &g_av2_codec_arg_defs.max_drl_refmvs,
   &g_av2_codec_arg_defs.max_drl_refbvs,
   &g_av2_codec_arg_defs.enable_refmvbank,
@@ -685,6 +686,7 @@ static void init_config(cfg_options_t *config) {
   config->enable_opfl_refine = 1;
   config->explicit_ref_frame_map = 0;
   config->add_sef_for_hidden_frames = 0;
+  config->monotonic_output_order = 0;
   config->enable_intra_edge_filter = 1;
   config->reduced_tx_part_set = 0;
   config->enable_smooth_interintra = 1;

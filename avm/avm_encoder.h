@@ -568,6 +568,11 @@ typedef struct cfg_options {
    *
    */
   unsigned int add_sef_for_hidden_frames;
+  /*!\brief Set monotonic output order flag
+   *
+   * Enables AV1-style output where hidden frames are shown via SEF.
+   */
+  unsigned int monotonic_output_order;
   /*!\brief use reduced transform type set
    *
    */

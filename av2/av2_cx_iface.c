@@ -162,6 +162,7 @@ struct av2_extracfg {
   int explicit_ref_frame_map;      // explicitly signal reference frame mapping
   int add_sef_for_hidden_frames;   // add sef_obu with the display order hint
                                    // derivation to output hidden frames
+  int monotonic_output_order;      // set monotonic_output_order_flag=1
   int enable_ref_frame_mvs;        // sequence level
   int reduced_ref_frame_mvs_mode;  // use 1 reference frame combination
                                    // for temporal mv prediction
@@ -488,6 +489,7 @@ static struct av2_extracfg default_extra_cfg = {
   0,  // enable_reduced_reference_set
   0,  // explicit_ref_frame_map
   0,  // enable frame output order derivation based on SEF
+  0,  // monotonic_output_order
   1,  // enable_ref_frame_mvs sequence level
   0,    // reduced_ref_frame_mvs_mode sequence level
   1,  // allow ref_frame_mvs frame level
@@ -810,6 +812,10 @@ static avm_codec_err_t validate_config(avm_codec_alg_priv_t *ctx,
   RANGE_CHECK(extra_cfg, enable_reduced_reference_set, 0, 1);
   RANGE_CHECK(extra_cfg, explicit_ref_frame_map, 0, 1);
   RANGE_CHECK(extra_cfg, add_sef_for_hidden_frames, 0, 1);
+  RANGE_CHECK(extra_cfg, monotonic_output_order, 0, 1);
+  if (extra_cfg->monotonic_output_order &&
+      extra_cfg->enable_keyframe_filtering > 0)
+    ERROR("monotonic_output_order=1 requires enable_keyframe_filtering=0");
   RANGE_CHECK_HI(extra_cfg, chroma_subsampling_x, 1);
   RANGE_CHECK_HI(extra_cfg, chroma_subsampling_y, 1);
   RANGE_CHECK_HI(extra_cfg, enable_trellis_quant, 3);
@@ -995,6 +1001,7 @@ static void update_encoder_config(cfg_options_t *cfg,
   cfg->enable_mfh_obu_signaling = extra_cfg->enable_mfh_obu_signaling;
   cfg->explicit_ref_frame_map = extra_cfg->explicit_ref_frame_map;
   cfg->add_sef_for_hidden_frames = extra_cfg->add_sef_for_hidden_frames;
+  cfg->monotonic_output_order = extra_cfg->monotonic_output_order;
   cfg->disable_loopfilters_across_tiles =
       extra_cfg->disable_loopfilters_across_tiles;
   cfg->reduced_tx_type_set = extra_cfg->reduced_tx_type_set;
@@ -1111,6 +1118,7 @@ static void update_default_encoder_config(const cfg_options_t *cfg,
   extra_cfg->enable_bru = cfg->enable_bru;
   extra_cfg->explicit_ref_frame_map = cfg->explicit_ref_frame_map;
   extra_cfg->add_sef_for_hidden_frames = cfg->add_sef_for_hidden_frames;
+  extra_cfg->monotonic_output_order = cfg->monotonic_output_order;
   extra_cfg->disable_loopfilters_across_tiles =
       cfg->disable_loopfilters_across_tiles;
   extra_cfg->reduced_tx_type_set = cfg->reduced_tx_type_set;
@@ -1593,6 +1601,7 @@ static avm_codec_err_t set_encoder_config(AV2EncoderConfig *oxcf,
   oxcf->ref_frm_cfg.explicit_ref_frame_map = extra_cfg->explicit_ref_frame_map;
   oxcf->ref_frm_cfg.add_sef_for_hidden_frames =
       extra_cfg->add_sef_for_hidden_frames;
+  oxcf->tool_cfg.monotonic_output_order = extra_cfg->monotonic_output_order;
   oxcf->row_mt = extra_cfg->row_mt;
 
   // Set motion mode related configuration.
@@ -2712,6 +2721,14 @@ static avm_codec_err_t ctrl_set_add_sef_for_hidden_frames(
   struct av2_extracfg extra_cfg = ctx->extra_cfg;
   extra_cfg.add_sef_for_hidden_frames =
       CAST(AV2E_SET_ADD_SEF_FOR_HIDDEN_FRAMES, args);
+  return update_extra_cfg(ctx, &extra_cfg);
+}
+
+static avm_codec_err_t ctrl_set_monotonic_output_order(
+    avm_codec_alg_priv_t *ctx, va_list args) {
+  struct av2_extracfg extra_cfg = ctx->extra_cfg;
+  extra_cfg.monotonic_output_order =
+      CAST(AV2E_SET_MONOTONIC_OUTPUT_ORDER, args);
   return update_extra_cfg(ctx, &extra_cfg);
 }
 
@@ -4262,6 +4279,11 @@ static avm_codec_err_t encoder_set_option(avm_codec_alg_priv_t *ctx,
     extra_cfg.add_sef_for_hidden_frames =
         avm_arg_parse_int_helper(&arg, err_string);
   } else if (avm_arg_match_helper(&arg,
+                                  &g_av2_codec_arg_defs.monotonic_output_order,
+                                  argv, err_string)) {
+    extra_cfg.monotonic_output_order =
+        avm_arg_parse_int_helper(&arg, err_string);
+  } else if (avm_arg_match_helper(&arg,
                                   &g_av2_codec_arg_defs.enable_ref_frame_mvs,
                                   argv, err_string)) {
     extra_cfg.enable_ref_frame_mvs = avm_arg_parse_int_helper(&arg, err_string);
@@ -4667,6 +4689,7 @@ static avm_codec_ctrl_fn_map_t encoder_ctrl_maps[] = {
   { AV2E_SET_ENABLE_FLAG_MULTI_LAYER_LAG_TEST,
     ctrl_set_enable_flag_multi_layer_lag_test },
   { AV2E_SET_ADD_SEF_FOR_HIDDEN_FRAMES, ctrl_set_add_sef_for_hidden_frames },
+  { AV2E_SET_MONOTONIC_OUTPUT_ORDER, ctrl_set_monotonic_output_order },
 
   // Getters
   { AVME_GET_LAST_QUANTIZER, ctrl_get_quantizer },
@@ -4794,6 +4817,7 @@ static const avm_codec_enc_cfg_t encoder_usage_cfg[] = { {
         1,  // enable_reduced_reference_set
         0,  // explicit_ref_frame_map
         0,  // add_sef_for_hidden_frames
+        0,  // monotonic_output_order
         0,  // reduced_tx_type_set
         0,  // max_drl_refmvs
 

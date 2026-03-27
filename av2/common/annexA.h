@@ -47,7 +47,7 @@ int av2_check_profile_interop_conformance(
 // Profile Scaling and Bitrate Functions
 //===========================================
 // Gets profile scaling factor CWG-G004
-int get_profile_scaling_factor(int seq_profile_idc, int chroma_format_idc);
+int get_profile_scaling_factor(int seq_profile_idc);
 
 #ifdef __cplusplus
 }  // extern "C"

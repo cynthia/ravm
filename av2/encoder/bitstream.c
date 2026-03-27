@@ -4406,7 +4406,13 @@ static AVM_INLINE void write_frame_size_with_refs(
 
 static AVM_INLINE void write_profile(BITSTREAM_PROFILE profile,
                                      struct avm_write_bit_buffer *wb) {
-  assert(profile >= 0 && profile < MAX_PROFILES);
+#if CONFIG_TESTONLY_12BIT_SUPPORT
+  assert(profile >= 0 && profile < MAX_PROFILES &&
+         !(profile > TEST_ONLY_12BIT_PROFILE && profile < CONFIGURABLE));
+#else
+  assert(profile >= 0 && profile < MAX_PROFILES &&
+         !(profile > MAIN_444_10_IP1 && profile < CONFIGURABLE));
+#endif  // CONFIG_TESTONLY_12BIT_SUPPORT
   avm_wb_write_literal(wb, profile, PROFILE_BITS);
 }
 

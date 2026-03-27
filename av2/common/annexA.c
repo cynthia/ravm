@@ -318,7 +318,7 @@ int av2_check_profile_interop_conformance(
  */
 /* clang-format on */
 
-int get_profile_scaling_factor(int seq_profile_idc, int chroma_format_idc) {
+int get_profile_scaling_factor(int seq_profile_idc) {
   // Table A.5: Definition of ProfileScalingFactor
   // Note that the bit_depth_idx must be 0 or 1 for all valid combinations
 

@@ -508,8 +508,7 @@ static double get_max_bitrate(const AV2LevelSpec *const level_spec, int tier,
   uint32_t chroma_format_idc = CHROMA_FORMAT_420;
   av2_get_chroma_format_idc(subsampling_x, subsampling_y, monochrome,
                             &chroma_format_idc);
-  const int profile_scaling_factor =
-      get_profile_scaling_factor(profile, chroma_format_idc);
+  const int profile_scaling_factor = get_profile_scaling_factor(profile);
   double bitrate_profile_factor =
       bitrate_profile_factor_table[profile_scaling_factor];
   return bitrate_basis * bitrate_profile_factor;
@@ -529,8 +528,7 @@ static double get_max_compressed_size(const AV2LevelSpec *const level_spec,
 
   av2_get_chroma_format_idc(subsampling_x, subsampling_y, monochrome,
                             &chroma_format_idc);
-  const int profile_scaling_factor =
-      get_profile_scaling_factor(profile, chroma_format_idc);
+  const int profile_scaling_factor = get_profile_scaling_factor(profile);
   double picture_size_profile_factor =
       picture_size_profile_factor_table[profile_scaling_factor];
 
@@ -560,8 +558,7 @@ static double get_max_frame_symbol_count(const AV2LevelSpec *const level_spec,
 
   av2_get_chroma_format_idc(subsampling_x, subsampling_y, monochrome,
                             &chroma_format_idc);
-  const int profile_scaling_factor =
-      get_profile_scaling_factor(profile, chroma_format_idc);
+  const int profile_scaling_factor = get_profile_scaling_factor(profile);
   double picture_size_profile_factor =
       picture_size_profile_factor_table[profile_scaling_factor];
   double scale = multi_stream_scaling_x == 0 ? 1 : multi_stream_scaling_x;
@@ -1463,8 +1460,7 @@ double av2_get_compression_ratio(const AV2_COMMON *const cm,
   av2_get_chroma_format_idc(cm->seq_params.subsampling_x,
                             cm->seq_params.subsampling_y,
                             cm->seq_params.monochrome, &chroma_format_idc);
-  const int profile_scaling_factor =
-      get_profile_scaling_factor(profile, chroma_format_idc);
+  const int profile_scaling_factor = get_profile_scaling_factor(profile);
   const int picture_size_profile_factor =
       (int)picture_size_profile_factor_table[profile_scaling_factor];
   encoded_frame_size =

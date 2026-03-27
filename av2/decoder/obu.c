@@ -2632,6 +2632,11 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
         pbi->obus_in_frame_unit_data[cm->tlayer_id][cm->mlayer_id]
                                     [OBU_CLOSED_LOOP_KEY]) {
       flush_remaining_frames(pbi, INT_MAX);
+      // Reset last_output_doh for this xlayer only, after flushing so that
+      // the flushed frames' DOH values are still checked against the old
+      // last_output_doh.  Other xlayers may still be mid-sequence.
+      for (int ml = 0; ml < MAX_NUM_MLAYERS; ml++)
+        pbi->last_output_doh[cm->xlayer_id][ml] = -1;
     }
 
     // Flush leading frames (doh < last_olk_tu_display_order_hint) at the start

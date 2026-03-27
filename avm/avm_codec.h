@@ -98,8 +98,6 @@
 extern "C" {
 #endif
 
-#include "config/avm_config.h"
-
 #include "avm/avm_image.h"
 #include "avm/avm_integer.h"
 

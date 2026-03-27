@@ -31,7 +31,6 @@
 extern "C" {
 #endif
 
-#include "config/avm_config.h"
 #include "avm/avm_codec.h"
 
 /*!\brief Current ABI version number

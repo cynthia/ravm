@@ -17,7 +17,6 @@
 #include <stdarg.h>
 #include <stdlib.h>
 
-#include "config/avm_config.h"
 #include "config/avm_version.h"
 
 #include "avm/avm_integer.h"

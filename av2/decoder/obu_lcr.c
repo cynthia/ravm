@@ -279,7 +279,7 @@ static void read_lcr_global_info(struct AV2Decoder *pbi,
   }
 
   // Set the GLCR flag if this Global LCR describes multiple extended layers.
-  // This triggers multi_stream_mode even without an MSDO OBU present.
+  // This triggers is_multistream even without an MSDO OBU present.
   if (glcr->LcrMaxNumXLayerCount > 1) {
     pbi->glcr_is_present_in_tu = 1;
     pbi->glcr_num_xlayers = glcr->LcrMaxNumXLayerCount;

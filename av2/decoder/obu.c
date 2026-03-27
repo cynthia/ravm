@@ -2090,7 +2090,7 @@ static BITSTREAM_PROFILE get_lcr_local_profile(struct AV2Decoder *pbi) {
 // not impose additional constraints, so we return true.
 bool conformance_check_msdo_lcr(struct AV2Decoder *pbi, bool global_lcr_present,
                                 bool local_lcr_present) {
-  int msdo_present = pbi->multi_stream_mode;
+  int msdo_present = pbi->multistream_decoder_mode;
   int num_extended_layers = 0;
   int num_embedded_layers = 0;
 
@@ -2309,17 +2309,19 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
   ObuHeader obu_header;
   memset(&obu_header, 0, sizeof(obu_header));
 
-  // Enable multi_stream_mode if MSDO is present in the current TU.
-  // Use obus_in_frame_unit_data which is populated before decode, rather than
-  // msdo_is_present_in_tu which reflects the previous TU at this point.
-  if (pbi->obus_in_frame_unit_data[0][0][OBU_MULTI_STREAM_DECODER_OPERATION] ||
-      pbi->glcr_is_present_in_tu)
-    pbi->multi_stream_mode = 1;
+  // Enable is_multistream if multiple extended layers are present.
+  // Enable multistream_decoder_mode only when an MSDO OBU is present.
+  if (pbi->obus_in_frame_unit_data[0][0][OBU_MULTI_STREAM_DECODER_OPERATION]) {
+    pbi->is_multistream = 1;
+    pbi->multistream_decoder_mode = 1;
+  } else if (pbi->glcr_is_present_in_tu) {
+    pbi->is_multistream = 1;
+  }
 
-  // Reset multi_stream_mode at a random access point TU without MSDO.
+  // Reset is_multistream at a random access point TU without MSDO/GLCR.
   // obus_in_frame_unit_data reflects the current frame unit (populated before
   // decode).
-  if (pbi->multi_stream_mode) {
+  if (pbi->is_multistream) {
     int tid = pbi->current_tlayer_id;
     int mid = pbi->current_mlayer_id;
     if (tid >= 0 && mid >= 0 &&
@@ -2338,7 +2340,8 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
       cm->num_streams = 0;
       for (int i = 0; i < AVM_MAX_NUM_STREAMS; i++) pbi->xlayer_id_map[i] = 0;
 
-      pbi->multi_stream_mode = 0;
+      pbi->is_multistream = 0;
+      pbi->multistream_decoder_mode = 0;
     }
   }
 
@@ -2549,9 +2552,8 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
     cm->tlayer_id = obu_header.obu_tlayer_id;
     cm->mlayer_id = obu_header.obu_mlayer_id;
 
-    if (!pbi->multi_stream_mode ||
-        (obu_header.obu_xlayer_id == GLOBAL_XLAYER_ID &&
-         cm->xlayer_id == GLOBAL_XLAYER_ID)) {
+    if (!pbi->is_multistream || (obu_header.obu_xlayer_id == GLOBAL_XLAYER_ID &&
+                                 cm->xlayer_id == GLOBAL_XLAYER_ID)) {
       cm->xlayer_id = obu_header.obu_xlayer_id;
     } else if (cm->xlayer_id != GLOBAL_XLAYER_ID &&
                obu_header.obu_xlayer_id == GLOBAL_XLAYER_ID) {
@@ -2575,7 +2577,7 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
       if (prev_obu_xlayer_id == -1) {
         prev_obu_xlayer_id = obu_header.obu_xlayer_id;
       } else {
-        if (pbi->multi_stream_mode && prev_obu_xlayer_id >= 0 &&
+        if (pbi->is_multistream && prev_obu_xlayer_id >= 0 &&
             obu_header.obu_xlayer_id != prev_obu_xlayer_id) {
           avm_internal_error(&cm->error, AVM_CODEC_UNSUP_BITSTREAM,
                              "tile group OBUs with the same stream_id shall "

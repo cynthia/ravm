@@ -621,9 +621,19 @@ typedef struct AV2Decoder {
   bool obus_in_frame_unit_data[MAX_NUM_TLAYERS][MAX_NUM_MLAYERS][NUM_OBU_TYPES];
 
   /*!
-   * Indicates if the MultiStreamMode is activated.
+   * Indicates if the bitstream has multiple extended layers (multistream).
+   * Set when an MSDO OBU or a Global LCR with multiple xlayers is present.
+   * Controls xlayer context switching and tile group contiguity checks.
    */
-  int multi_stream_mode;
+  int is_multistream;
+  /*!
+   * Indicates if the MSDO OBU is present, activating multistream decoder mode.
+   * This is a subset of is_multistream: multistream_decoder_mode implies
+   * is_multistream, but not vice versa (e.g. Global LCR can trigger
+   * is_multistream without an MSDO OBU).
+   * Controls MSDO-specific conformance checks (DOH constraint, Annex A table).
+   */
+  int multistream_decoder_mode;
   /*!
    * Indicates if the MSDO OBU is read.
    */
@@ -632,12 +642,12 @@ typedef struct AV2Decoder {
    * Indicates if a Global LCR with multiple extended layers is present in TU.
    * This flag is set when a Global LCR (xlayer_id=31) is parsed and its
    * LcrMaxNumXLayerCount > 1, indicating multiple extended layers that should
-   * trigger multi_stream_mode even without an MSDO OBU.
+   * trigger is_multistream even without an MSDO OBU.
    */
   int glcr_is_present_in_tu;
   /*!
    * Number of extended layers specified in the Global LCR.
-   * Used for stream_info allocation when Global LCR triggers multi_stream_mode.
+   * Used for stream_info allocation when Global LCR triggers is_multistream.
    */
   int glcr_num_xlayers;
   /*!

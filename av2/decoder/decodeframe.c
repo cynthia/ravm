@@ -8189,9 +8189,11 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
 
       // Conformance: when monotonic_output_order_flag is 0 in any activated
       // sequence header, msdo_doh_constraint_flag shall be 1.
-      // Only applies when an MSDO OBU is present (multistream mode).
-      if (pbi->multi_stream_mode && !seq_params->monotonic_output_order_flag &&
-          !msdo_doh) {
+      // Only applies when an MSDO OBU is present (multistream decoder mode).
+      // The equivalent lcr_doh_constraint_flag check is in
+      // av2_decode_frame_headers_obu() at LCR activation time.
+      if (pbi->multistream_decoder_mode &&
+          !seq_params->monotonic_output_order_flag && !msdo_doh) {
         avm_internal_error(&cm->error, AVM_CODEC_UNSUP_BITSTREAM,
                            "msdo_doh_constraint_flag must be 1 when "
                            "monotonic_output_order_flag is 0");

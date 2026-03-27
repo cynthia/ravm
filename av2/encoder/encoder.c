@@ -71,6 +71,7 @@
 #include "av2/encoder/mv_prec.h"
 #include "av2/encoder/pass2_strategy.h"
 #include "av2/encoder/pickcdef.h"
+#include "av2/encoder/banding_detection.h"
 #include "av2/encoder/pickccso.h"
 #include "av2/encoder/picklpf.h"
 #include "av2/encoder/pickrst.h"
@@ -523,6 +524,7 @@ void av2_init_seq_coding_tools(AV2_COMP *cpi, SequenceHeader *seq,
   seq->enable_restoration = tool_cfg->enable_restoration;
   seq->enable_ccso = tool_cfg->enable_ccso;
   seq->ccso_unit_matches_sb_size = tool_cfg->ccso_unit_matches_sb;
+  seq->enable_band_metadata = tool_cfg->enable_band_metadata;
   seq->enable_lf_sub_pu =
       seq->single_picture_header_flag ? 0 : tool_cfg->enable_lf_sub_pu;
   seq->enable_opfl_refine = seq->single_picture_header_flag
@@ -3006,6 +3008,27 @@ void gdf_optimize_frame(AV2_COMP *cpi, AV2_COMMON *cm) {
   }
 }
 
+/*!\brief Banding detection process
+ *
+ * \ingroup high_level_algo
+ */
+static void avm_band_search(AV2_COMP *cpi, AV2_COMMON *cm, MACROBLOCKD *xd) {
+  Av2BandDetectInfo *const dbi = &cm->band_info;
+  int bit_depth = xd->bd;
+  int frame_width = xd->plane[0].dst.width;
+  int frame_height = xd->plane[0].dst.height;
+  if (avm_band_detection_init(dbi, frame_width, frame_height, bit_depth)) {
+    avm_band_detection(&cm->cur_frame->buf, cpi->source, dbi, xd,
+                       &cpi->band_metadata);
+
+    cpi->band_metadata_present =
+        (cpi->band_metadata.coding_banding_present_flag ||
+         cpi->band_metadata.source_banding_present_flag);
+
+    avm_band_detection_close(dbi);
+  }
+}
+
 /*!\brief Select and apply cdef filters and switchable restoration filters
  *
  * \ingroup high_level_algo
@@ -4194,6 +4217,9 @@ static int encode_with_recode_loop_and_filter(AV2_COMP *cpi, size_t *size,
 #ifdef OUTPUT_YUV_REC
   avm_write_one_yuv_frame(cm, &cm->cur_frame->buf);
 #endif
+
+  MACROBLOCKD *xd = &cpi->td.mb.e_mbd;
+  if (cm->seq_params.enable_band_metadata) avm_band_search(cpi, cm, xd);
 
   // For primary_ref_frame and derived_primary_ref_frame, if one of them is
   // PRIMARY_REF_NONE, the other one is also PRIMARY_REF_NONE.

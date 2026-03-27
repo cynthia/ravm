@@ -75,6 +75,7 @@ struct av2_extracfg {
   unsigned int enable_wiener_nonsep;
   unsigned int enable_ccso;
   unsigned int ccso_unit_matches_sb;
+  unsigned int enable_band_metadata;
   unsigned int enable_lf_sub_pu;
   unsigned int force_video_mode;
   unsigned int enable_trellis_quant;
@@ -407,6 +408,7 @@ static struct av2_extracfg default_extra_cfg = {
   1,                                         // enable_wiener_nonsep
   1,                                         // enable_ccso
   0,                                         // ccso_unit_matches_sb
+  0,                                         // enable_band_metadata
   1,                            // enable_lf_sub_pu
   0,                            // force_video_mode
   3,                            // enable_trellis_quant
@@ -910,6 +912,7 @@ static void update_encoder_config(cfg_options_t *cfg,
   cfg->enable_wiener_nonsep = extra_cfg->enable_wiener_nonsep;
   cfg->enable_ccso = extra_cfg->enable_ccso;
   cfg->ccso_unit_matches_sb = extra_cfg->ccso_unit_matches_sb;
+  cfg->enable_band_metadata = extra_cfg->enable_band_metadata;
   cfg->enable_lf_sub_pu = extra_cfg->enable_lf_sub_pu;
   cfg->superblock_size =
       (extra_cfg->superblock_size == AVM_SUPERBLOCK_SIZE_64X64)     ? 64
@@ -1026,6 +1029,7 @@ static void update_default_encoder_config(const cfg_options_t *cfg,
   extra_cfg->enable_wiener_nonsep = cfg->enable_wiener_nonsep;
   extra_cfg->enable_ccso = cfg->enable_ccso;
   extra_cfg->ccso_unit_matches_sb = cfg->ccso_unit_matches_sb;
+  extra_cfg->enable_band_metadata = cfg->enable_band_metadata;
   extra_cfg->enable_lf_sub_pu = cfg->enable_lf_sub_pu;
   extra_cfg->superblock_size =
       (cfg->superblock_size == 64)    ? AVM_SUPERBLOCK_SIZE_64X64
@@ -1311,6 +1315,7 @@ static avm_codec_err_t set_encoder_config(AV2EncoderConfig *oxcf,
       (tool_cfg->enable_pc_wiener | tool_cfg->enable_wiener_nonsep);
   tool_cfg->enable_ccso = extra_cfg->enable_ccso;
   tool_cfg->ccso_unit_matches_sb = extra_cfg->ccso_unit_matches_sb;
+  tool_cfg->enable_band_metadata = extra_cfg->enable_band_metadata;
   tool_cfg->enable_lf_sub_pu = extra_cfg->enable_lf_sub_pu;
   if (tool_cfg->enable_lf_sub_pu) {
     if (cfg->kf_max_dist == 0) {
@@ -3969,6 +3974,11 @@ static avm_codec_err_t encoder_set_option(avm_codec_alg_priv_t *ctx,
   } else if (avm_arg_match_helper(&arg, &g_av2_codec_arg_defs.enable_lf_sub_pu,
                                   argv, err_string)) {
     extra_cfg.enable_lf_sub_pu = avm_arg_parse_uint_helper(&arg, err_string);
+  } else if (avm_arg_match_helper(&arg,
+                                  &g_av2_codec_arg_defs.enable_band_metadata,
+                                  argv, err_string)) {
+    extra_cfg.enable_band_metadata =
+        avm_arg_parse_uint_helper(&arg, err_string);
   } else if (avm_arg_match_helper(&arg, &g_av2_codec_arg_defs.force_video_mode,
                                   argv, err_string)) {
     extra_cfg.force_video_mode = avm_arg_parse_uint_helper(&arg, err_string);
@@ -4760,6 +4770,7 @@ static const avm_codec_enc_cfg_t encoder_usage_cfg[] = { {
         0,  // enable_high_motion
         1,    1, 1, 1,
         1,  // enable idtx intra for fsc is disabled case
+        1,
         1,  // IST
         1,  // inter IST
         0,  // chroma DCT only

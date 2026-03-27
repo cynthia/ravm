@@ -430,6 +430,10 @@ typedef struct cfg_options {
    *
    */
   unsigned int ccso_unit_matches_sb;
+  /*!\brief enable banding metadata
+   *
+   */
+  unsigned int enable_band_metadata;
   /*!\brief enable loop filter on sub-block
    *
    */

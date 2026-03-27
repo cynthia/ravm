@@ -825,7 +825,6 @@ typedef struct GlobalLayerConfigurationRecord {
   int lcr_enforce_tile_alignment_flag;
   int lcr_reserved_zero_6bits;
   uint32_t lcr_data_size[MAX_NUM_XLAYERS];
-  int lcr_xlayer_id[MAX_NUM_XLAYERS];
   uint32_t lcr_num_dependent_xlayer_map[MAX_NUM_XLAYERS];
   // Xlayer infor for each extended layer in this global LCR
   struct LCRXLayerInfo xlayer_info[MAX_NUM_XLAYERS];

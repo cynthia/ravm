@@ -25,7 +25,6 @@
 #include "avm_ports/system_state.h"
 
 #include "av2/common/common.h"
-#include "av2/common/entropy.h"
 #include "av2/common/entropymode.h"
 #include "av2/common/mvref_common.h"
 #include "av2/common/pred_common.h"

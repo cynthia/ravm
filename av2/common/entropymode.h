@@ -41,6 +41,9 @@ extern "C" {
 
 #define MRL_INDEX_CONTEXTS 3
 
+// Number of contexts for intra_dip_cdf.
+#define DIP_CTXS 3
+
 #define COMPREF_BIT_TYPES 2
 #define RANKED_REF0_TO_PRUNE 3
 // The number of reference pictures for the same reference compound mode
@@ -48,8 +51,10 @@ extern "C" {
 #define MAX_REFS_ARF 4
 
 #define WIENERNS_4PART_CTX_MAX 1
+#define WIENERNS_LENGTH_CTXS 2
 
 #define CCSO_CONTEXT 4
+#define CCSO_PLANES 3
 
 #define CDEF_STRENGTH_INDEX0_CTX 4
 #define CDEF_STRENGTHS_NUM 7
@@ -100,9 +105,15 @@ extern "C" {
 // derived from the warp_precision_idx flag.
 #define WARP_DELTA_NUMSYMBOLS_LOW 8
 #define WARP_DELTA_NUMSYMBOLS_HIGH 8
+#define WARP_DELTA_PARAM_TYPES 2  // Row and column warp delta parameters.
 
 #define NUM_REFINEMV_CTX 24
 #define REFINEMV_NUM_MODES 2
+
+#define DRL_CDF_TYPES 3
+#define MORPH_PRED_CTXS 3
+#define BAWP_FLAG_CTXS 2
+#define LOSSLESS_TX_SIZE_PLANE_CTXS 2
 
 struct AV2Common;
 
@@ -118,7 +129,8 @@ typedef struct {
 } SCAN_ORDER;
 
 typedef struct frame_contexts {
-  avm_cdf_prob txb_skip_cdf[2][TX_SIZES][TXB_SKIP_CONTEXTS][CDF_SIZE(2)];
+  avm_cdf_prob txb_skip_cdf[TXB_SKIP_PRED_MODE_CTXS][TX_SIZES]
+                           [TXB_SKIP_CONTEXTS][CDF_SIZE(2)];
   avm_cdf_prob v_txb_skip_cdf[V_TXB_SKIP_CONTEXTS][CDF_SIZE(2)];
   avm_cdf_prob eob_extra_cdf[CDF_SIZE(2)];
   avm_cdf_prob dc_sign_cdf[PLANE_TYPES][DC_SIGN_GROUPS][DC_SIGN_CONTEXTS]
@@ -163,9 +175,9 @@ typedef struct frame_contexts {
                                     [CDF_SIZE(INTER_SINGLE_MODES)];
   avm_cdf_prob inter_warp_mode_cdf[WARPMV_MODE_CONTEXT][CDF_SIZE(2)];
   avm_cdf_prob is_warpmv_or_warp_newmv_cdf[CDF_SIZE(2)];
-  avm_cdf_prob drl_cdf[3][DRL_MODE_CONTEXTS][CDF_SIZE(2)];
-  avm_cdf_prob skip_drl_cdf[3][CDF_SIZE(2)];
-  avm_cdf_prob tip_drl_cdf[3][CDF_SIZE(2)];
+  avm_cdf_prob drl_cdf[DRL_CDF_TYPES][DRL_MODE_CONTEXTS][CDF_SIZE(2)];
+  avm_cdf_prob skip_drl_cdf[DRL_CDF_TYPES][CDF_SIZE(2)];
+  avm_cdf_prob tip_drl_cdf[DRL_CDF_TYPES][CDF_SIZE(2)];
   avm_cdf_prob refinemv_flag_cdf[NUM_REFINEMV_CTX]
                                 [CDF_SIZE(REFINEMV_NUM_MODES)];
 
@@ -209,14 +221,15 @@ typedef struct frame_contexts {
   avm_cdf_prob warp_precision_idx_cdf[BLOCK_SIZES_ALL]
                                      [CDF_SIZE(NUM_WARP_PRECISION_MODES)];
 
-  avm_cdf_prob warp_delta_param_cdf[2][CDF_SIZE(WARP_DELTA_NUMSYMBOLS_LOW)];
+  avm_cdf_prob warp_delta_param_cdf[WARP_DELTA_PARAM_TYPES]
+                                   [CDF_SIZE(WARP_DELTA_NUMSYMBOLS_LOW)];
   avm_cdf_prob warp_param_sign_cdf[CDF_SIZE(2)];
-  avm_cdf_prob warp_delta_param_high_cdf[2]
+  avm_cdf_prob warp_delta_param_high_cdf[WARP_DELTA_PARAM_TYPES]
                                         [CDF_SIZE(WARP_DELTA_NUMSYMBOLS_HIGH)];
 
   avm_cdf_prob warp_extend_cdf[WARP_EXTEND_CTX][CDF_SIZE(2)];
 
-  avm_cdf_prob bawp_cdf[2][CDF_SIZE(2)];
+  avm_cdf_prob bawp_cdf[BAWP_FLAG_CTXS][CDF_SIZE(2)];
   avm_cdf_prob explicit_bawp_cdf[BAWP_SCALES_CTX_COUNT][CDF_SIZE(2)];
   avm_cdf_prob explicit_bawp_scale_cdf[CDF_SIZE(EXPLICIT_BAWP_SCALE_CNT)];
 
@@ -238,15 +251,18 @@ typedef struct frame_contexts {
                             [CDF_SIZE(2)];
   avm_cdf_prob comp_ref1_cdf[REF_CONTEXTS][COMPREF_BIT_TYPES]
                             [INTER_REFS_PER_FRAME - 1][CDF_SIZE(2)];
-  avm_cdf_prob txfm_do_partition_cdf[FSC_MODES][2][TXFM_SPLIT_GROUP]
-                                    [CDF_SIZE(2)];
-  avm_cdf_prob txfm_2or3_way_partition_type_cdf
-      [FSC_MODES][2][TX_PARTITION_TYPE_NUM_VERT_OR_HORZ - 1][CDF_SIZE(2)];
-  avm_cdf_prob txfm_4way_partition_type_cdf[FSC_MODES][2]
+  avm_cdf_prob txfm_do_partition_cdf[FSC_MODES][TX_PARTITION_DIRS]
+                                    [TXFM_SPLIT_GROUP][CDF_SIZE(2)];
+  avm_cdf_prob
+      txfm_2or3_way_partition_type_cdf[FSC_MODES][TX_PARTITION_DIRS]
+                                      [TX_PARTITION_TYPE_NUM_VERT_OR_HORZ - 1]
+                                      [CDF_SIZE(2)];
+  avm_cdf_prob txfm_4way_partition_type_cdf[FSC_MODES][TX_PARTITION_DIRS]
                                            [TX_PARTITION_TYPE_NUM_VERT_AND_HORZ]
                                            [CDF_SIZE(TX_PARTITION_TYPE_NUM)];
 
-  avm_cdf_prob lossless_tx_size_cdf[BLOCK_SIZE_GROUPS][2][CDF_SIZE(2)];
+  avm_cdf_prob lossless_tx_size_cdf[BLOCK_SIZE_GROUPS]
+                                   [LOSSLESS_TX_SIZE_PLANE_CTXS][CDF_SIZE(2)];
   avm_cdf_prob lossless_inter_tx_type_cdf[CDF_SIZE(2)];
   avm_cdf_prob comp_group_idx_cdf[COMP_GROUP_IDX_CONTEXTS][CDF_SIZE(2)];
   avm_cdf_prob bru_mode_cdf[CDF_SIZE(3)];
@@ -259,7 +275,7 @@ typedef struct frame_contexts {
   avm_cdf_prob intrabc_mode_cdf[CDF_SIZE(2)];
   avm_cdf_prob intrabc_bv_precision_cdf[NUM_BV_PRECISION_CONTEXTS]
                                        [CDF_SIZE(NUM_ALLOWED_BV_PRECISIONS)];
-  avm_cdf_prob morph_pred_cdf[3][CDF_SIZE(2)];
+  avm_cdf_prob morph_pred_cdf[MORPH_PRED_CTXS][CDF_SIZE(2)];
   struct segmentation_probs seg;
   avm_cdf_prob intra_dip_cdf[DIP_CTXS][CDF_SIZE(2)];
   avm_cdf_prob intra_dip_mode_n6_cdf[CDF_SIZE(6)];
@@ -272,14 +288,14 @@ typedef struct frame_contexts {
   // For disallowed tools, the corresponding bit is skipped.
   avm_cdf_prob switchable_flex_restore_cdf[MAX_LR_FLEX_SWITCHABLE_BITS]
                                           [MAX_LR_FLEX_MB_PLANE][CDF_SIZE(2)];
-  avm_cdf_prob ccso_cdf[3][CCSO_CONTEXT][CDF_SIZE(2)];
+  avm_cdf_prob ccso_cdf[CCSO_PLANES][CCSO_CONTEXT][CDF_SIZE(2)];
   // CDF for CDEF strength index 0
   avm_cdf_prob cdef_strength_index0_cdf[CDEF_STRENGTH_INDEX0_CTX][CDF_SIZE(2)];
   // CDF for CDEF all other strength index
   avm_cdf_prob cdef_cdf[CDEF_STRENGTHS_NUM - 1][CDF_SIZE(CDEF_STRENGTHS_NUM)];
   avm_cdf_prob gdf_cdf[CDF_SIZE(2)];
   avm_cdf_prob wienerns_restore_cdf[CDF_SIZE(2)];
-  avm_cdf_prob wienerns_length_cdf[2][CDF_SIZE(2)];
+  avm_cdf_prob wienerns_length_cdf[WIENERNS_LENGTH_CTXS][CDF_SIZE(2)];
   avm_cdf_prob wienerns_uv_sym_cdf[CDF_SIZE(2)];
   avm_cdf_prob wienerns_4part_cdf[WIENERNS_4PART_CTX_MAX][CDF_SIZE(4)];
   avm_cdf_prob pc_wiener_restore_cdf[CDF_SIZE(2)];
@@ -345,20 +361,21 @@ typedef struct frame_contexts {
     EXT_TX_SET_ALL16, EXT_TX_SET_DTT9_IDTX_1DDCT) is decoded and added to
     INTER_TX_TYPE_INDEX_COUNT
   */
-  avm_cdf_prob inter_tx_type_set[2][EOB_TX_CTXS][EXT_TX_SIZES][CDF_SIZE(2)];
-  avm_cdf_prob inter_tx_type_idx[2][EOB_TX_CTXS]
+  avm_cdf_prob inter_tx_type_set[INTER_TX_TYPE_SIGNALING_SETS][EOB_TX_CTXS]
+                                [EXT_TX_SIZES][CDF_SIZE(2)];
+  avm_cdf_prob inter_tx_type_idx[INTER_TX_TYPE_SIGNALING_SETS][EOB_TX_CTXS]
                                 [CDF_SIZE(INTER_TX_TYPE_INDEX_COUNT)];
   avm_cdf_prob inter_tx_type_offset_1[EOB_TX_CTXS]
                                      [CDF_SIZE(INTER_TX_TYPE_OFFSET1_COUNT)];
   avm_cdf_prob inter_tx_type_offset_2[EOB_TX_CTXS]
                                      [CDF_SIZE(INTER_TX_TYPE_OFFSET2_COUNT)];
-  avm_cdf_prob tx_ext_32_cdf[2][CDF_SIZE(2)];
+  avm_cdf_prob tx_ext_32_cdf[TX_EXT_32_CTXS][CDF_SIZE(2)];
   avm_cdf_prob intra_ext_tx_short_side_cdf[EXT_TX_SIZES][CDF_SIZE(4)];
   avm_cdf_prob inter_ext_tx_short_side_cdf[EOB_TX_CTXS][EXT_TX_SIZES]
                                           [CDF_SIZE(4)];
   avm_cdf_prob cfl_sign_cdf[CDF_SIZE(CFL_JOINT_SIGNS)];
   avm_cdf_prob cfl_alpha_cdf[CFL_ALPHA_CONTEXTS][CDF_SIZE(CFL_ALPHABET_SIZE)];
-  avm_cdf_prob stx_cdf[2][TX_SIZES][CDF_SIZE(STX_TYPES)];
+  avm_cdf_prob stx_cdf[STX_PRED_CTXS][TX_SIZES][CDF_SIZE(STX_TYPES)];
   avm_cdf_prob most_probable_stx_set_cdf[CDF_SIZE(IST_SET_SIZE)];
   avm_cdf_prob
       most_probable_stx_set_cdf_ADST_ADST[CDF_SIZE(IST_REDUCED_SET_SIZE)];

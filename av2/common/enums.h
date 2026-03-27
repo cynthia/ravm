@@ -52,6 +52,8 @@ extern "C" {
 #define INTER_TX_TYPE_INDEX_COUNT 8
 #define INTER_TX_TYPE_OFFSET1_COUNT 8
 #define INTER_TX_TYPE_OFFSET2_COUNT 4
+#define INTER_TX_TYPE_SIGNALING_SETS 2
+#define TX_EXT_32_CTXS 2
 
 #define FGM_ID_BITS 3
 #define MAX_FGM_NUM (1 << FGM_ID_BITS)
@@ -227,6 +229,7 @@ enum {
 // - IST_4x4_SET_SIZE: number of all 4x4 IST sets (DCT_DCT + ADST_ADST)
 // - IST_8x8_SET_SIZE: number of all 8x8 IST sets (DCT_DCT + ADST_ADST)
 #define STX_TYPES 4
+#define STX_PRED_CTXS 2
 #define IST_SET_SIZE 7
 #define IST_REDUCED_SET_SIZE 4
 #define IST_4x4_SET_SIZE (IST_SET_SIZE + IST_SET_SIZE)
@@ -645,6 +648,7 @@ enum {
 #define TX_PARTITION_TYPE_NUM (TX_PARTITION_TYPES - 1)
 #define TX_PARTITION_TYPE_NUM_VERT_AND_HORZ 14
 #define TX_PARTITION_TYPE_NUM_VERT_OR_HORZ 3
+#define TX_PARTITION_DIRS 2  // Horizontal and vertical.
 
 #define MAX_TX_SIZE_LOG2 (6)
 #define MAX_TX_SIZE (1 << MAX_TX_SIZE_LOG2)

@@ -335,10 +335,10 @@ int get_profile_scaling_factor(int seq_profile_idc) {
   }
 
   // Profile 5 with 444 chroma format
-  if (seq_profile_idc == MAIN_444_10_IP1 || seq_profile_idc == CONFIGURABLE) {
+  if (seq_profile_idc == MAIN_444_10_IP1) {
     return 2;
   }
 
-  // Default for invalid combinations
+  // Default for invalid combinations and Configurable profile
   return 0;
 }

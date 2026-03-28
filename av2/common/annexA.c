@@ -163,14 +163,9 @@ static const int seq_profile_max_mlayer_cnt[MAX_PROFILES] = {
 
 static INLINE int av2_get_max_mlayer_cnt_from_profile(int seq_profile_idc) {
   if (seq_profile_idc < 0 || seq_profile_idc >= MAX_PROFILES) return -1;
-#if CONFIG_TESTONLY_12BIT_SUPPORT
-  if (seq_profile_idc > TEST_ONLY_12BIT_PROFILE &&
+  if (seq_profile_idc >= RESERVED_PROFILES_START &&
       seq_profile_idc < CONFIGURABLE)
     return -1;
-#else
-  if (seq_profile_idc > MAIN_444_10_IP1 && seq_profile_idc < CONFIGURABLE)
-    return -1;
-#endif
   return seq_profile_max_mlayer_cnt[seq_profile_idc];
 }
 

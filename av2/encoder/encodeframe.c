@@ -1842,6 +1842,10 @@ static AVM_INLINE int could_tip_mode_be_selected(AV2_COMP *const cpi) {
     }
   }
 
+  if (cm->tip_ref.ref_frame[0] == NONE_FRAME ||
+      cm->tip_ref.ref_frame[1] == NONE_FRAME)
+    return 0;
+
   if (cm->cur_frame->refs_restricted_status[cm->tip_ref.ref_frame[0]] ||
       cm->cur_frame->refs_restricted_status[cm->tip_ref.ref_frame[1]])
     return 0;

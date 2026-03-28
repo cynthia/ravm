@@ -235,6 +235,7 @@ AV2Decoder *av2_decoder_create(BufferPool *const pool) {
   memset(&pbi->last_frame_unit, -1, sizeof(pbi->last_frame_unit));
   memset(&pbi->last_displayable_frame_unit, -1,
          sizeof(pbi->last_displayable_frame_unit));
+  memset(pbi->last_output_doh, -1, sizeof(pbi->last_output_doh));
   pbi->this_is_first_keyframe_unit_in_tu = 0;
   pbi->this_is_first_vcl_obu_in_tu = 0;
   pbi->last_decoded_xlayer_id = -1;
@@ -620,6 +621,30 @@ avm_codec_err_t flush_remaining_frames(struct AV2Decoder *pbi,
   return res;
 }
 
+// check uniqueness and ascending order at output time, then update
+// last_output_doh.  Returns 0 on success, 1 on violation.
+static int check_and_update_output_doh(AV2Decoder *pbi,
+                                       const RefCntBuffer *frame) {
+  const int xl = frame->xlayer_id;
+  const int ml = frame->mlayer_id;
+  const int doh = frame->display_order_hint;
+
+  // A restricted switch frame resets the DOH epoch for this layer.
+  // This marks a CVS-internal epoch boundary where DOH derivation is restarted.
+  if (frame->is_restricted_switch_frame) {
+    pbi->last_output_doh[xl][ml] = doh;
+    return 0;
+  }
+
+  const int last_doh = pbi->last_output_doh[xl][ml];
+
+  if (doh <= last_doh) {
+    return 1;
+  }
+  pbi->last_output_doh[xl][ml] = doh;
+  return 0;
+}
+
 // This function outputs frames that are ready to be output.
 // The output frames may be the output trigger frame along with
 // past frames that have not yet been output,
@@ -628,10 +653,12 @@ avm_codec_err_t flush_remaining_frames(struct AV2Decoder *pbi,
 // the frame to be flushed out from the ref_frame_map slot.
 // ref_idx == -1 indicates the output process is trigged by
 // decoding the current frame.
-void output_frame_buffers(AV2Decoder *pbi, int ref_idx) {
+// Returns 0 on success, 1 if a DOH conformance violation was detected.
+int output_frame_buffers(AV2Decoder *pbi, int ref_idx) {
   AV2_COMMON *const cm = &pbi->common;
   RefCntBuffer *trigger_frame = NULL;
   RefCntBuffer *output_candidate = NULL;
+  int doh_error = 0;
 
   // Determine if the triggering frame is the current frame or a frame
   // already stored in the refrence buffer.
@@ -648,6 +675,9 @@ void output_frame_buffers(AV2Decoder *pbi, int ref_idx) {
       }
     }
     if (output_candidate != trigger_frame) {
+      if (cm->seq_params.monotonic_output_order_flag == 0) {
+        doh_error |= check_and_update_output_doh(pbi, output_candidate);
+      }
       assign_output_frame_buffer_p(
           &pbi->output_frames[pbi->num_output_frames++], output_candidate);
       output_candidate->frame_output_done = 1;
@@ -661,7 +691,10 @@ void output_frame_buffers(AV2Decoder *pbi, int ref_idx) {
     }
   } while (output_candidate != trigger_frame);
 
-  // Add the output triggering frame into the output queue.
+  if (cm->seq_params.monotonic_output_order_flag == 0) {
+    // Add the output triggering frame into the output queue.
+    doh_error |= check_and_update_output_doh(pbi, trigger_frame);
+  }
   assign_output_frame_buffer_p(&pbi->output_frames[pbi->num_output_frames++],
                                trigger_frame);
   trigger_frame->frame_output_done = 1;
@@ -690,6 +723,9 @@ void output_frame_buffers(AV2Decoder *pbi, int ref_idx) {
       if (is_frame_eligible_for_output(cm->ref_frame_map[i]) &&
           derive_output_order_idx(cm, cm->ref_frame_map[i]) ==
               next_frame_output_order) {
+        if (cm->seq_params.monotonic_output_order_flag == 0) {
+          doh_error |= check_and_update_output_doh(pbi, cm->ref_frame_map[i]);
+        }
         assign_output_frame_buffer_p(
             &pbi->output_frames[pbi->num_output_frames++],
             cm->ref_frame_map[i]);
@@ -705,6 +741,7 @@ void output_frame_buffers(AV2Decoder *pbi, int ref_idx) {
       }
     }
   }
+  return doh_error;
 }
 
 // If any buffer updating is signaled it should be done here.
@@ -716,6 +753,7 @@ static void update_frame_buffers(AV2Decoder *pbi, int frame_decoded) {
   int ref_index = 0;
   AV2_COMMON *const cm = &pbi->common;
   BufferPool *const pool = cm->buffer_pool;
+  int doh_error = 0;
 
   pbi->output_frames_offset = 0;
 
@@ -746,7 +784,7 @@ static void update_frame_buffers(AV2Decoder *pbi, int frame_decoded) {
           }
         }
         if (is_frame_eligible_for_output(cm->ref_frame_map[ref_index]))
-          output_frame_buffers(pbi, ref_index);
+          doh_error |= output_frame_buffers(pbi, ref_index);
         decrease_ref_count(cm->ref_frame_map[ref_index], pool);
 
         if (av2_skip_reference_buffer_update(clear_multiple_insert_in_one,
@@ -763,12 +801,21 @@ static void update_frame_buffers(AV2Decoder *pbi, int frame_decoded) {
                         pbi->enable_subgop_stats);
     if (((cm->immediate_output_picture && !cm->cur_frame->frame_output_done) ||
          cm->show_existing_frame)) {
-      output_frame_buffers(pbi, -1);
+      doh_error |= output_frame_buffers(pbi, -1);
       decrease_ref_count(cm->cur_frame, pool);
     } else {
       decrease_ref_count(cm->cur_frame, pool);
     }
     unlock_buffer_pool(pool);
+    if (cm->seq_params.monotonic_output_order_flag == 0) {
+      if (doh_error) {
+        avm_internal_error(
+            &cm->error, AVM_CODEC_UNSUP_BITSTREAM,
+            "Display order hint of an output picture is not unique"
+            " in the same (xlayer_id %d) layer.",
+            cm->xlayer_id);
+      }
+    }
   } else {
     // Nothing was decoded, so just drop this frame buffer
     lock_buffer_pool(pool);

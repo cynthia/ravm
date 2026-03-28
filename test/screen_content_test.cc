@@ -81,7 +81,7 @@ class ScreenContentToolsTestLarge
 TEST_P(ScreenContentToolsTestLarge, ScreenContentToolsTest) {
   // force screen content tools on
   ::libavm_test::Y4mVideoSource video_nonsc("park_joy_90p_8_444.y4m", 0, 1);
-  cfg_.g_profile = MAIN_444_10;
+  cfg_.g_profile = MAIN_444_10_IP1;
   tune_content_ = AVM_CONTENT_SCREEN;
   ASSERT_NO_FATAL_FAILURE(RunLoop(&video_nonsc));
   ASSERT_EQ(is_screen_content_violated_, false)
@@ -90,7 +90,7 @@ TEST_P(ScreenContentToolsTestLarge, ScreenContentToolsTest) {
   // Don't force screen content, however as the input is screen content
   // allow_screen_content_tools should still be turned on
   ::libavm_test::Y4mVideoSource video_sc("desktop_credits.y4m", 0, 1);
-  cfg_.g_profile = MAIN_444_10;
+  cfg_.g_profile = MAIN_444_10_IP1;
   is_screen_content_violated_ = true;
   tune_content_ = AVM_CONTENT_DEFAULT;
   ASSERT_NO_FATAL_FAILURE(RunLoop(&video_sc));

@@ -1020,13 +1020,13 @@ static void init_config(struct AV2_COMP *cpi, AV2EncoderConfig *oxcf) {
     seq_params->subsampling_x = 0;
     seq_params->subsampling_y = 0;
   } else {
-    if (seq_params->seq_profile_idc <= MAIN_420_10) {
+    if (seq_params->seq_profile_idc <= MAIN_420_10_IP2) {
       seq_params->subsampling_x = 1;
       seq_params->subsampling_y = 1;
-    } else if (seq_params->seq_profile_idc == MAIN_422_10) {
+    } else if (seq_params->seq_profile_idc == MAIN_422_10_IP1) {
       seq_params->subsampling_x = 1;
       seq_params->subsampling_y = 0;
-    } else if (seq_params->seq_profile_idc == MAIN_444_10) {
+    } else if (seq_params->seq_profile_idc == MAIN_444_10_IP1) {
       seq_params->subsampling_x = 0;
       seq_params->subsampling_y = 0;
 #if CONFIG_TESTONLY_12BIT_SUPPORT

@@ -278,6 +278,7 @@ static avm_codec_err_t decoder_peek_si_internal(const uint8_t *data,
           int n = avm_ceil_log2(max_mlayer_id + 1);
           avm_rb_read_literal(&rb, n);
         }
+        avm_rb_read_bit(&rb);  // monotonic_output_order_flag
       }
 
       int num_bits_width = avm_rb_read_literal(&rb, 4) + 1;

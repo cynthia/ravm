@@ -198,6 +198,7 @@ static int parse_sequence_header(const uint8_t *const buffer, size_t length,
       int n = avm_ceil_log2(max_mlayer_id + 1);
       AV2C_READ_BITS_OR_RETURN_ERROR(seq_max_mlayer_cnt_minus_1, n);
     }
+    AV2C_READ_BIT_OR_RETURN_ERROR(monotonic_output_order_flag);
   }
 
   AV2C_READ_BITS_OR_RETURN_ERROR(frame_width_bits_minus_1, 4);

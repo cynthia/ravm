@@ -5273,9 +5273,12 @@ static AVM_INLINE void write_uncompressed_header(
           avm_internal_error(&cm->error, AVM_CODEC_UNSUP_BITSTREAM,
                              "Bridge frame implicit_output_picture is not 0");
         }
-      } else
+      } else if (!seq_params->monotonic_output_order_flag) {
         avm_wb_write_bit(wb, cm->implicit_output_picture);
-    } else {
+      }
+    }
+    if (cm->immediate_output_picture ||
+        seq_params->monotonic_output_order_flag) {
       cm->implicit_output_picture = 0;
     }
     cm->cur_frame->immediate_output_picture = cm->immediate_output_picture;

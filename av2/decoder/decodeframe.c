@@ -8116,18 +8116,13 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
     if (!cm->immediate_output_picture) {
       if (cm->bridge_frame_info.is_bridge_frame) {
         cm->implicit_output_picture = 0;
-      } else {
+      } else if (!seq_params->monotonic_output_order_flag) {
         cm->implicit_output_picture = avm_rb_read_bit(rb);
+      } else {
+        cm->implicit_output_picture = 0;
       }
     } else {
       cm->implicit_output_picture = 0;
-    }
-
-    if (seq_params->monotonic_output_order_flag &&
-        cm->implicit_output_picture) {
-      avm_internal_error(&cm->error, AVM_CODEC_UNSUP_BITSTREAM,
-                         "implicit_output_picture must be 0 when "
-                         "monotonic_output_order_flag is 1");
     }
 
     cm->cur_frame->immediate_output_picture = cm->immediate_output_picture;

@@ -315,6 +315,9 @@ typedef struct {
   bool mfh_valid_buf[MAX_MFH_NUM];
   int decoding_first_frame;
   int last_olk_tu_display_order_hint;
+  int seen_frame_header_buf;
+  int next_start_tile_buf;
+  int seen_vcl_obu_in_this_tu_buf;
 } StreamInfo;
 
 /*!
@@ -526,11 +529,6 @@ typedef struct AV2Decoder {
    * unit per xlayer_id it is used to check the obu order validation
    */
   obu_info last_displayable_frame_unit[MAX_NUM_XLAYERS];
-  /*!
-   * Indicates if the current data chunk being decoded in avm_codec_decode()
-   * is the first frame unit of the temporal unit
-   */
-  int this_is_first_keyframe_unit_in_tu;
   /*!
    * Tracks the xlayer_id of the last decoded frame unit. Reset to -1 when a
    * temporal delimiter is seen. Used to detect combined TU boundaries so that

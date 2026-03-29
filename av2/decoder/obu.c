@@ -259,6 +259,10 @@ void av2_store_xlayer_context(AV2Decoder *pbi, AV2_COMMON *cm, int xlayer_id) {
   pbi->stream_info[stream_idx].decoding_first_frame = pbi->decoding_first_frame;
   pbi->stream_info[stream_idx].last_olk_tu_display_order_hint =
       pbi->last_olk_tu_display_order_hint;
+  pbi->stream_info[stream_idx].seen_frame_header_buf = pbi->seen_frame_header;
+  pbi->stream_info[stream_idx].next_start_tile_buf = pbi->next_start_tile;
+  pbi->stream_info[stream_idx].seen_vcl_obu_in_this_tu_buf =
+      pbi->seen_vcl_obu_in_this_tu;
 }
 
 // Helper function to restore xlayer context
@@ -323,6 +327,10 @@ void av2_restore_xlayer_context(AV2Decoder *pbi, AV2_COMMON *cm,
   pbi->decoding_first_frame = pbi->stream_info[stream_idx].decoding_first_frame;
   pbi->last_olk_tu_display_order_hint =
       pbi->stream_info[stream_idx].last_olk_tu_display_order_hint;
+  pbi->seen_frame_header = pbi->stream_info[stream_idx].seen_frame_header_buf;
+  pbi->next_start_tile = pbi->stream_info[stream_idx].next_start_tile_buf;
+  pbi->seen_vcl_obu_in_this_tu =
+      pbi->stream_info[stream_idx].seen_vcl_obu_in_this_tu_buf;
 }
 
 static void init_stream_info(StreamInfo *stream_info) {
@@ -2519,22 +2527,6 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
       }
     }
 
-    if (is_single_tile_vcl_obu(obu_header.type) ||
-        is_multi_tile_vcl_obu(obu_header.type)) {
-      if (!pbi->seen_vcl_obu_in_this_tu) {
-        pbi->this_is_first_vcl_obu_in_tu = 1;
-        pbi->seen_vcl_obu_in_this_tu = 1;
-      } else {
-        pbi->this_is_first_vcl_obu_in_tu = 0;
-      }
-    }
-
-    if (obu_header.type == OBU_CLOSED_LOOP_KEY ||
-        obu_header.type == OBU_OPEN_LOOP_KEY) {
-      if (pbi->this_is_first_vcl_obu_in_tu)
-        pbi->this_is_first_keyframe_unit_in_tu = 1;
-    }
-
     if (av2_is_leading_vcl_obu(obu_header.type))
       cm->is_leading_picture = 1;
     else if (av2_is_regular_vcl_obu(obu_header.type))
@@ -2638,13 +2630,23 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
       cm->bridge_frame_info.is_bridge_frame = 0;
     }
 
+    if (is_single_tile_vcl_obu(obu_header.type) ||
+        is_multi_tile_vcl_obu(obu_header.type)) {
+      if (!pbi->seen_vcl_obu_in_this_tu) {
+        pbi->this_is_first_vcl_obu_in_tu = 1;
+        pbi->seen_vcl_obu_in_this_tu = 1;
+      } else {
+        pbi->this_is_first_vcl_obu_in_tu = 0;
+      }
+    }
+
     // Flush remaining frames after xlayer context is correctly set.
     // This must happen after xlayer switching but before processing frame OBUs.
     // Skip flush while in GLOBAL_XLAYER_ID context -- the target layer's
     // context has not been restored yet; flush will run once a non-global
     // OBU restores it.
-    if (pbi->this_is_first_keyframe_unit_in_tu &&
-        cm->xlayer_id != GLOBAL_XLAYER_ID &&
+    if (pbi->this_is_first_vcl_obu_in_tu && cm->xlayer_id != GLOBAL_XLAYER_ID &&
+        obu_header.type == OBU_CLOSED_LOOP_KEY &&
         pbi->obus_in_frame_unit_data[cm->tlayer_id][cm->mlayer_id]
                                     [OBU_CLOSED_LOOP_KEY]) {
       flush_remaining_frames(pbi, INT_MAX);
@@ -2666,13 +2668,19 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
     av2_init_read_bit_buffer(pbi, &rb, data, data + payload_size);
     switch (obu_header.type) {
       case OBU_TEMPORAL_DELIMITER:
-        decoded_payload_size = read_temporal_delimiter_obu();
-        pbi->seen_frame_header = 0;
-        pbi->next_start_tile = 0;
-        pbi->seen_vcl_obu_in_this_tu = 0;
-        pbi->this_is_first_vcl_obu_in_tu = 0;
-        pbi->doh_tu_order_hint_bits_set = 0;
-        for (int i = 0; i < NUM_CUSTOM_QMS; i++) pbi->qm_protected[i] = 0;
+        for (int xlayer = 0; xlayer < AVM_MAX_NUM_STREAMS - 1; xlayer++) {
+          if (pbi->xlayer_id_map[xlayer] > 0) {
+            av2_store_xlayer_context(pbi, cm, cm->xlayer_id);
+            cm->xlayer_id = xlayer;
+            av2_restore_xlayer_context(pbi, cm, xlayer);
+            decoded_payload_size = read_temporal_delimiter_obu();
+            pbi->seen_frame_header = 0;
+            pbi->next_start_tile = 0;
+            pbi->seen_vcl_obu_in_this_tu = 0;
+            pbi->doh_tu_order_hint_bits_set = 0;
+            for (int i = 0; i < NUM_CUSTOM_QMS; i++) pbi->qm_protected[i] = 0;
+          }
+        }
         break;
       case OBU_MULTI_STREAM_DECODER_OPERATION:
         decoded_payload_size =

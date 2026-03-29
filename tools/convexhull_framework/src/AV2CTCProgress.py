@@ -8,6 +8,7 @@
 ## License 1.0 was not distributed with this source code in the PATENTS file, you
 ## can obtain it at aomedia.org/license/patent-license/.
 ##
+from platform import release
 __author__ = "maggie.sun@intel.com, ryanlei@meta.com"
 
 import csv
@@ -64,77 +65,84 @@ qtys = [
 
 csv_paths = {
     "v01.0.0": [
-        "v1.0.0",
+        "v01.0.0",
         "av2",
         "aom",
         "0",
         os.path.join(CTC_RESULT_PATH, "AV2-CTC-v1.0.0-alt-anchor-r4.0"),
     ],
+    "v01.0.0-scale": [
+        "v01.0.0",
+        "av2",
+        "aom",
+        "0",
+        os.path.join(CTC_RESULT_PATH, "AV2-CTC-v1.0.0-alt-anchor-r4.0-scale"),
+    ],
     "libaom-v3.12.0": [
-        "v3.12.0",
+        "libaom-v3.12.0",
         "av1",
         "aom",
         "0",
         os.path.join(CTC_RESULT_PATH, "AV1-CTC-v3.12.0-constrained"),
     ],
     "libaom-v3.12.0-unconstrained": [
-        "v3.12.0",
+        "libaom-v3.12.0-unconstrained",
         "av1",
         "aom",
         "0",
         os.path.join(CTC_RESULT_PATH, "AV1-CTC-v3.12.0-unconstrained"),
     ],
     "v02.0.0": [
-        "v2.0.0",
+        "v02.0.0",
         "av2",
         "aom",
         "0",
         os.path.join(CTC_RESULT_PATH, "AV2-CTC-v2.0.0"),
     ],
     "v03.0.0": [
-        "v3.0.0",
+        "v03.0.0",
         "av2",
         "aom",
         "0",
         os.path.join(CTC_RESULT_PATH, "AV2-CTC-v3.0.0"),
     ],
     "v04.0.0": [
-        "v4.0.0",
+        "v04.0.0",
         "av2",
         "aom",
         "0",
         os.path.join(CTC_RESULT_PATH, "AV2-CTC-v4.0.0"),
     ],
     "v05.0.0": [
-        "v5.0.0",
+        "v05.0.0",
         "av2",
         "aom",
         "0",
         os.path.join(CTC_RESULT_PATH, "AV2-CTC-v5.0.0"),
     ],
     "v06.0.0": [
-        "v6.0.0",
+        "v06.0.0",
         "av2",
         "aom",
         "0",
         os.path.join(CTC_RESULT_PATH, "AV2-CTC-v6.0.0"),
     ],
     "v07.0.0": [
-        "v7.0.0",
+        "v07.0.0",
         "av2",
         "aom",
         "0",
         os.path.join(CTC_RESULT_PATH, "AV2-CTC-v7.0.0"),
     ],
     "v08.0.0": [
-        "v8.0.0",
+        "v08.0.0",
         "av2",
         "aom",
         "0",
         os.path.join(CTC_RESULT_PATH, "AV2-CTC-v8.0.0"),
     ],
     "v09.0.0": [
-        "v9.0.0",
+        "v09.0.0",
         "av2",
         "aom",
         "0",
@@ -166,7 +174,7 @@ csv_paths = {
         "av2",
         "aom",
         "0",
-        os.path.join(CTC_RESULT_PATH, "AV2-CTC-v13.0.0"),
+        os.path.join(CTC_RESULT_PATH, "AV2-CTC-v13.0.0-scale"),
     ],
 }
 
@@ -181,6 +189,7 @@ start_row = {
     "LD": 50,
 }
 
+# key is the release
 formats = {
     "v01.0.0": ["r", "-", "o"],
     "v02.0.0": ["g", "-", "*"],
@@ -199,6 +208,7 @@ formats = {
     "v13.0.0": ["g", ":", "+"],
 }
 
+# key is the release
 dates = {
     "v01.0.0": "01/16/2021",
     "v02.0.0": "08/27/2021",
@@ -215,7 +225,6 @@ dates = {
     "v13.0.0": "12/19/2025",
     "libaom-v3.12.0": "02/10/2025",
     "libaom-v3.12.0-unconstrained": "01/10/2025",
-    "v13.0.0": "12/19/2025",
 }
 
 
@@ -228,7 +237,6 @@ AS_formats = {
     "640x360": ["k", "-.", "<"],
 }
 
-anchor = "v01.0.0"
 rd_curve_pdf = os.path.join(CTC_RESULT_PATH, "rdcurve.pdf")
 combined_rd_curve_pdf = os.path.join(CTC_RESULT_PATH, "combined_rdcurve.pdf")
 combined_runtime_pdf = os.path.join(CTC_RESULT_PATH, "combined_runtime.pdf")
@@ -258,20 +266,22 @@ markers = cycle("o*^+<x>.")
 def populate_stats_files():
     stats_files = {}
     for tag in csv_paths.keys():
+        release = csv_paths[tag][0]
         codec = csv_paths[tag][1]
         encoder = csv_paths[tag][2]
         preset = csv_paths[tag][3]
         path = csv_paths[tag][4]
         stats_files[tag] = {}
-        stats_files[tag]["release"] = csv_paths[tag][0]
+        stats_files[tag]["release"] = release
+        stats_files[tag]["config"] = {}
         for cfg in CONFIG:
             if cfg == "Still":
-                stats_files[tag][cfg] = os.path.join(
+                stats_files[tag]["config"][cfg] = os.path.join(
                     path,
                     "RDResults_%s_%s_STILL_Preset_%s.csv" % (encoder, codec, preset),
                 )
             else:
-                stats_files[tag][cfg] = os.path.join(
+                stats_files[tag]["config"][cfg] = os.path.join(
                     path,
                     "RDResults_%s_%s_%s_Preset_%s.csv" % (encoder, codec, cfg, preset),
                 )
@@ -296,15 +306,25 @@ def WriteSheet(csv_file, sht, start_row):
     csv.close()
 
 
+def get_anchor_tag(tag):
+    if tag in ["v13.0.0"]:
+        anchor_tag = "v01.0.0-scale"
+    elif tag == "v01.0.0-scale":
+        anchor_tag = "None"
+    else:
+        anchor_tag = "v01.0.0"
+    return anchor_tag
+
 def FillXlsFile(csv_files):
     for tag in csv_files.keys():
-        if tag == anchor:
+        if tag in ["v01.0.0", "v01.0.0-scale"]:
             continue
         else:
+            anchor = get_anchor_tag(tag)
             anchor_release = csv_files[anchor]["release"]
             release = csv_files[tag]["release"]
             print("Processing %s..." % release)
-            for cfg in csv_files[anchor].keys():
+            for cfg in csv_files[anchor]["config"].keys():
                 if cfg not in CONFIG:
                     continue
                 anchor_sht_name = "Anchor-%s" % cfg
@@ -340,33 +360,32 @@ def FillXlsFile(csv_files):
                     filename=xls_file, read_only=False, keep_vba=True
                 )
                 anchor_sht = wb[anchor_sht_name]
-                anchor_csv = csv_files[anchor][cfg]
+                anchor_csv = csv_files[anchor]["config"][cfg]
                 WriteSheet(anchor_csv, anchor_sht, start_row[cfg])
 
                 test_sht = wb[test_sht_name]
-                test_csv = csv_files[tag][cfg]
+                test_csv = csv_files[tag]["config"][cfg]
                 WriteSheet(test_csv, test_sht, start_row[cfg])
 
                 wb.save(xls_file)
 
 
-def DrawIndividualRDCurve(records, anchor, pdf):
+def DrawIndividualRDCurve(records, pdf):
+    tmp_anchor = "v01.0.0"
+
     with PdfPages(pdf) as export_pdf:
-        for cfg in records[anchor].keys():
-            videos = records[anchor][cfg].keys()
+        for cfg in records[tmp_anchor]["config"].keys():
+            videos = records[tmp_anchor]["config"][cfg].keys()
             for video in videos:
                 if cfg == "AS":
-                    DnScaledRes = [
-                        (int(3840 / ratio), int(2160 / ratio)) for ratio in DnScaleRatio
-                    ]
                     Int_RDPoints = {}
                     # draw individual rd curves
                     for tag in records.keys():
                         Int_RDPoints[tag] = []
-                        if video not in records[tag][cfg].keys():
+                        if video not in records[tag]["config"][cfg].keys():
                             continue
 
-                        record = records[tag][cfg][video]
+                        record = records[tag]["config"][cfg][video]
                         plt.figure(figsize=(15, 10))
                         plt.suptitle("%s : %s: %s" % (cfg, video, tag))
 
@@ -412,6 +431,7 @@ def DrawIndividualRDCurve(records, anchor, pdf):
                     plt.figure(figsize=(15, 10))
                     plt.suptitle("%s : %s: convex hull" % (cfg, video))
                     for tag in records.keys():
+                        release = records[tag]["release"]
                         lower, upper = convex_hull(Int_RDPoints[tag])
                         br = [h[0] for h in upper]
                         apsnr = [h[1] for h in upper]
@@ -419,11 +439,11 @@ def DrawIndividualRDCurve(records, anchor, pdf):
                             br,
                             apsnr,
                             "overall_apsnr(dB)",
-                            tag,
+                            release,
                             "bitrate(kbps)",
-                            formats[tag][0],
-                            formats[tag][1],
-                            formats[tag][2],
+                            formats[release][0],
+                            formats[release][1],
+                            formats[release][2],
                         )
                     plt.legend(loc="lower right")
                     plt.grid(True)
@@ -434,162 +454,27 @@ def DrawIndividualRDCurve(records, anchor, pdf):
                     plt.figure(figsize=(15, 10))
                     plt.suptitle("%s : %s" % (cfg, video))
                     for tag in records.keys():
-                        if video not in records[tag][cfg].keys():
+                        if video not in records[tag]["config"][cfg].keys():
                             continue
 
-                        record = records[tag][cfg][video]
+                        release = records[tag]["release"]
+                        record = records[tag]["config"][cfg][video]
                         br = [record[key].bitrate for key in record.keys()]
                         apsnr = [record[key].overall_apsnr for key in record.keys()]
                         plot_rd_curve(
                             br,
                             apsnr,
                             "overall_apsnr(dB)",
-                            tag,
+                            release,
                             "bitrate(kbps)",
-                            formats[tag][0],
-                            formats[tag][1],
-                            formats[tag][2],
+                            formats[release][0],
+                            formats[release][1],
+                            formats[release][2],
                         )
                     plt.legend(loc="lower right")
                     plt.grid(True)
                     export_pdf.savefig()
                     plt.close()
-
-
-def DrawCombinedRDCurve(csv_files, records, pdf):
-    with PdfPages(pdf) as export_pdf:
-        for tag in csv_files.keys():
-            for cfg in csv_files[tag].keys():
-                if cfg not in CONFIG:
-                    continue
-                videos = records[tag][cfg].keys()
-                plt.figure(figsize=(30, 30))
-                plt.suptitle("%s : %s" % (tag, cfg))
-
-                for video in videos:
-                    short_name = video.split("_")[0]
-                    if video not in records[tag][cfg].keys():
-                        continue
-
-                    if cfg == "AS":
-                        Int_RDPoints = []
-                        record = records[tag][cfg][video]
-                        br = {}
-                        apsnr = {}
-                        for key in record.keys():
-                            res = re.split("_", key)[0]
-                            if res not in br.keys():
-                                br[res] = []
-                                apsnr[res] = []
-                            br[res].append(record[key].bitrate)
-                            apsnr[res].append(record[key].overall_apsnr)
-
-                        for res in br.keys():
-                            rdpnts = [
-                                (brt, qty) for brt, qty in zip(br[res], apsnr[res])
-                            ]
-                            if UsePCHIPInterpolation:
-                                int_rdpnts = Interpolate_PCHIP(
-                                    rdpnts, QPs["AS"][:], InterpolatePieces, True
-                                )
-                            else:
-                                int_rdpnts = Interpolate_Bilinear(
-                                    rdpnts, QPs["AS"][:], InterpolatePieces, True
-                                )
-                            Int_RDPoints += int_rdpnts
-
-                        # draw convex hull
-                        lower, upper = convex_hull(Int_RDPoints)
-                        br = [h[0] for h in upper]
-                        apsnr = [h[1] for h in upper]
-                        plot_rd_curve(
-                            br,
-                            apsnr,
-                            "overall_apsnr(dB)",
-                            short_name,
-                            "bitrate(kbps)",
-                            next(colors),
-                            "-",
-                            next(markers),
-                        )
-                    else:
-                        record = records[tag][cfg][video]
-                        br = [record[key].bitrate for key in record.keys()]
-                        apsnr = [record[key].overall_apsnr for key in record.keys()]
-                        plot_rd_curve(
-                            br,
-                            apsnr,
-                            "overall_apsnr(dB)",
-                            short_name,
-                            "bitrate(kbps)",
-                            next(colors),
-                            "-",
-                            next(markers),
-                        )
-
-                plt.legend(loc="lower right")
-                plt.grid(True)
-                export_pdf.savefig()
-                plt.close()
-
-
-def DrawCombinedRuntime(csv_files, records, pdf):
-    with PdfPages(pdf) as export_pdf:
-        for tag in csv_files.keys():
-            for cfg in csv_files[tag].keys():
-                if cfg == "RA" or cfg not in CONFIG:
-                    continue
-                videos = records[tag][cfg].keys()
-                plt.figure(figsize=(30, 30))
-                plt.suptitle("%s : %s" % (tag, cfg))
-
-                for video in videos:
-                    short_name = video.split("_")[0]
-                    if video not in records[tag][cfg].keys():
-                        continue
-
-                    if cfg == "AS":
-                        record = records[tag][cfg][video]
-                        br = {}
-                        enc_time = {}
-                        for key in record.keys():
-                            res = re.split("_", key)[0]
-                            if res not in br.keys():
-                                br[res] = []
-                                enc_time[res] = []
-                            br[res].append(record[key].bitrate)
-                            enc_time[res].append(record[key].enc_time)
-
-                        for res in br.keys():
-                            plot_rd_curve(
-                                br[res],
-                                enc_time[res],
-                                "enc_time(s)",
-                                short_name + "_" + res,
-                                "bitrate(kbps)",
-                                next(colors),
-                                "-",
-                                next(markers),
-                            )
-                    else:
-                        record = records[tag][cfg][video]
-                        br = [record[key].bitrate for key in record.keys()]
-                        enc_time = [record[key].enc_time for key in record.keys()]
-                        plot_rd_curve(
-                            br,
-                            enc_time,
-                            "enc_time(s)",
-                            short_name,
-                            "bitrate(kbps)",
-                            next(colors),
-                            "-",
-                            next(markers),
-                        )
-
-                plt.legend(loc="lower right")
-                plt.grid(True)
-                export_pdf.savefig()
-                plt.close()
 
 
 def GetQty(record, key, qty):
@@ -755,18 +640,20 @@ def HasMatchingQPs(anchor_record, test_record, cfg):
         return True
 
 
-def CalcFullBDRate(anchor, csv_files, records):
+def CalcFullBDRate(csv_files, records):
     bdrate = []
     seq_time = []
-    for cfg in csv_files[anchor].keys():
+    tmp_anchor = "v01.0.0"
+    for cfg in csv_files[tmp_anchor]["config"].keys():
         if cfg not in CONFIG:
             continue
-        for video in records[anchor][cfg].keys():
+        for video in records[tmp_anchor]["config"][cfg].keys():
             for tag in records.keys():
-                if video not in records[tag][cfg].keys():
+                if video not in records[tag]["config"][cfg].keys():
                     continue
 
-                record = records[tag][cfg][video]
+                record = records[tag]["config"][cfg][video]
+                release = records[tag]["release"]
                 time = 0
                 instr = 0
                 video_class = ""
@@ -776,7 +663,7 @@ def CalcFullBDRate(anchor, csv_files, records):
                     video_class = record[key].file_class
 
                 total_time = {}
-                total_time["tag"] = tag
+                total_time["tag"] = release
                 total_time["cfg"] = cfg
                 total_time["class"] = video_class
                 total_time["video"] = video
@@ -784,13 +671,13 @@ def CalcFullBDRate(anchor, csv_files, records):
                 total_time["instr"] = instr
 
                 seq_time.append(total_time)
-
-                if tag == anchor:
+                anchor = get_anchor_tag(tag)
+                if tag == anchor or anchor == "None":
                     continue
 
                 # Skip if anchor and test don't have matching QPs
-                anchor_record = records[anchor][cfg][video]
-                test_record = records[tag][cfg][video]
+                anchor_record = records[anchor]["config"][cfg][video]
+                test_record = records[tag]["config"][cfg][video]
                 if not HasMatchingQPs(anchor_record, test_record, cfg):
                     print(
                         "Warning: Skipping %s %s %s - mismatched or missing QPs "
@@ -1192,20 +1079,20 @@ if __name__ == "__main__":
     records = {}
     for tag in csv_files.keys():
         records[tag] = {}
-        for test_cfg in csv_files[tag].keys():
+        records[tag]["config"] = {}
+        for test_cfg in csv_files[tag]["config"].keys():
             if test_cfg not in CONFIG:
                 continue
             IgnorePerf = test_cfg in ["RA", "AS"]
-            records[tag][test_cfg] = ParseCSVFile(csv_files[tag][test_cfg], IgnorePerf)
+            records[tag]["config"][test_cfg] = ParseCSVFile(csv_files[tag]["config"][test_cfg], IgnorePerf)
+            records[tag]["release"] = csv_files[tag]["release"]
 
     FillXlsFile(csv_files)
 
-    DrawCombinedRDCurve(csv_files, records, combined_rd_curve_pdf)
-    DrawCombinedRuntime(csv_files, records, combined_runtime_pdf)
-    DrawIndividualRDCurve(records, anchor, rd_curve_pdf)
+    DrawIndividualRDCurve(records, rd_curve_pdf)
 
     # Calculate BDRate and collect total time
-    (bdrate, seq_time) = CalcFullBDRate(anchor, csv_files, records)
+    (bdrate, seq_time) = CalcFullBDRate(csv_files, records)
 
     write_bdrate(bdrate, bdrate_summary)
 

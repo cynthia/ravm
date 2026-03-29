@@ -2714,9 +2714,8 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
         }
         if (pbi->sbe_state.extraction_enabled &&
             cm->xlayer_id == GLOBAL_XLAYER_ID) {
-          av2_sbe_process_global_lcr(
-              &pbi->sbe_state, cm->lcr_params.global_lcr.LcrMaxNumXLayerCount,
-              cm->lcr_params.global_lcr.lcr_xlayer_id);
+          av2_sbe_process_global_lcr(&pbi->sbe_state, cm->num_streams,
+                                     cm->stream_ids);
         }
         break;
       case OBU_ATLAS_SEGMENT:

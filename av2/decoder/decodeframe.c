@@ -7535,7 +7535,7 @@ static void check_lcr_layer_map_conformance(struct AV2Decoder *pbi,
       const GlobalLayerConfigurationRecord *glb_lcr = &lcr_params->global_lcr;
       if (glb_lcr == NULL) return;
       for (int i = 0; i < glb_lcr->LcrMaxNumXLayerCount; i++) {
-        int xLId = glb_lcr->lcr_xlayer_id[i];
+        int xLId = glb_lcr->LcrXLayerID[i];
         lcr_xlayer_info = &glb_lcr->xlayer_info[xLId];
         check_lcr_mlayer_tlayer_conformance(
             seq_header, &lcr_xlayer_info->mlayer_params, &cm->error);

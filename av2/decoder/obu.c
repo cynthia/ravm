@@ -626,20 +626,23 @@ static uint32_t read_sequence_header_obu(AV2Decoder *pbi, int xlayer_id,
       seq_params->seq_max_encoder_buffer_delay = 20000;
       seq_params->seq_max_low_delay_mode_flag = 0;
     }
-    int64_t seq_bitrate = av2_max_level_bitrate(
-        seq_params->seq_profile_idc, seq_params->seq_max_level_idx,
-        seq_params->seq_tier, seq_params->subsampling_x,
-        seq_params->subsampling_y, seq_params->monochrome);
-    if (seq_bitrate == 0)
-      avm_internal_error(&cm->error, AVM_CODEC_UNSUP_BITSTREAM,
-                         "AV2 does not support this combination of "
-                         "profile, level, and tier.");
-    // Buffer size in bits/s is bitrate in bits/s * 1 s
-    int64_t buffer_size = seq_bitrate;
-    if (buffer_size == 0)
-      avm_internal_error(&cm->error, AVM_CODEC_UNSUP_BITSTREAM,
-                         "AV2 does not support this combination of "
-                         "profile, level, and tier.");
+    // Configurable profile does not define bitrate and buffer size constraints
+    if (seq_params->seq_profile_idc != CONFIGURABLE) {
+      int64_t seq_bitrate = av2_max_level_bitrate(
+          seq_params->seq_profile_idc, seq_params->seq_max_level_idx,
+          seq_params->seq_tier, seq_params->subsampling_x,
+          seq_params->subsampling_y, seq_params->monochrome);
+      if (seq_bitrate == 0)
+        avm_internal_error(&cm->error, AVM_CODEC_UNSUP_BITSTREAM,
+                           "AV2 does not support this combination of "
+                           "profile, level, and tier.");
+      // Buffer size in bits/s is bitrate in bits/s * 1 s
+      int64_t buffer_size = seq_bitrate;
+      if (buffer_size == 0)
+        avm_internal_error(&cm->error, AVM_CODEC_UNSUP_BITSTREAM,
+                           "AV2 does not support this combination of "
+                           "profile, level, and tier.");
+    }
   }
 
   // setup default embedded layer dependency
@@ -2117,7 +2120,7 @@ static BITSTREAM_PROFILE get_lcr_local_profile(struct AV2Decoder *pbi) {
 // Conformance check for the presence of MSDO and LCR.
 // The OBU requirements table in Annex A only applies when IOP < 3, i.e.
 // when the MSDO profile or LCR profile is one of the IP profiles (0, 1, 2).
-// For profiles >= 3 (MAIN_420_10, MAIN_422_10, MAIN_444_10) the table does
+// For profile == 31 (CONFIGURABLE) the table does
 // not impose additional constraints, so we return true.
 bool conformance_check_msdo_lcr(struct AV2Decoder *pbi, bool global_lcr_present,
                                 bool local_lcr_present) {
@@ -2147,14 +2150,14 @@ bool conformance_check_msdo_lcr(struct AV2Decoder *pbi, bool global_lcr_present,
 
   // The IOP table only applies for IOPs 0-2 (profiles IP0, IP1, IP2).
   // If the signaled profile is >= 3, the table does not apply.
-  if (msdo_present && msdo_prof > MAIN_420_10_IP2) return true;
-  if (global_lcr_present && glcr_prof > MAIN_420_10_IP2) return true;
+  if (msdo_present && msdo_prof == CONFIGURABLE) return true;
+  if (global_lcr_present && glcr_prof == CONFIGURABLE) return true;
   if (!msdo_present && !global_lcr_present && local_lcr_present &&
-      llcr_prof > MAIN_420_10_IP2) {
+      llcr_prof == CONFIGURABLE) {
     return true;
   }
   if (!msdo_present && !global_lcr_present && !local_lcr_present &&
-      pbi->common.seq_params.seq_profile_idc > MAIN_420_10_IP2) {
+      pbi->common.seq_params.seq_profile_idc == CONFIGURABLE) {
     return true;
   }
 
@@ -2165,14 +2168,17 @@ bool conformance_check_msdo_lcr(struct AV2Decoder *pbi, bool global_lcr_present,
   if (num_extended_layers > 1 && num_embedded_layers == 1) {
     if (msdo_present &&
         (msdo_prof == MAIN_420_10_IP0 || msdo_prof == MAIN_420_10_IP1 ||
-         msdo_prof == MAIN_420_10_IP2))
+         msdo_prof == MAIN_420_10_IP2 || msdo_prof == MAIN_422_10_IP1 ||
+         msdo_prof == MAIN_444_10_IP1))
       return true;
 
     if (global_lcr_present && glcr_prof == MAIN_420_10_IP2) return true;
   }
 
   if (num_extended_layers == 1 && num_embedded_layers > 1) {
-    if (!msdo_present && local_lcr_present && llcr_prof == MAIN_420_10_IP1)
+    if (!msdo_present && local_lcr_present &&
+        (llcr_prof == MAIN_420_10_IP1 || llcr_prof == MAIN_422_10_IP1 ||
+         llcr_prof == MAIN_444_10_IP1))
       return true;
 
     if (!msdo_present && (global_lcr_present || local_lcr_present) &&

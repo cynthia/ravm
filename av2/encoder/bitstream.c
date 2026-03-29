@@ -4406,7 +4406,8 @@ static AVM_INLINE void write_frame_size_with_refs(
 
 static AVM_INLINE void write_profile(BITSTREAM_PROFILE profile,
                                      struct avm_write_bit_buffer *wb) {
-  assert(profile >= 0 && profile < MAX_PROFILES);
+  assert(profile >= 0 && profile < MAX_PROFILES &&
+         !(profile >= RESERVED_PROFILES_START && profile < CONFIGURABLE));
   avm_wb_write_literal(wb, profile, PROFILE_BITS);
 }
 

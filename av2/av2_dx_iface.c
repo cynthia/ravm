@@ -623,6 +623,7 @@ static size_t check_frame_unit_data(struct AV2Decoder *pbi, const uint8_t *data,
       for (int type = 0; type < NUM_OBU_TYPES; type++)
         pbi->obus_in_frame_unit_data[tid][mid][type] = false;
 
+  pbi->glcr_obu_in_frame_unit = false;
   avm_codec_err_t res = AVM_CODEC_OK;
   pbi->num_obus_with_frame_unit = 0;
   const uint8_t *data_read = data;
@@ -715,6 +716,13 @@ static size_t check_frame_unit_data(struct AV2Decoder *pbi, const uint8_t *data,
     pbi->obus_in_frame_unit_data[obu_header.obu_tlayer_id]
                                 [obu_header.obu_mlayer_id][obu_header.type] =
         true;
+    // Detect Global LCR (xlayer_id == GLOBAL_XLAYER_ID) so the multistream
+    // reset logic can check it in the same temporal domain as
+    // obus_in_frame_unit_data.
+    if (obu_header.type == OBU_LAYER_CONFIGURATION_RECORD &&
+        obu_header.obu_xlayer_id == GLOBAL_XLAYER_ID) {
+      pbi->glcr_obu_in_frame_unit = true;
+    }
 
     // Advance to next OBU
     data_read += bytes_read + payload_size;

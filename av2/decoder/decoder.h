@@ -658,6 +658,13 @@ typedef struct AV2Decoder {
    */
   int glcr_is_present_in_tu;
   /*!
+   * Indicates if a Global LCR OBU (xlayer_id == GLOBAL_XLAYER_ID) is present
+   * in the current frame unit.  Set during pre-decode OBU scanning
+   * (check_frame_unit_data) so it is temporally aligned with
+   * obus_in_frame_unit_data and safe to use in the multistream reset logic.
+   */
+  bool glcr_obu_in_frame_unit;
+  /*!
    * Number of extended layers specified in the Global LCR.
    * Used for stream_info allocation when Global LCR triggers is_multistream.
    */

@@ -2365,6 +2365,7 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
         pbi->obus_in_frame_unit_data[0][0][OBU_TEMPORAL_DELIMITER] &&
         !pbi->obus_in_frame_unit_data[0][0]
                                      [OBU_MULTI_STREAM_DECODER_OPERATION] &&
+        !pbi->glcr_obu_in_frame_unit &&
         (pbi->obus_in_frame_unit_data[tid][mid][OBU_CLOSED_LOOP_KEY] ||
          pbi->obus_in_frame_unit_data[tid][mid][OBU_OPEN_LOOP_KEY] ||
          pbi->obus_in_frame_unit_data[tid][mid][OBU_RAS_FRAME])) {

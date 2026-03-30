@@ -40,8 +40,10 @@ int av2_is_regular_vcl_obu(OBU_TYPE obu_type);
 void av2_read_conformance_window(struct avm_read_bit_buffer *rb,
                                  struct SequenceHeader *seq_params);
 
-uint32_t av2_read_layer_configuration_record_obu(
-    struct AV2Decoder *pbi, int obu_xlayer_id, struct avm_read_bit_buffer *rb);
+uint32_t av2_read_layer_configuration_record_obu(struct AV2Decoder *pbi,
+                                                 int obu_xlayer_id,
+                                                 struct avm_read_bit_buffer *rb,
+                                                 uint8_t *acc_lcr_id_bitmap);
 
 uint32_t av2_read_operating_point_set_obu(struct AV2Decoder *pbi,
                                           int obu_xlayer_id,

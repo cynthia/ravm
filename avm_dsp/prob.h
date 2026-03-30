@@ -28,9 +28,17 @@ typedef uint16_t avm_cdf_prob;
 #define EC_PROB_SHIFT 7
 #define EC_MIN_PROB 4  // must be <= (1<<EC_PROB_SHIFT)/16
 
-#define CDF_SIZE(x) ((x) + 2)
-#define NUM_PARA_COMBINATIONS 125
-#define NUM_PARA_INTERVALS 3
+#define CDF_SIZE(x) ((x) + 4)
+
+// AVM_PARAn(a, b, c): emit 3 pre-computed rate offsets for time intervals 0,
+// 1, 2.  a, b, c are raw PARA triplet values from training (range {-2..+1}).
+#define AVM_PARA2(a, b, c) ((a) + 2), ((b) + 3), ((c) + 4)
+#define AVM_PARA3(a, b, c) ((a) + 2), ((b) + 3), ((c) + 4)
+#define AVM_PARA4(a, b, c) ((a) + 3), ((b) + 4), ((c) + 5)
+#define AVM_PARA5(a, b, c) ((a) + 3), ((b) + 4), ((c) + 5)
+#define AVM_PARA6(a, b, c) ((a) + 3), ((b) + 4), ((c) + 5)
+#define AVM_PARA7(a, b, c) ((a) + 3), ((b) + 4), ((c) + 5)
+#define AVM_PARA8(a, b, c) ((a) + 3), ((b) + 4), ((c) + 5)
 #define CDF_PROB_BITS 15
 #define CDF_PROB_TOP (1 << CDF_PROB_BITS)
 #define CDF_INIT_TOP 32768
@@ -207,71 +215,11 @@ static INLINE uint8_t get_prob(unsigned int num, unsigned int den) {
   }
 }
 
-/* para_adjustment_list array defines all possible triplets of adjustment
- parameters allowed in PARA method. The first entry with {0, 0, 0} corresponds
- to the default setting where no adjustment is made for the speed of adaptation.
- Note: Developers may use the default (0) value for newly introduced contexts.
- As an example, for the newly introduced default_stx_set_cdf table below, 0
- values are added to explicitly set to default rate adaptation.
- ----------------------------------------------------------------------------
- static const avm_cdf_prob
-       default_stx_set_cdf[IST_SET_SIZE][CDF_SIZE(IST_SET_SIZE)] = {
-         { AVM_CDF7(32744, 32748, 32752, 32756, 32760, 32764), 0 },
-         { AVM_CDF7(4, 32748, 32752, 32756, 32760, 32764), 0 },
-         { AVM_CDF7(4, 8, 32752, 32756, 32760, 32764), 0 },
-         { AVM_CDF7(4, 8, 12, 32756, 32760, 32764), 0 },
-         { AVM_CDF7(4, 8, 12, 16, 32760, 32764), 0 },
-         { AVM_CDF7(4, 8, 12, 16, 20, 32764), 0 },
-         { AVM_CDF7(4, 8, 12, 16, 20, 24), 0 },
-       };
- ----------------------------------------------------------------------------
- */
-static const int
-    para_adjustment_list[NUM_PARA_COMBINATIONS][NUM_PARA_INTERVALS] = {
-      { 0, 0, 0 },    { 0, 0, -1 },   { 0, 0, -2 },   { 0, 0, 1 },
-      { 0, 0, 1 },    { 0, -1, 0 },   { 0, -1, -1 },  { 0, -1, -2 },
-      { 0, -1, 1 },   { 0, -1, 1 },   { 0, -2, 0 },   { 0, -2, -1 },
-      { 0, -2, -2 },  { 0, -2, 1 },   { 0, -2, 1 },   { 0, 1, 0 },
-      { 0, 1, -1 },   { 0, 1, -2 },   { 0, 1, 1 },    { 0, 1, 1 },
-      { 0, 1, 0 },    { 0, 1, -1 },   { 0, 1, -2 },   { 0, 1, 1 },
-      { 0, 1, 1 },    { -1, 0, 0 },   { -1, 0, -1 },  { -1, 0, -2 },
-      { -1, 0, 1 },   { -1, 0, 1 },   { -1, -1, 0 },  { -1, -1, -1 },
-      { -1, -1, -2 }, { -1, -1, 1 },  { -1, -1, 1 },  { -1, -2, 0 },
-      { -1, -2, -1 }, { -1, -2, -2 }, { -1, -2, 1 },  { -1, -2, 1 },
-      { -1, 1, 0 },   { -1, 1, -1 },  { -1, 1, -2 },  { -1, 1, 1 },
-      { -1, 1, 1 },   { -1, 1, 0 },   { -1, 1, -1 },  { -1, 1, -2 },
-      { -1, 1, 1 },   { -1, 1, 1 },   { -2, 0, 0 },   { -2, 0, -1 },
-      { -2, 0, -2 },  { -2, 0, 1 },   { -2, 0, 1 },   { -2, -1, 0 },
-      { -2, -1, -1 }, { -2, -1, -2 }, { -2, -1, 1 },  { -2, -1, 1 },
-      { -2, -2, 0 },  { -2, -2, -1 }, { -2, -2, -2 }, { -2, -2, 1 },
-      { -2, -2, 1 },  { -2, 1, 0 },   { -2, 1, -1 },  { -2, 1, -2 },
-      { -2, 1, 1 },   { -2, 1, 1 },   { -2, 1, 0 },   { -2, 1, -1 },
-      { -2, 1, -2 },  { -2, 1, 1 },   { -2, 1, 1 },   { 1, 0, 0 },
-      { 1, 0, -1 },   { 1, 0, -2 },   { 1, 0, 1 },    { 1, 0, 1 },
-      { 1, -1, 0 },   { 1, -1, -1 },  { 1, -1, -2 },  { 1, -1, 1 },
-      { 1, -1, 1 },   { 1, -2, 0 },   { 1, -2, -1 },  { 1, -2, -2 },
-      { 1, -2, 1 },   { 1, -2, 1 },   { 1, 1, 0 },    { 1, 1, -1 },
-      { 1, 1, -2 },   { 1, 1, 1 },    { 1, 1, 1 },    { 1, 1, 0 },
-      { 1, 1, -1 },   { 1, 1, -2 },   { 1, 1, 1 },    { 1, 1, 1 },
-      { 1, 0, 0 },    { 1, 0, -1 },   { 1, 0, -2 },   { 1, 0, 1 },
-      { 1, 0, 1 },    { 1, -1, 0 },   { 1, -1, -1 },  { 1, -1, -2 },
-      { 1, -1, 1 },   { 1, -1, 1 },   { 1, -2, 0 },   { 1, -2, -1 },
-      { 1, -2, -2 },  { 1, -2, 1 },   { 1, -2, 1 },   { 1, 1, 0 },
-      { 1, 1, -1 },   { 1, 1, -2 },   { 1, 1, 1 },    { 1, 1, 1 },
-      { 1, 1, 0 },    { 1, 1, -1 },   { 1, 1, -2 },   { 1, 1, 1 },
-      { 1, 1, 1 },
-    };
-
 static INLINE void update_cdf(avm_cdf_prob *cdf, int8_t val, int nsymbs) {
-  int rate;
   int i, tmp;
-
-  static const int nsymbs2speed[17] = { 0, 0, 1, 1, 2, 2, 2, 2, 2,
-                                        2, 2, 2, 2, 2, 2, 2, 2 };
   assert(nsymbs < 17);
   const int time_interval = cdf[nsymbs] > 31 ? 2 : cdf[nsymbs] > 15 ? 1 : 0;
-  rate = 3 + time_interval + nsymbs2speed[nsymbs] +
-         para_adjustment_list[cdf[nsymbs + 1]][time_interval];
+  const int rate = 2 + cdf[nsymbs + 1 + time_interval];
   tmp = AVM_ICDF(0);
 
   // Single loop (faster)

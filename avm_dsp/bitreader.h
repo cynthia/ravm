@@ -434,7 +434,8 @@ static INLINE int avm_read_symbol_probdata(avm_reader *r, avm_cdf_prob *cdf,
     for (int sym = 0; sym < symLength; sym++) {
       fprintf(filedata, ",%d", cdf_list[sym]);
     }
-    fprintf(filedata, ",%d", (int)cdf[symLength + 1]);
+    fprintf(filedata, ",%d,%d,%d", (int)cdf[symLength + 1],
+            (int)cdf[symLength + 2], (int)cdf[symLength + 3]);
   }
   beginningFrameFlag[prob_info.model_idx][begin_idx[0]][begin_idx[1]]
                     [begin_idx[2]][begin_idx[3]] = 0;

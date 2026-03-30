@@ -5242,7 +5242,8 @@ static AVM_INLINE void write_uncompressed_header(
       avm_wb_write_bit(wb, is_inter_frame);
     }
 
-    if (current_frame->frame_type == KEY_FRAME) {
+    if (current_frame->frame_type == KEY_FRAME ||
+        current_frame->frame_type == INTRA_ONLY_FRAME) {
       // When long term id is not in use for the sequence coding,
       // long_term_id will be set as -1, and number_of_bits_for_lt_frame_id
       // will be 0.

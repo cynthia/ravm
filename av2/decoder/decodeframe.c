@@ -8076,7 +8076,8 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
           avm_rb_read_bit(rb) ? INTER_FRAME : INTRA_ONLY_FRAME;
     }
     current_frame->long_term_id = -1;
-    if (current_frame->frame_type == KEY_FRAME) {
+    if (current_frame->frame_type == KEY_FRAME ||
+        current_frame->frame_type == INTRA_ONLY_FRAME) {
       const int long_term_id_plus_1 =
           avm_rb_read_literal(rb, seq_params->number_of_bits_for_lt_frame_id);
       current_frame->long_term_id = long_term_id_plus_1 - 1;

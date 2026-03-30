@@ -856,6 +856,7 @@ typedef struct LayerConfigurationRecord {
   struct GlobalLayerConfigurationRecord global_lcr;
   struct LocalLayerConfigurationRecord local_lcr;
   int lcr_extension_present_flag;
+  bool lcr_from_leading;
 } LayerConfigurationRecord;
 
 // Each AtlasSegmentInfo represents ONE atlas OBU
@@ -1079,6 +1080,7 @@ typedef struct SequenceHeader {
   int seq_header_id;
 
   int seq_lcr_id;
+  int sh_from_leading;
 
   int num_bits_width;
   int num_bits_height;

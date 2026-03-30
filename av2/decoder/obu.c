@@ -515,7 +515,8 @@ static uint32_t read_multi_stream_decoder_operation_obu(
 // On success, returns the number of bytes read from 'rb'.
 // On failure, sets pbi->common.error.error_code and returns 0.
 static uint32_t read_sequence_header_obu(AV2Decoder *pbi, int xlayer_id,
-                                         struct avm_read_bit_buffer *rb) {
+                                         struct avm_read_bit_buffer *rb,
+                                         uint16_t *acc_sh_id_bitmap) {
   AV2_COMMON *const cm = &pbi->common;
   const uint32_t saved_bit_offset = rb->bit_offset;
 
@@ -532,6 +533,8 @@ static uint32_t read_sequence_header_obu(AV2Decoder *pbi, int xlayer_id,
 
   struct SequenceHeader *seq_params = &pbi->seq_list[xlayer_id][seq_header_id];
   seq_params->seq_header_id = seq_header_id;
+  seq_params->sh_from_leading = 0;
+  acc_sh_id_bitmap[xlayer_id] |= (1 << seq_header_id);
 
   seq_params->seq_profile_idc = av2_read_profile(rb);
   if (seq_params->seq_profile_idc >= MAX_PROFILES) {
@@ -2452,6 +2455,8 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
   // grain models signalled before a coded frame have the same fgm_id
   uint32_t acc_fgm_id_bitmap = 0;
   uint32_t acc_mfh_id_bitmap = 0;
+  uint16_t acc_sh_id_bitmap[MAX_NUM_XLAYERS] = { 0 };
+  uint8_t acc_lcr_id_bitmap[MAX_NUM_XLAYERS] = { 0 };
   int prev_obu_xlayer_id = -1;
   // prev_obu_type, prev_xlayer_id and tu_validation_state are used to compare
   // obus in this "data"
@@ -2677,8 +2682,8 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
         break;
       case OBU_SEQUENCE_HEADER:
         cm->xlayer_id = obu_header.obu_xlayer_id;
-        decoded_payload_size =
-            read_sequence_header_obu(pbi, obu_header.obu_xlayer_id, &rb);
+        decoded_payload_size = read_sequence_header_obu(
+            pbi, obu_header.obu_xlayer_id, &rb, acc_sh_id_bitmap);
         if (cm->error.error_code != AVM_CODEC_OK) return -1;
         if (pbi->sbe_state.extraction_enabled) {
           av2_sbe_extract_seq_header_params(
@@ -2693,8 +2698,8 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
         if (cm->error.error_code != AVM_CODEC_OK) return -1;
         break;
       case OBU_LAYER_CONFIGURATION_RECORD:
-        decoded_payload_size =
-            av2_read_layer_configuration_record_obu(pbi, cm->xlayer_id, &rb);
+        decoded_payload_size = av2_read_layer_configuration_record_obu(
+            pbi, cm->xlayer_id, &rb, acc_lcr_id_bitmap);
         if (cm->error.error_code != AVM_CODEC_OK) return -1;
         // Allocate stream_info if Global LCR triggers multi-stream mode
         // (i.e., LcrMaxNumXLayerCount > 1 and no MSDO present)
@@ -2821,6 +2826,14 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
                                           [leading_mlayer_id]
                                           [OBU_BUFFER_REMOVAL_TIMING])
             cm->brt_info.brt_from_leading = true;
+          for (int x = 0; x < MAX_NUM_XLAYERS; x++)
+            for (int s = 0; s < MAX_SEQ_NUM; s++)
+              if (acc_sh_id_bitmap[x] & (1 << s))
+                pbi->seq_list[x][s].sh_from_leading = 1;
+          for (int x = 0; x < MAX_NUM_XLAYERS; x++)
+            for (int l = 0; l < MAX_NUM_LCR; l++)
+              if (acc_lcr_id_bitmap[x] & (1 << l))
+                pbi->lcr_list[x][l].lcr_from_leading = true;
         } else if (pbi->this_is_first_vcl_obu_in_tu == 1) {
           // SEF, TIP, SWITCH, RAS, BRIDGE, TG (not CLK)
           // MFH, QM, FGM, BRT, CI signalled in leading temporal unit cannot
@@ -2874,6 +2887,18 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
             memset(&cm->brt_info, 0, sizeof(cm->brt_info));
           }
           cm->brt_info.brt_from_leading = false;
+          for (int x = 0; x < MAX_NUM_XLAYERS; x++) {
+            for (int s = 0; s < MAX_SEQ_NUM; s++) {
+              if (!(pbi->seq_list[x][s].sh_from_leading == 1 &&
+                    !(acc_sh_id_bitmap[x] & (1 << s))))
+                pbi->seq_list[x][s].sh_from_leading = 0;
+            }
+            for (int l = 0; l < MAX_NUM_LCR; l++) {
+              if (!(pbi->lcr_list[x][l].lcr_from_leading &&
+                    !(acc_lcr_id_bitmap[x] & (1 << l))))
+                pbi->lcr_list[x][l].lcr_from_leading = false;
+            }
+          }
         }
 
         // It is a requirement that if multiple QM OBUs are present
@@ -2887,6 +2912,8 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
         // the same FGM ID more than once.
         acc_fgm_id_bitmap = 0;
         acc_mfh_id_bitmap = 0;
+        memset(acc_sh_id_bitmap, 0, sizeof(acc_sh_id_bitmap));
+        memset(acc_lcr_id_bitmap, 0, sizeof(acc_lcr_id_bitmap));
         decoded_payload_size = read_tilegroup_obu(
             pbi, &rb, data, data + payload_size, p_data_end, obu_header.type,
             obu_header.obu_xlayer_id, &curr_obu_info->first_tile_group,

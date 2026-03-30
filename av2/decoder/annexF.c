@@ -452,6 +452,10 @@ int av2_sbe_should_retain_obu(const SubBitstreamExtractionState *sbe,
     return 0;
   }
 
+  if (obu_type == OBU_TEMPORAL_DELIMITER) {
+    return 1;
+  }
+
   // Check if extended layer xId is selected: exists at least one pair (j,k)
   // where retention_map[xId][j][k] == 1
   int is_xlayer_selected = 0;

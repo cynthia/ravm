@@ -7400,7 +7400,7 @@ static void activate_layer_configuration_record(AV2Decoder *pbi,
       LayerConfigurationRecord *candidate =
           &pbi->lcr_list[current_xlayer_id][i];
       if (candidate->valid && !candidate->is_global &&
-          candidate->local_lcr.lcr_global_id == seq_lcr_id) {
+          candidate->local_lcr.lcr_local_id == seq_lcr_id) {
         lcr = candidate;
         break;
       }
@@ -7437,28 +7437,34 @@ static void activate_layer_configuration_record(AV2Decoder *pbi,
     // so that embedded layer info can fall back to it.
     if (!lcr->is_global) {
       int global_id = lcr->local_lcr.lcr_global_id;
-      LayerConfigurationRecord *parent_glcr =
-          &pbi->lcr_list[GLOBAL_XLAYER_ID][global_id];
-      if (parent_glcr->valid && parent_glcr->is_global) {
-        cm->global_lcr_params = *parent_glcr;
-        // Conformance: when a local LCR is present and its parent global LCR
-        // has xlayer_info for the same extended layer, the local LCR's
-        // xlayer_info shall be the same as the global LCR's xlayer_info.
-        const GlobalLayerConfigurationRecord *glcr = &parent_glcr->global_lcr;
-        for (int i = 0; i < glcr->LcrMaxNumXLayerCount; i++) {
-          if (glcr->LcrXLayerID[i] == lcr->xlayer_id) {
-            if (memcmp(&lcr->local_lcr.xlayer_info, &glcr->xlayer_info[i],
-                       sizeof(lcr->local_lcr.xlayer_info)) != 0) {
-              avm_internal_error(
-                  &cm->error, AVM_CODEC_UNSUP_BITSTREAM,
-                  "Local LCR xlayer_info for xlayer_id %d does not match "
-                  "the parent global LCR xlayer_info",
-                  lcr->xlayer_id);
+      if (global_id != LCR_ID_UNSPECIFIED) {
+        LayerConfigurationRecord *parent_glcr =
+            &pbi->lcr_list[GLOBAL_XLAYER_ID][global_id];
+        if (parent_glcr->valid && parent_glcr->is_global) {
+          cm->global_lcr_params = *parent_glcr;
+          // Conformance: when a local LCR is present and its parent global LCR
+          // has xlayer_info for the same extended layer, the local LCR's
+          // xlayer_info shall be the same as the global LCR's xlayer_info.
+          const GlobalLayerConfigurationRecord *glcr =
+              &parent_glcr->global_lcr;
+          for (int i = 0; i < glcr->LcrMaxNumXLayerCount; i++) {
+            if (glcr->LcrXLayerID[i] == lcr->xlayer_id) {
+              if (memcmp(&lcr->local_lcr.xlayer_info, &glcr->xlayer_info[i],
+                         sizeof(lcr->local_lcr.xlayer_info)) != 0) {
+                avm_internal_error(
+                    &cm->error, AVM_CODEC_UNSUP_BITSTREAM,
+                    "Local LCR xlayer_info for xlayer_id %d does not match "
+                    "the parent global LCR xlayer_info",
+                    lcr->xlayer_id);
+              }
+              break;
             }
-            break;
           }
+        } else {
+          memset(&cm->global_lcr_params, 0, sizeof(cm->global_lcr_params));
         }
       } else {
+        // No Global LCR associated with this Local LCR.
         memset(&cm->global_lcr_params, 0, sizeof(cm->global_lcr_params));
       }
     } else {

@@ -7445,8 +7445,7 @@ static void activate_layer_configuration_record(AV2Decoder *pbi,
           // Conformance: when a local LCR is present and its parent global LCR
           // has xlayer_info for the same extended layer, the local LCR's
           // xlayer_info shall be the same as the global LCR's xlayer_info.
-          const GlobalLayerConfigurationRecord *glcr =
-              &parent_glcr->global_lcr;
+          const GlobalLayerConfigurationRecord *glcr = &parent_glcr->global_lcr;
           for (int i = 0; i < glcr->LcrMaxNumXLayerCount; i++) {
             if (glcr->LcrXLayerID[i] == lcr->xlayer_id) {
               if (memcmp(&lcr->local_lcr.xlayer_info, &glcr->xlayer_info[i],

@@ -285,12 +285,22 @@ static void read_lcr_global_info(struct AV2Decoder *pbi,
   // This triggers is_multistream even without an MSDO OBU present.
   if (glcr->LcrMaxNumXLayerCount > 1) {
     pbi->glcr_is_present_in_tu = 1;
-    pbi->glcr_num_xlayers = glcr->LcrMaxNumXLayerCount;
-    // Copy xlayer IDs for stream_info allocation
-    cm->num_streams = glcr->LcrMaxNumXLayerCount;
+    // Accumulate xlayer IDs across all global LCRs (deduplicated)
     for (int i = 0; i < glcr->LcrMaxNumXLayerCount; i++) {
-      cm->stream_ids[i] = glcr->LcrXLayerID[i];
+      int xid = glcr->LcrXLayerID[i];
+      int found = 0;
+      for (int j = 0; j < cm->num_streams; j++) {
+        if (cm->stream_ids[j] == xid) {
+          found = 1;
+          break;
+        }
+      }
+      if (!found && cm->num_streams < AVM_MAX_NUM_STREAMS) {
+        cm->stream_ids[cm->num_streams] = xid;
+        cm->num_streams++;
+      }
     }
+    pbi->glcr_num_xlayers = cm->num_streams;
   }
 }
 

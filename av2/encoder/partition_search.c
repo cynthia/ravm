@@ -456,7 +456,12 @@ void av2_set_offsets(const AV2_COMP *const cpi, const TileInfo *const tile,
   av2_set_offsets_without_segment_id(cpi, tile, x, mi_row, mi_col, bsize,
                                      chroma_ref_info);
 
-  if (xd->tree_type == CHROMA_PART) return;
+  if (xd->tree_type == CHROMA_PART) {
+    if (seg->enabled) {
+      av2_init_plane_quantizers(cpi, x, xd->mi[0]->segment_id);
+    }
+    return;
+  }
 
   // Setup segment ID.
   mbmi = xd->mi[0];

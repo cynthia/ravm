@@ -2368,20 +2368,21 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
         pbi->obus_in_frame_unit_data[0][0][OBU_TEMPORAL_DELIMITER] &&
         !pbi->obus_in_frame_unit_data[0][0]
                                      [OBU_MULTI_STREAM_DECODER_OPERATION] &&
-        !pbi->glcr_obu_in_frame_unit &&
         (pbi->obus_in_frame_unit_data[tid][mid][OBU_CLOSED_LOOP_KEY] ||
          pbi->obus_in_frame_unit_data[tid][mid][OBU_OPEN_LOOP_KEY] ||
          pbi->obus_in_frame_unit_data[tid][mid][OBU_RAS_FRAME])) {
-      // Flush and reset like a config change
-      if (pbi->stream_info != NULL) {
-        flush_all_xlayer_frames(pbi, cm, true);
-        avm_free(pbi->stream_info);
-        pbi->stream_info = NULL;
-      }
-      cm->num_streams = 0;
-      for (int i = 0; i < AVM_MAX_NUM_STREAMS; i++) pbi->xlayer_id_map[i] = 0;
+      if (!pbi->glcr_obu_in_frame_unit) {
+        // Flush and reset like a config change
+        if (pbi->stream_info != NULL) {
+          flush_all_xlayer_frames(pbi, cm, true);
+          avm_free(pbi->stream_info);
+          pbi->stream_info = NULL;
+        }
+        cm->num_streams = 0;
+        for (int i = 0; i < AVM_MAX_NUM_STREAMS; i++) pbi->xlayer_id_map[i] = 0;
 
-      pbi->is_multistream = 0;
+        pbi->is_multistream = 0;
+      }
       pbi->multistream_decoder_mode = 0;
     }
   }

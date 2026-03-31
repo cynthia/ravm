@@ -670,6 +670,11 @@ typedef struct AV2Decoder {
    */
   int glcr_num_xlayers;
   /*!
+   * Number of StreamInfo entries currently allocated in stream_info.
+   * Used to detect when reallocation is needed for additional global LCRs.
+   */
+  int glcr_stream_info_num_allocated;
+  /*!
    * Map to indicate which xlayer is present in the current CVS.
    */
   int xlayer_id_map[AVM_MAX_NUM_STREAMS];

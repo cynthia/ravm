@@ -465,6 +465,7 @@ void av2_decoder_remove(AV2Decoder *pbi) {
     if (pbi->stream_info != NULL) {
       avm_free(pbi->stream_info);
       pbi->stream_info = NULL;
+      pbi->glcr_stream_info_num_allocated = 0;
     }
   }
 

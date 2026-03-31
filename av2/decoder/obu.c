@@ -481,6 +481,7 @@ static uint32_t read_multi_stream_decoder_operation_obu(
     flush_all_xlayer_frames(pbi, cm, true);
     avm_free(pbi->stream_info);
     pbi->stream_info = NULL;
+    pbi->glcr_stream_info_num_allocated = 0;
 
     // Reset xlayer_id_map so only the new segment's layers are active
     for (int i = 0; i < AVM_MAX_NUM_STREAMS; i++) {
@@ -2377,6 +2378,7 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
           flush_all_xlayer_frames(pbi, cm, true);
           avm_free(pbi->stream_info);
           pbi->stream_info = NULL;
+          pbi->glcr_stream_info_num_allocated = 0;
         }
         cm->num_streams = 0;
         for (int i = 0; i < AVM_MAX_NUM_STREAMS; i++) pbi->xlayer_id_map[i] = 0;
@@ -2702,22 +2704,31 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
         decoded_payload_size = av2_read_layer_configuration_record_obu(
             pbi, cm->xlayer_id, &rb, acc_lcr_id_bitmap);
         if (cm->error.error_code != AVM_CODEC_OK) return -1;
-        // Allocate stream_info if Global LCR triggers multi-stream mode
-        // (i.e., LcrMaxNumXLayerCount > 1 and no MSDO present)
+        // Allocate or reallocate stream_info if Global LCR triggers
+        // multi-stream mode and more space is needed.
         if (cm->xlayer_id == GLOBAL_XLAYER_ID && pbi->glcr_is_present_in_tu &&
-            !pbi->msdo_is_present_in_tu && pbi->stream_info == NULL) {
+            !pbi->msdo_is_present_in_tu &&
+            pbi->glcr_num_xlayers > pbi->glcr_stream_info_num_allocated) {
           const int num_streams = pbi->glcr_num_xlayers;
-          pbi->stream_info =
+          const int old_count = pbi->glcr_stream_info_num_allocated;
+          StreamInfo *new_info =
               (StreamInfo *)avm_malloc(num_streams * sizeof(StreamInfo));
-          if (pbi->stream_info == NULL) {
+          if (new_info == NULL) {
             avm_internal_error(&cm->error, AVM_CODEC_MEM_ERROR,
                                "Memory allocation failed for pbi->stream_info "
                                "(GLCR)\n");
           }
-          memset(pbi->stream_info, 0, num_streams * sizeof(StreamInfo));
-          for (int i = 0; i < num_streams; i++) {
-            init_stream_info(&pbi->stream_info[i]);
+          memset(new_info, 0, num_streams * sizeof(StreamInfo));
+          if (pbi->stream_info != NULL && old_count > 0) {
+            memcpy(new_info, pbi->stream_info,
+                   old_count * sizeof(StreamInfo));
+            avm_free(pbi->stream_info);
           }
+          for (int i = old_count; i < num_streams; i++) {
+            init_stream_info(&new_info[i]);
+          }
+          pbi->stream_info = new_info;
+          pbi->glcr_stream_info_num_allocated = num_streams;
         }
         if (pbi->sbe_state.extraction_enabled &&
             cm->xlayer_id == GLOBAL_XLAYER_ID) {

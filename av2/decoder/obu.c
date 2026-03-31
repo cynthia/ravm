@@ -2720,8 +2720,7 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
           }
           memset(new_info, 0, num_streams * sizeof(StreamInfo));
           if (pbi->stream_info != NULL && old_count > 0) {
-            memcpy(new_info, pbi->stream_info,
-                   old_count * sizeof(StreamInfo));
+            memcpy(new_info, pbi->stream_info, old_count * sizeof(StreamInfo));
             avm_free(pbi->stream_info);
           }
           for (int i = old_count; i < num_streams; i++) {

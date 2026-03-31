@@ -8074,6 +8074,16 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
             }
           }
         }
+
+        // A restricted switch frame resets the DOH epoch for this layer.
+        // This marks a CVS-internal epoch boundary where DOH derivation is
+        // restarted.
+        for (int ml = 0; ml <= cm->seq_params.max_mlayer_id; ml++) {
+          if (is_mlayer_transitively_dependent(&cm->seq_params, ml,
+                                               cm->mlayer_id)) {
+            pbi->last_output_doh[cm->xlayer_id][ml] = -1;
+          }
+        }
         memset(&pbi->last_frame_unit, -1, sizeof(pbi->last_frame_unit));
         memset(&pbi->last_displayable_frame_unit, -1,
                sizeof(pbi->last_displayable_frame_unit));

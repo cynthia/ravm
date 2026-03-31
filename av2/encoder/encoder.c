@@ -926,7 +926,8 @@ static void init_config(struct AV2_COMP *cpi, AV2EncoderConfig *oxcf) {
   cm->lcr->global_lcr.lcr_global_config_record_id = 1;
 
   // Init
-  // lcr_global_id must be non-zero since 0 is LCR_ID_UNSPECIFIED
+  // lcr_global_id == 0 (LCR_ID_UNSPECIFIED) means no Global LCR is associated
+  // with this Local LCR.
   cm->lcr_params.valid = 1;
   cm->lcr_params.is_global = false;
   cm->lcr_params.xlayer_id = 0;

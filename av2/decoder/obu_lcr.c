@@ -298,13 +298,15 @@ static void read_lcr_local_info(struct AV2Decoder *pbi, int xlayer_id,
                                 struct avm_read_bit_buffer *rb,
                                 uint8_t *acc_lcr_id_bitmap) {
   AV2_COMMON *const cm = &pbi->common;
+  // lcr_global_id == LCR_ID_UNSPECIFIED (0) is valid and means no Global LCR
+  // is associated with this Local LCR.
   int lcr_global_id = avm_rb_read_literal(rb, 3);
-  if (lcr_global_id == LCR_ID_UNSPECIFIED) {
+  int lcr_local_id = avm_rb_read_literal(rb, 3);
+  if (lcr_local_id == LCR_ID_UNSPECIFIED) {
     avm_internal_error(
         &cm->error, AVM_CODEC_UNSUP_BITSTREAM,
-        "Invalid lcr_global_id: LCR_ID_UNSPECIFIED (0) is not a valid LCR ID.");
+        "Invalid lcr_local_id: LCR_ID_UNSPECIFIED (0) is not a valid LCR ID.");
   }
-  int lcr_local_id = avm_rb_read_literal(rb, 3);
   LayerConfigurationRecord *lcr = &pbi->lcr_list[xlayer_id][lcr_local_id];
 
   // Snapshot the active LCR's local record if it matches this

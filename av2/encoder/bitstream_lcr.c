@@ -235,6 +235,8 @@ static int write_lcr_local_info(struct LayerConfigurationRecord *lcr_params,
                                 struct avm_write_bit_buffer *wb) {
   struct LocalLayerConfigurationRecord *llcr = &lcr_params->local_lcr;
 
+  assert(llcr->lcr_local_id != LCR_ID_UNSPECIFIED &&
+         "lcr_local_id must not be LCR_ID_UNSPECIFIED (0)");
   avm_wb_write_literal(wb, llcr->lcr_global_id, 3);
   avm_wb_write_literal(wb, llcr->lcr_local_id, 3);
   avm_wb_write_bit(wb, llcr->lcr_profile_tier_level_info_present_flag);

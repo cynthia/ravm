@@ -318,7 +318,6 @@ typedef struct {
   int seen_frame_header_buf;
   int next_start_tile_buf;
   int seen_vcl_obu_in_this_tu_buf;
-  int this_is_first_vcl_obu_in_tu_buf;
 } StreamInfo;
 
 /*!

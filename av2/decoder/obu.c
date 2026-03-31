@@ -263,8 +263,6 @@ void av2_store_xlayer_context(AV2Decoder *pbi, AV2_COMMON *cm, int xlayer_id) {
   pbi->stream_info[stream_idx].next_start_tile_buf = pbi->next_start_tile;
   pbi->stream_info[stream_idx].seen_vcl_obu_in_this_tu_buf =
       pbi->seen_vcl_obu_in_this_tu;
-  pbi->stream_info[stream_idx].this_is_first_vcl_obu_in_tu_buf =
-      pbi->this_is_first_vcl_obu_in_tu;
 }
 
 // Helper function to restore xlayer context
@@ -333,8 +331,6 @@ void av2_restore_xlayer_context(AV2Decoder *pbi, AV2_COMMON *cm,
   pbi->next_start_tile = pbi->stream_info[stream_idx].next_start_tile_buf;
   pbi->seen_vcl_obu_in_this_tu =
       pbi->stream_info[stream_idx].seen_vcl_obu_in_this_tu_buf;
-  pbi->this_is_first_vcl_obu_in_tu =
-      pbi->stream_info[stream_idx].this_is_first_vcl_obu_in_tu_buf;
 }
 
 static void init_stream_info(StreamInfo *stream_info) {
@@ -2684,7 +2680,6 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
             pbi->seen_frame_header = 0;
             pbi->next_start_tile = 0;
             pbi->seen_vcl_obu_in_this_tu = 0;
-            pbi->this_is_first_vcl_obu_in_tu = 0;
             pbi->doh_tu_order_hint_bits_set = 0;
             for (int i = 0; i < NUM_CUSTOM_QMS; i++) pbi->qm_protected[i] = 0;
           }

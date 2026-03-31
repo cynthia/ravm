@@ -629,17 +629,9 @@ static int check_and_update_output_doh(AV2Decoder *pbi,
   const int ml = frame->mlayer_id;
   const int doh = frame->display_order_hint;
 
-  // A restricted switch frame resets the DOH epoch for this layer.
-  // This marks a CVS-internal epoch boundary where DOH derivation is restarted.
-  if (frame->is_restricted_switch_frame) {
-    return 0;
-  }
-
   const int last_doh = pbi->last_output_doh[xl][ml];
+  if (doh <= last_doh) return 1;
 
-  if (doh <= last_doh) {
-    return 1;
-  }
   pbi->last_output_doh[xl][ml] = doh;
   return 0;
 }

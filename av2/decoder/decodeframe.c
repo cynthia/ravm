@@ -8245,7 +8245,7 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
       } else {
         // prevent resetting it to -1 when {OLK(s) - OLK(h)} when a hidden OLK
         // comes after a shown OLK
-        if (pbi->this_is_first_keyframe_unit_in_tu ||
+        if (pbi->this_is_first_vcl_obu_in_tu ||
             pbi->last_olk_tu_display_order_hint == -1) {
           pbi->last_olk_tu_display_order_hint = -1;
         }

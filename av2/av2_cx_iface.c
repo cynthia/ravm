@@ -2842,7 +2842,9 @@ static avm_codec_err_t encoder_init(avm_codec_ctx_t *ctx) {
             clamp(lap_lag_in_frames, 0, MAX_LAG_BUFFERS),
             &priv->stats_buf_context);
       }
-      init_ibp_info(priv->cpi->common.ibp_directional_weights);
+      if (res == AVM_CODEC_OK) {
+        init_ibp_info(priv->cpi->common.ibp_directional_weights);
+      }
     }
   }
 

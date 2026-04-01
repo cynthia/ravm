@@ -1528,10 +1528,16 @@ static INLINE void init_tip_ref_frame(AV2_COMMON *const cm) {
 }
 
 static INLINE void free_tip_ref_frame(AV2_COMMON *const cm) {
-  avm_free_frame_buffer(&cm->tip_ref.tip_frame->buf);
-  avm_free(cm->tip_ref.tip_frame);
-  avm_free_frame_buffer(&cm->tip_ref.tmp_tip_frame->buf);
-  avm_free(cm->tip_ref.tmp_tip_frame);
+  if (cm->tip_ref.tip_frame != NULL) {
+    avm_free_frame_buffer(&cm->tip_ref.tip_frame->buf);
+    avm_free(cm->tip_ref.tip_frame);
+    cm->tip_ref.tip_frame = NULL;
+  }
+  if (cm->tip_ref.tmp_tip_frame != NULL) {
+    avm_free_frame_buffer(&cm->tip_ref.tmp_tip_frame->buf);
+    avm_free(cm->tip_ref.tmp_tip_frame);
+    cm->tip_ref.tmp_tip_frame = NULL;
+  }
 }
 
 AV2_COMP *av2_create_compressor(AV2EncoderConfig *oxcf, BufferPool *const pool,

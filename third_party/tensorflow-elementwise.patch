@@ -2,7 +2,16 @@ diff --git a/tensorflow/lite/kernels/elementwise.cc b/tensorflow/lite/kernels/el
 index 1ac5680d8c..4e0a196eea 100644
 --- a/tensorflow/lite/kernels/elementwise.cc
 +++ b/tensorflow/lite/kernels/elementwise.cc
-@@ -301,7 +301,8 @@ TfLiteStatus AbsEval(TfLiteContext* context, TfLiteNode* node) {
+@@ -293,7 +293,8 @@ TfLiteStatus AbsEval(TfLiteContext* context, TfLiteNode* node) {
+   switch (type) {
+     case kTfLiteFloat32:
+-      return EvalImpl<float>(context, node, std::abs<float>, type);
++      return EvalImpl<float>(context, node,
++                         [](float v) { return std::abs(v); }, type);
+     case kTfLiteInt8:
+       return AbsEvalQuantized<int8_t>(context, node, type);
+     case kTfLiteInt16:
+@@ -301,7 +302,8 @@ TfLiteStatus AbsEval(TfLiteContext* context, TfLiteNode* node) {
                   ? AbsInt16EvalImpl(context, node, type)
                   : AbsEvalQuantized<int16_t>(context, node, type);
      case kTfLiteInt32:

@@ -130,8 +130,8 @@ static const arg_def_t outallarg = ARG_DEF(
 static const arg_def_t skipfilmgrain =
     ARG_DEF(NULL, "skip-film-grain", 0, "Skip film grain application");
 static const arg_def_t randomaccess =
-    ARG_DEF(NULL, "random-access", 0,
-            "Random access to random-access-th random access point");
+    ARG_DEF(NULL, "random-access-point-index", 1,
+            "Start decoding at the N-th random access point");
 static const arg_def_t bruoptmodearg =
     ARG_DEF(NULL, "bru-opt-mode", 0, "Use BRU optimized decode mode");
 static const arg_def_t icc_file =

@@ -6215,10 +6215,9 @@ BEGIN_PARTITION_SEARCH:
                          &part_split_rd, &level_banks, ptree_luma,
                          template_tree, max_recursion_depth - 1);
 
-  if (search_none_after_split) {
+  if (search_none_after_split && pc_tree->partitioning == PARTITION_SPLIT) {
     // Based on split result, decide if we want to further delay the search to
     // after rect
-    assert(pc_tree->partitioning == PARTITION_SPLIT);
     for (int idx = 0; idx < 4; idx++) {
       const int depth =
           get_partition_depth(pc_tree->split[pc_tree->region_type][idx], 0);

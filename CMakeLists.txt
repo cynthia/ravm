@@ -564,6 +564,7 @@ if(CONFIG_AV2_ENCODER)
         "tar -xzf tensorflow.tar.gz; "
         "cd tensorflow; "
         "patch -p1 < ../tensorflow-designated-initializers.patch; "
+        "patch -p1 < ../tensorflow-elementwise.patch; "
         "cd ..; "
         "tar -xzf deps_cmake.tar.gz; "
         "cp deps_cmake/abseil-cpp.cmake ${CMAKE_CURRENT_SOURCE_DIR}/third_party/tensorflow/tensorflow/lite/tools/cmake/modules; "

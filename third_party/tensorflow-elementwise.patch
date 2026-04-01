@@ -1,0 +1,14 @@
+diff --git a/tensorflow/lite/kernels/elementwise.cc b/tensorflow/lite/kernels/elementwise.cc
+index 1ac5680d8c..4e0a196eea 100644
+--- a/tensorflow/lite/kernels/elementwise.cc
++++ b/tensorflow/lite/kernels/elementwise.cc
+@@ -301,7 +301,8 @@ TfLiteStatus AbsEval(TfLiteContext* context, TfLiteNode* node) {
+                  ? AbsInt16EvalImpl(context, node, type)
+                  : AbsEvalQuantized<int16_t>(context, node, type);
+     case kTfLiteInt32:
+-      return EvalImpl<int32_t>(context, node, std::abs<int32_t>, type);
++      return EvalImpl<int32_t>(context, node,
++                         [](int32_t v) { return std::abs(v); }, type);
+     default:
+       TF_LITE_KERNEL_LOG(context, "Current data type %s is not supported.",
+                          TfLiteTypeGetName(type));

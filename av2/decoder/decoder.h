@@ -606,8 +606,8 @@ typedef struct AV2Decoder {
   /*!
    * A decoder option to start decoding from the random_access_point_index-th
    * random access point. random_accessed is set to be true when
-   * random_access_point_index is equal to random_access_point_count   * when
-   * not used, the default value is -1
+   * random_access_point_index is equal to random_access_point_count.
+   * When not used, the default value is -1
    */
   int64_t random_access_point_index;
   /*!

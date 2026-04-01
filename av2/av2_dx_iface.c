@@ -112,6 +112,7 @@ static avm_codec_err_t decoder_init(avm_codec_ctx_t *ctx) {
 
     priv->selected_ops_id = -1;
     priv->selected_op_index = -1;
+    priv->random_access_point_index = -1;
     priv->enable_sub_bitstream_extraction = 0;
     priv->num_local_ops_selections = 0;
 

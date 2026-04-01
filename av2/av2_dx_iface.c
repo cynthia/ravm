@@ -112,6 +112,7 @@ static avm_codec_err_t decoder_init(avm_codec_ctx_t *ctx) {
 
     priv->selected_ops_id = -1;
     priv->selected_op_index = -1;
+    priv->random_access_point_index = -1;
     priv->enable_sub_bitstream_extraction = 0;
     priv->num_local_ops_selections = 0;
 
@@ -845,6 +846,7 @@ static avm_codec_err_t decoder_decode(avm_codec_alg_priv_t *ctx,
   // loop with while() to make the test decoder in the encoder works same as a
   // standalone decoder.
   struct AV2Decoder *pbi = frame_worker_data->pbi;
+  bool ra_counted_in_tu = false;
   while (data_start < data_end) {
     int xlayer_id = -1;
     int mlayer_id = -1;  // vcl obu's mlayer_id
@@ -855,30 +857,56 @@ static avm_codec_err_t decoder_decode(avm_codec_alg_priv_t *ctx,
     if (frame_unit_size == 0 || frame_unit_size == SIZE_MAX) {
       return AVM_CODEC_ERROR;
     }
-    if (pbi->obus_in_frame_unit_data[0][0][OBU_TEMPORAL_DELIMITER])
+    if (pbi->obus_in_frame_unit_data[0][0][OBU_TEMPORAL_DELIMITER]) {
       pbi->last_decoded_xlayer_id = -1;
+      ra_counted_in_tu = false;
+    }
     bool has_key_obu =
         pbi->obus_in_frame_unit_data[tlayer_id][mlayer_id]
                                     [OBU_CLOSED_LOOP_KEY] ||
-        pbi->obus_in_frame_unit_data[tlayer_id][mlayer_id][OBU_OPEN_LOOP_KEY];
+        pbi->obus_in_frame_unit_data[tlayer_id][mlayer_id][OBU_OPEN_LOOP_KEY] ||
+        pbi->obus_in_frame_unit_data[tlayer_id][mlayer_id][OBU_RAS_FRAME];
     pbi->current_mlayer_id = mlayer_id;
     pbi->current_tlayer_id = tlayer_id;
 
     // droping leading obus if neccessary
-    // pbi->random_accessed is set in main_loop() when parsing begins at a
-    // random access point
+    // pbi->random_accessed is set when random_access_point_count reaches
+    // random_access_point_index
     bool has_leading_frame =
         pbi->obus_in_frame_unit_data[tlayer_id][mlayer_id]
                                     [OBU_LEADING_TILE_GROUP] ||
         pbi->obus_in_frame_unit_data[tlayer_id][mlayer_id][OBU_LEADING_SEF] ||
         pbi->obus_in_frame_unit_data[tlayer_id][mlayer_id][OBU_LEADING_TIP];
-    if (pbi->random_accessed && has_leading_frame) {
+
+    bool is_target_rap =
+        (pbi->random_access_point_count - 1 == pbi->random_access_point_index);
+
+    if (pbi->random_accessed && has_leading_frame && is_target_rap) {
       data_start += frame_unit_size;
       continue;
-    } else if ((pbi->random_accessed && !has_key_obu) ||
-               pbi->obus_in_frame_unit_data[tlayer_id][mlayer_id]
+    } else if (pbi->random_accessed && !has_key_obu && !has_leading_frame) {
+      pbi->random_accessed = false;
+    } else if (pbi->obus_in_frame_unit_data[tlayer_id][mlayer_id]
                                            [OBU_CLOSED_LOOP_KEY]) {
       pbi->random_accessed = false;
+    }
+
+    // Count random access points and derive random_accessed (0-based).
+    // This runs after the reset logic above so that random_accessed
+    // persists from the key OBU into subsequent frame units.
+    if (has_key_obu && !ra_counted_in_tu) {
+      ra_counted_in_tu = true;
+      if (pbi->random_access_point_count == pbi->random_access_point_index) {
+        pbi->random_accessed = true;
+      }
+      pbi->random_access_point_count++;
+    }
+
+    // Skip all frame units before the target random access point
+    if (pbi->random_access_point_index >= 0 &&
+        pbi->random_access_point_count <= pbi->random_access_point_index) {
+      data_start += frame_unit_size;
+      continue;
     }
 
     // Reset last_frame_unit and last_displayable_frame_unit for this xlayer

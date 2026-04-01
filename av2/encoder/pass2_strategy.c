@@ -1575,6 +1575,18 @@ static INLINE void set_baseline_gf_interval(AV2_COMP *cpi, int arf_position,
   } else {
     rc->baseline_gf_interval = arf_position;
   }
+
+  // In LAP mode, is_last_kf may fail to detect the last KF interval because
+  // the stats buffer doesn't represent the true end of the clip. Cap
+  // baseline_gf_interval against the actual lookahead depth to prevent
+  // arf_src_offset from exceeding available frames.
+  if (cpi->lap_enabled) {
+    const int la_depth =
+        av2_lookahead_depth(cpi->lookahead, cpi->compressor_stage);
+    if (rc->baseline_gf_interval > la_depth)
+      rc->baseline_gf_interval = la_depth;
+  }
+
   assert(rc->baseline_gf_interval > 0);
 }
 

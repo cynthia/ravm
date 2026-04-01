@@ -1,0 +1,21 @@
+--- a/tensorflow/lite/kernels/elementwise.cc
++++ b/tensorflow/lite/kernels/elementwise.cc
+@@ -293,14 +293,16 @@
+   switch (type) {
+     case kTfLiteFloat32:
+-      return EvalImpl<float>(context, node, std::abs<float>, type);
++      return EvalImpl<float>(context, node,
++                         [](float v) { return std::abs(v); }, type);
+     case kTfLiteInt8:
+       return AbsEvalQuantized<int8_t>(context, node, type);
+     case kTfLiteInt16:
+       return input->quantization.type == kTfLiteNoQuantization
+                  ? AbsInt16EvalImpl(context, node, type)
+                  : AbsEvalQuantized<int16_t>(context, node, type);
+     case kTfLiteInt32:
+-      return EvalImpl<int32_t>(context, node, std::abs<int32_t>, type);
++      return EvalImpl<int32_t>(context, node,
++                         [](int32_t v) { return std::abs(v); }, type);
+     default:
+       TF_LITE_KERNEL_LOG(context, "Current data type %%s is not supported.",
+                          TfLiteTypeGetName(type));

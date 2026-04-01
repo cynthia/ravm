@@ -307,6 +307,10 @@ else()
   add_compiler_flag_if_supported("-Wunused")
   add_compiler_flag_if_supported("-Wvla")
 
+  # Workaround to suppress SFrame related warnings due to
+  # https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1112585
+  add_compiler_flag_if_supported("-Wa,--gsframe=no")
+
   if(CMAKE_C_COMPILER_ID MATCHES "GNU")
     add_c_flag_if_supported("-Wstack-usage=960000")
     add_cxx_flag_if_supported("-Wstack-usage=960000")

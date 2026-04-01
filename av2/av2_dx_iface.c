@@ -879,7 +879,8 @@ static avm_codec_err_t decoder_decode(avm_codec_alg_priv_t *ctx,
     if (pbi->random_accessed && has_leading_frame) {
       data_start += frame_unit_size;
       continue;
-    } else if ((pbi->random_accessed && !has_key_obu) ||
+    } else if ((pbi->random_accessed && !has_key_obu &&
+                !pbi->olk_encountered) ||
                pbi->obus_in_frame_unit_data[tlayer_id][mlayer_id]
                                            [OBU_CLOSED_LOOP_KEY]) {
       pbi->random_accessed = false;

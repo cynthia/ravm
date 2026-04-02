@@ -1382,6 +1382,13 @@ fail2:
         }
       }
       MD5Final(md5_digest, &md5_ctx);
+      FILE *outfile_md5 = open_outfile(outfile_name);
+      if (outfile_md5) {
+        fprint_md5(outfile_md5, md5_digest);
+        if (strcmp("-", outfile_name) != 0) {
+          fclose(outfile_md5);
+        }
+      }
       print_md5(md5_digest, outfile_name);
     } else {
       if (num_streams > 1) {

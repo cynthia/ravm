@@ -1382,10 +1382,10 @@ fail2:
         }
       }
       MD5Final(md5_digest, &md5_ctx);
-      FILE *outfile_md5 = open_outfile(outfile_name);
-      if (outfile_md5) {
-        fprint_md5(outfile_md5, md5_digest);
-        if (strcmp("-", outfile_name) != 0) {
+      if (strcmp("-", outfile_name) != 0) {
+        FILE *outfile_md5 = open_outfile(outfile_name);
+        if (outfile_md5) {
+          fprint_md5(outfile_md5, md5_digest);
           fclose(outfile_md5);
         }
       }

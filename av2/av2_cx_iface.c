@@ -1602,6 +1602,13 @@ static avm_codec_err_t set_encoder_config(AV2EncoderConfig *oxcf,
   oxcf->ref_frm_cfg.add_sef_for_hidden_frames =
       extra_cfg->add_sef_for_hidden_frames;
   oxcf->tool_cfg.monotonic_output_order = extra_cfg->monotonic_output_order;
+  if (oxcf->tool_cfg.monotonic_output_order &&
+      !oxcf->ref_frm_cfg.add_sef_for_hidden_frames) {
+    // `monotonic_output_order = 1` implies that `implicit_output_frame = 0`.
+    // So, explicit SEF OBUs must be signaled.
+    oxcf->ref_frm_cfg.add_sef_for_hidden_frames = 1;
+  }
+
   oxcf->row_mt = extra_cfg->row_mt;
 
   // Set motion mode related configuration.

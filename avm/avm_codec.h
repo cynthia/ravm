@@ -583,7 +583,7 @@ typedef enum ATTRIBUTE_PACKED {
   OBU_FILM_GRAIN_MODEL,
   OBU_CONTENT_INTERPRETATION,
   OBU_PADDING,
-  NUM_OBU_TYPES
+  NUM_OBU_TYPES = 32  // Also include reserved OBUs.
 } OBU_TYPE;
 
 /*!\brief OBU metadata types. */

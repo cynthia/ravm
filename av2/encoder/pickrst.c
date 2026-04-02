@@ -2546,8 +2546,12 @@ static void search_wienerns_visitor(const RestorationTileLimits *limits,
           nsfilter_params->ncoeffs, c_id, equal_ref_for_class);
       (void)is_equal;
       assert(is_equal >= 0);  // Must exist in bank
-      assert(rui_merge_best.wienerns_info.bank_ref_for_class[c_id] ==
-             equal_ref_for_class[c_id]);
+      assert(check_wienerns_eq(
+          &rui_merge_best.wienerns_info,
+          av2_constref_from_wienerns_bank(
+              &last_unit->ref_wienerns_bank,
+              rui_merge_best.wienerns_info.bank_ref_for_class[c_id], c_id),
+          nsfilter_params->ncoeffs, c_id));
       av2_upd_to_wienerns_bank(&rsc->wienerns_bank, equal_ref_for_class[c_id],
                                &rui_merge_best.wienerns_info, c_id);
     } else {

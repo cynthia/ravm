@@ -689,8 +689,25 @@ static int main_loop(int argc, const char **argv_) {
 
   const char *outfile_pattern = NULL;
   char outfile_name[PATH_MAX] = { 0 };
+
+  // In case of single stream, `outfile` is the output file where output video /
+  // MD5 is stored.
+  // In case of multi-stream:
+  // - `outfile_substream[i]` is the output file where output video / MD5 of
+  // i'th stream is stored.
+  // - `outfile` is either (a) a pointer to output file of current stream
+  // `outfile_substream[i]`, in case of video output or (b) output file where
+  // the overall multistream MD5 is stored.
+  // This implementation approach is for two reasons:
+  // 1. In case of video output, there is no "combined" multistream output, so
+  // `outfile` is repurposed to point to current output file. That way, all the
+  // video output related code can unconditionally use `outfile` for
+  // single/multistream cases.
+  // 2. In case of MD5 output, there is a "combined" multistream output, so
+  // `outfile` is used for this combined output file.
   FILE *outfile = NULL;
   FILE *outfile_substream[AVM_MAX_NUM_STREAMS] = { NULL, NULL, NULL, NULL };
+
   int substream_frame_out[AVM_MAX_NUM_STREAMS] = { 0, 0, 0, 0 };
   FILE *framestats_file = NULL;
 
@@ -930,7 +947,11 @@ static int main_loop(int argc, const char **argv_) {
     if (do_md5) {
       MD5Init(&md5_ctx);
     } else {
-      outfile = open_outfile(outfile_name);
+      if (num_streams > 1) {
+        // outfile will be set to outfile_substream[stream_id] below.
+      } else {
+        outfile = open_outfile(outfile_name);
+      }
     }
   }
 
@@ -1345,7 +1366,8 @@ static int main_loop(int argc, const char **argv_) {
             } else {
               raw_write_image_file(img, planes, num_planes, outfile);
             }
-            fclose(outfile);
+            if (outfile != stdout) fclose(outfile);
+            outfile = NULL;
           }
         }
       }
@@ -1384,10 +1406,8 @@ fail2:
       MD5Final(md5_digest, &md5_ctx);
       if (strcmp("-", outfile_name) != 0) {
         FILE *outfile_md5 = open_outfile(outfile_name);
-        if (outfile_md5) {
-          fprint_md5(outfile_md5, md5_digest);
-          fclose(outfile_md5);
-        }
+        fprint_md5(outfile_md5, md5_digest);
+        fclose(outfile_md5);
       }
       print_md5(md5_digest, outfile_name);
     } else {
@@ -1395,8 +1415,10 @@ fail2:
         for (int sub = 0; sub < num_streams; sub++) {
           fclose(outfile_substream[sub]);
         }
-      } else
-        fclose(outfile);
+      } else {
+        if (outfile != stdout) fclose(outfile);
+        outfile = NULL;
+      }
     }
   }
 

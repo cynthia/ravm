@@ -7936,11 +7936,25 @@ int read_obu_extension_bits(const uint8_t *obu_payload, size_t payload_size,
   return (int)extension_data_bits;
 }
 
+// Comparer function of references based on display order hint: for qsort.
+static int compare_refs(const void *a, const void *b) {
+  const RefCntBuffer *ref1 = a;
+  const RefCntBuffer *ref2 = b;
+
+  if (ref1->display_order_hint < ref2->display_order_hint) return -1;
+  if (ref1->display_order_hint > ref2->display_order_hint) return 1;
+  return 0;
+}
+
 // Called when we get a restricted SWITCH / RAS frame.
 // It outputs and marks as restricted the ref frames from dependent mlayers.
 static void output_references_and_mark_as_restricted(AV2Decoder *pbi) {
   AV2_COMMON *const cm = &pbi->common;
   assert(cm->restricted_prediction_switch);
+
+  // Find reference frames eligible for output.
+  RefCntBuffer *output_refs[REF_FRAMES];
+  int num_output_refs = 0;
 
   for (int i = 0; i < REF_FRAMES; i++) {
     if (cm->ref_frame_map[i] != NULL) {
@@ -7948,29 +7962,46 @@ static void output_references_and_mark_as_restricted(AV2Decoder *pbi) {
                                            cm->ref_frame_map[i]->mlayer_id,
                                            cm->mlayer_id)) {
         if (is_frame_eligible_for_output(cm->ref_frame_map[i])) {
-          if (cm->seq_params.monotonic_output_order_flag == 0) {
-            const int doh_error =
-                av2_check_and_update_output_doh(pbi, cm->ref_frame_map[i]);
-            if (doh_error) {
-              avm_internal_error(
-                  &cm->error, AVM_CODEC_UNSUP_BITSTREAM,
-                  "Display order hint of an output picture is not unique"
-                  " in the same (xlayer_id %d) layer.",
-                  cm->xlayer_id);
-            }
-          }
-          assign_output_frame_buffer_p(
-              &pbi->output_frames[pbi->num_output_frames++],
-              cm->ref_frame_map[i]);
-          cm->ref_frame_map[i]->frame_output_done = true;
+          output_refs[num_output_refs++] = cm->ref_frame_map[i];
+        }
+      }
+    }
+  }
+
+  // Sort eligible output frames by display order hint.
+  qsort(output_refs, num_output_refs, sizeof(output_refs[0]), compare_refs);
+
+  // Output the eligible frames.
+  for (int idx = 0; idx < num_output_refs; idx++) {
+    RefCntBuffer *ref = output_refs[idx];
+    if (cm->seq_params.monotonic_output_order_flag == 0) {
+      const int doh_error = av2_check_and_update_output_doh(pbi, ref);
+      if (doh_error) {
+        avm_internal_error(
+            &cm->error, AVM_CODEC_UNSUP_BITSTREAM,
+            "Display order hint of an output picture is not unique"
+            " in the same (xlayer_id %d) layer.",
+            cm->xlayer_id);
+      }
+    }
+    assign_output_frame_buffer_p(&pbi->output_frames[pbi->num_output_frames++],
+                                 ref);
+    ref->frame_output_done = true;
 #if CONFIG_BITSTREAM_DEBUG
-          avm_bitstream_queue_set_frame_read(
-              derive_output_order_idx(cm, cm->ref_frame_map[i]) * 2 + 1);
+    avm_bitstream_queue_set_frame_read(derive_output_order_idx(cm, ref) * 2 +
+                                       1);
 #endif  // CONFIG_BITSTREAM_DEBUG
 #if CONFIG_MISMATCH_DEBUG
-          mismatch_move_frame_idx_r(0);
+    mismatch_move_frame_idx_r(0);
 #endif  // CONFIG_MISMATCH_DEBUG
-        }
+  }
+
+  // Mark references as restricted.
+  for (int i = 0; i < REF_FRAMES; i++) {
+    if (cm->ref_frame_map[i] != NULL) {
+      if (is_mlayer_transitively_dependent(&cm->seq_params,
+                                           cm->ref_frame_map[i]->mlayer_id,
+                                           cm->mlayer_id)) {
         cm->ref_frame_map[i]->is_restricted = true;
         cm->ref_frame_map[i]->display_order_hint = REF_RESTRICTED_DOH;
       }

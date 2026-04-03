@@ -656,7 +656,7 @@ static int main_loop(int argc, const char **argv_) {
   int do_verify = 0, error_on_verify = 0;
   int stop_after = 0, summary = 0, quiet = 1;
   int arg_skip = 0;
-  int num_streams = 1;  // 1 - 4
+  int num_streams = 1;
   int keep_going = 0;
   uint64_t dx_time = 0;
   struct arg arg;
@@ -706,9 +706,9 @@ static int main_loop(int argc, const char **argv_) {
   // 2. In case of MD5 output, there is a "combined" multistream output, so
   // `outfile` is used for this combined output file.
   FILE *outfile = NULL;
-  FILE *outfile_substream[AVM_MAX_NUM_STREAMS] = { NULL, NULL, NULL, NULL };
+  FILE *outfile_substream[AVM_MAX_NUM_STREAMS] = { NULL };
 
-  int substream_frame_out[AVM_MAX_NUM_STREAMS] = { 0, 0, 0, 0 };
+  int substream_frame_out[AVM_MAX_NUM_STREAMS] = { 0 };
   FILE *framestats_file = NULL;
 
   FILE *icc_f = NULL;
@@ -799,6 +799,8 @@ static int main_loop(int argc, const char **argv_) {
       arg_skip = arg_parse_uint(&arg);
     } else if (arg_match(&arg, &numstreamsarg, argi)) {
       num_streams = arg_parse_uint(&arg);
+      if (num_streams == 0 || num_streams > AVM_MAX_NUM_STREAMS)
+        die("Error: --num-streams=%d is not supported.\n", num_streams);
     } else if (arg_match(&arg, &md5arg, argi)) {
       do_md5 = 1;
     } else if (arg_match(&arg, &verifyarg, argi)) {

@@ -1263,7 +1263,7 @@ static int main_loop(int argc, const char **argv_) {
                     stream_id, xlayer_id);
             goto fail;
           }
-          if (!do_md5) outfile = outfile_substream[stream_id];
+          if (single_file && !do_md5) outfile = outfile_substream[stream_id];
         }
         if (single_file) {
           if (use_y4m) {
@@ -1360,14 +1360,13 @@ static int main_loop(int argc, const char **argv_) {
             MD5Final(md5_digest, &md5_ctx);
             print_md5(md5_digest, outfile_name);
           } else {
-            outfile = open_outfile(outfile_name);
+            FILE *outfile_img = open_outfile(outfile_name);
             if (use_y4m) {
-              y4m_write_image_file(img, planes, outfile);
+              y4m_write_image_file(img, planes, outfile_img);
             } else {
-              raw_write_image_file(img, planes, num_planes, outfile);
+              raw_write_image_file(img, planes, num_planes, outfile_img);
             }
-            if (outfile != stdout) fclose(outfile);
-            outfile = NULL;
+            if (outfile_img != stdout) fclose(outfile_img);
           }
         }
       }
@@ -1417,7 +1416,6 @@ fail2:
         }
       } else {
         if (outfile != stdout) fclose(outfile);
-        outfile = NULL;
       }
     }
   }

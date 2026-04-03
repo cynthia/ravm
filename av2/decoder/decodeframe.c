@@ -7936,6 +7936,48 @@ int read_obu_extension_bits(const uint8_t *obu_payload, size_t payload_size,
   return (int)extension_data_bits;
 }
 
+// Called when we get a restricted SWITCH / RAS frame.
+// It outputs and marks as restricted the ref frames from dependent mlayers.
+static void output_references_and_mark_as_restricted(AV2Decoder *pbi) {
+  AV2_COMMON *const cm = &pbi->common;
+  assert(cm->restricted_prediction_switch);
+
+  for (int i = 0; i < REF_FRAMES; i++) {
+    if (cm->ref_frame_map[i] != NULL) {
+      if (is_mlayer_transitively_dependent(&cm->seq_params,
+                                           cm->ref_frame_map[i]->mlayer_id,
+                                           cm->mlayer_id)) {
+        if (is_frame_eligible_for_output(cm->ref_frame_map[i])) {
+          if (cm->seq_params.monotonic_output_order_flag == 0) {
+            const int doh_error =
+                av2_check_and_update_output_doh(pbi, cm->ref_frame_map[i]);
+            if (doh_error) {
+              avm_internal_error(
+                  &cm->error, AVM_CODEC_UNSUP_BITSTREAM,
+                  "Display order hint of an output picture is not unique"
+                  " in the same (xlayer_id %d) layer.",
+                  cm->xlayer_id);
+            }
+          }
+          assign_output_frame_buffer_p(
+              &pbi->output_frames[pbi->num_output_frames++],
+              cm->ref_frame_map[i]);
+          cm->ref_frame_map[i]->frame_output_done = true;
+#if CONFIG_BITSTREAM_DEBUG
+          avm_bitstream_queue_set_frame_read(
+              derive_output_order_idx(cm, cm->ref_frame_map[i]) * 2 + 1);
+#endif  // CONFIG_BITSTREAM_DEBUG
+#if CONFIG_MISMATCH_DEBUG
+          mismatch_move_frame_idx_r(0);
+#endif  // CONFIG_MISMATCH_DEBUG
+        }
+        cm->ref_frame_map[i]->is_restricted = true;
+        cm->ref_frame_map[i]->display_order_hint = REF_RESTRICTED_DOH;
+      }
+    }
+  }
+}
+
 // On success, returns 0. On failure, calls avm_internal_error and does not
 // return.
 static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
@@ -8056,29 +8098,8 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
       current_frame->frame_type = S_FRAME;
       cm->restricted_prediction_switch = avm_rb_read_bit(rb);
       if (cm->restricted_prediction_switch) {
-        for (int i = 0; i < REF_FRAMES; i++) {
-          if (cm->ref_frame_map[i] != NULL) {
-            if (is_mlayer_transitively_dependent(
-                    &cm->seq_params, cm->ref_frame_map[i]->mlayer_id,
-                    cm->mlayer_id)) {
-              cm->ref_frame_map[i]->is_restricted = true;
-              cm->ref_frame_map[i]->display_order_hint = REF_RESTRICTED_DOH;
-              if (is_frame_eligible_for_output(cm->ref_frame_map[i])) {
-                assign_output_frame_buffer_p(
-                    &pbi->output_frames[pbi->num_output_frames++],
-                    cm->ref_frame_map[i]);
-#if CONFIG_BITSTREAM_DEBUG
-                avm_bitstream_queue_set_frame_read(
-                    derive_output_order_idx(cm, cm->ref_frame_map[i]) * 2 + 1);
-#endif  // CONFIG_BITSTREAM_DEBUG
-#if CONFIG_MISMATCH_DEBUG
-                mismatch_move_frame_idx_r(0);
-#endif  // CONFIG_MISMATCH_DEBUG
-              }
-              cm->ref_frame_map[i]->frame_output_done = true;
-            }
-          }
-        }
+        // Output appropriate reference frames and mark them as restricted.
+        output_references_and_mark_as_restricted(pbi);
 
         // A restricted switch frame resets the DOH epoch for this layer.
         // This marks a CVS-internal epoch boundary where DOH derivation is

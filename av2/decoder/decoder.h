@@ -759,6 +759,10 @@ static INLINE bool is_frame_eligible_for_output(RefCntBuffer *const buf) {
           buf->implicit_output_picture);
 }
 
+// Check uniqueness and ascending order at output time, then update
+// last_output_doh.  Returns 0 on success, 1 on violation.
+int av2_check_and_update_output_doh(AV2Decoder *pbi, const RefCntBuffer *frame);
+
 static INLINE void check_ref_count_status_dec(struct AV2Decoder *pbi) {
   AV2_COMMON *volatile const cm = &pbi->common;
   RefCntBuffer *const frame_bufs = cm->buffer_pool->frame_bufs;

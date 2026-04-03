@@ -662,7 +662,6 @@ static int main_loop(int argc, const char **argv_) {
   struct arg arg;
   char **argv, **argi, **argj;
 
-  int single_file;
   int use_y4m = 1;
   int opt_yv12 = 0;
   int opt_i420 = 0;
@@ -911,7 +910,7 @@ static int main_loop(int argc, const char **argv_) {
   }
 
   outfile_pattern = outfile_pattern ? outfile_pattern : "-";
-  single_file = is_single_file(outfile_pattern);
+  const int single_file = is_single_file(outfile_pattern);
 
   if (!noblit && single_file) {
     generate_filename(outfile_pattern, outfile_name, PATH_MAX,

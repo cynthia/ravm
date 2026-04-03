@@ -689,8 +689,25 @@ static int main_loop(int argc, const char **argv_) {
 
   const char *outfile_pattern = NULL;
   char outfile_name[PATH_MAX] = { 0 };
+
+  // In case of single stream, `outfile` is the output file where output video /
+  // MD5 is stored.
+  // In case of multi-stream:
+  // - `outfile_substream[i]` is the output file where output video / MD5 of
+  // i'th stream is stored.
+  // - `outfile` is either (a) a pointer to output file of current stream
+  // `outfile_substream[i]`, in case of video output or (b) output file where
+  // the overall multistream MD5 is stored.
+  // This implementation approach is for two reasons:
+  // 1. In case of video output, there is no "combined" multistream output, so
+  // `outfile` is repurposed to point to current output file. That way, all the
+  // video output related code can unconditionally use `outfile` for
+  // single/multistream cases.
+  // 2. In case of MD5 output, there is a "combined" multistream output, so
+  // `outfile` is used for this combined output file.
   FILE *outfile = NULL;
   FILE *outfile_substream[AVM_MAX_NUM_STREAMS] = { NULL, NULL, NULL, NULL };
+
   int substream_frame_out[AVM_MAX_NUM_STREAMS] = { 0, 0, 0, 0 };
   FILE *framestats_file = NULL;
 
@@ -698,8 +715,12 @@ static int main_loop(int argc, const char **argv_) {
   uint8_t *icc_data = NULL;
   size_t icc_size = 0;
 
+  // MD5 context and digest used for single-stream outputs or combining all
+  // frames into a single MD5.
   MD5Context md5_ctx;
   unsigned char md5_digest[16];
+  // MD5 contexts and digests for per-stream outputs when decoding multiple
+  // sub-streams.
   MD5Context md5_ctx_substream[AVM_MAX_NUM_STREAMS];
   unsigned char md5_digest_substream[AVM_MAX_NUM_STREAMS][16];
 
@@ -915,24 +936,23 @@ static int main_loop(int argc, const char **argv_) {
   if (!noblit && single_file) {
     generate_filename(outfile_pattern, outfile_name, PATH_MAX,
                       avm_input_ctx.width, avm_input_ctx.height, 0);
-    if (do_md5) {
-      for (int sub = 0; sub < num_streams; sub++) {
-        MD5Init(&md5_ctx_substream[sub]);
-      }
-    }
     if (num_streams > 1) {
       for (int sub = 0; sub < num_streams; sub++) {
         char outfile_substream_name[PATH_MAX] = { 0 };
         add_postfix_stream_id(outfile_name, outfile_substream_name, sub);
         outfile_substream[sub] = open_outfile(outfile_substream_name);
+        if (do_md5) MD5Init(&md5_ctx_substream[sub]);
       }
-    } else if (do_md5) {
-      outfile_substream[0] = open_outfile(outfile_name);
     }
-    if (do_md5)
+    if (do_md5) {
       MD5Init(&md5_ctx);
-    else
-      outfile = open_outfile(outfile_name);
+    } else {
+      if (num_streams > 1) {
+        // outfile will be set to outfile_substream[stream_id] below.
+      } else {
+        outfile = open_outfile(outfile_name);
+      }
+    }
   }
 
   if (use_y4m && !noblit) {
@@ -1266,8 +1286,10 @@ static int main_loop(int argc, const char **argv_) {
                         "Using a placeholder.\n");
               }
               if (do_md5) {
-                MD5Update(&md5_ctx_substream[stream_id], (md5byte *)y4m_buf,
-                          (unsigned int)len);
+                if (num_streams > 1) {
+                  MD5Update(&md5_ctx_substream[stream_id], (md5byte *)y4m_buf,
+                            (unsigned int)len);
+                }
                 MD5Update(&md5_ctx, (md5byte *)y4m_buf, (unsigned int)len);
               } else {
                 fputs(y4m_buf, outfile);
@@ -1277,6 +1299,12 @@ static int main_loop(int argc, const char **argv_) {
             // Y4M frame header
             len = y4m_write_frame_header(y4m_buf, sizeof(y4m_buf));
             if (do_md5) {
+              if (num_streams > 1) {
+                MD5Update(&md5_ctx_substream[stream_id], (md5byte *)y4m_buf,
+                          (unsigned int)len);
+                y4m_update_image_md5(img, planes,
+                                     &md5_ctx_substream[stream_id]);
+              }
               MD5Update(&md5_ctx, (md5byte *)y4m_buf, (unsigned int)len);
               y4m_update_image_md5(img, planes, &md5_ctx);
             } else {
@@ -1308,10 +1336,12 @@ static int main_loop(int argc, const char **argv_) {
                   goto fail;
                 }
               }
-              raw_update_image_md5(img, planes, num_planes,
-                                   &md5_ctx_substream[stream_id]);
             }
             if (do_md5) {
+              if (num_streams > 1) {
+                raw_update_image_md5(img, planes, num_planes,
+                                     &md5_ctx_substream[stream_id]);
+              }
               raw_update_image_md5(img, planes, num_planes, &md5_ctx);
             } else {
               raw_write_image_file(img, planes, num_planes, outfile);
@@ -1321,17 +1351,6 @@ static int main_loop(int argc, const char **argv_) {
           generate_filename(outfile_pattern, outfile_name, PATH_MAX, img->d_w,
                             img->d_h, frame_in);
           if (do_md5) {
-            MD5Init(&md5_ctx_substream[stream_id]);
-            if (use_y4m) {
-              y4m_update_image_md5(img, planes, &md5_ctx_substream[stream_id]);
-            } else {
-              raw_update_image_md5(img, planes, num_planes,
-                                   &md5_ctx_substream[stream_id]);
-            }
-            MD5Final(md5_digest_substream[stream_id],
-                     &md5_ctx_substream[stream_id]);
-            fprint_md5(outfile_substream[stream_id],
-                       md5_digest_substream[stream_id]);
             MD5Init(&md5_ctx);
             if (use_y4m) {
               y4m_update_image_md5(img, planes, &md5_ctx);
@@ -1347,7 +1366,8 @@ static int main_loop(int argc, const char **argv_) {
             } else {
               raw_write_image_file(img, planes, num_planes, outfile);
             }
-            fclose(outfile);
+            if (outfile != stdout) fclose(outfile);
+            outfile = NULL;
           }
         }
       }
@@ -1376,20 +1396,29 @@ fail2:
 
   if (!noblit && single_file) {
     if (do_md5) {
-      for (int sub = 0; sub < num_streams; sub++) {
-        MD5Final(md5_digest_substream[sub], &md5_ctx_substream[sub]);
-        fprint_md5(outfile_substream[sub], md5_digest_substream[sub]);
-        fclose(outfile_substream[sub]);
+      if (num_streams > 1) {
+        for (int sub = 0; sub < num_streams; sub++) {
+          MD5Final(md5_digest_substream[sub], &md5_ctx_substream[sub]);
+          fprint_md5(outfile_substream[sub], md5_digest_substream[sub]);
+          fclose(outfile_substream[sub]);
+        }
       }
       MD5Final(md5_digest, &md5_ctx);
+      if (strcmp("-", outfile_name) != 0) {
+        FILE *outfile_md5 = open_outfile(outfile_name);
+        fprint_md5(outfile_md5, md5_digest);
+        fclose(outfile_md5);
+      }
       print_md5(md5_digest, outfile_name);
     } else {
       if (num_streams > 1) {
         for (int sub = 0; sub < num_streams; sub++) {
           fclose(outfile_substream[sub]);
         }
-      } else
-        fclose(outfile);
+      } else {
+        if (outfile != stdout) fclose(outfile);
+        outfile = NULL;
+      }
     }
   }
 

@@ -102,7 +102,7 @@ class OutputOrderTest : public ::libavm_test::CodecTestWithParam<int>,
     cfg_.sframe_dist = 4;
     cfg_.sframe_mode = 0;
     cfg_.sframe_type = 1;
-    // init_flags_ = AVM_CODEC_USE_PER_FRAME_STATS; // Enable to print encoder
+    init_flags_ = AVM_CODEC_USE_PER_FRAME_STATS;
     // logs and decoder output order DOH
   }
 

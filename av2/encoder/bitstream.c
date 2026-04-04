@@ -5259,6 +5259,20 @@ static AVM_INLINE void write_uncompressed_header(
       }
     }
 
+    // Test-only: defer output of non-KEY/non-S inter frames so they
+    // accumulate in ref_frame_map for the restricted_prediction_switch path.
+    const int test_modified =
+        cpi->oxcf.unit_test_cfg.force_hidden_for_ras_test &&
+        cm->immediate_output_picture &&
+        cm->current_frame.frame_type != KEY_FRAME &&
+        cm->current_frame.frame_type != S_FRAME &&
+        !cm->bridge_frame_info.is_bridge_frame &&
+        !seq_params->monotonic_output_order_flag;
+    if (test_modified) {
+      cm->immediate_output_picture = 0;
+      cm->implicit_output_picture = 1;
+    }
+
     if (cm->bridge_frame_info.is_bridge_frame) {
       if (cm->immediate_output_picture) {
         avm_internal_error(&cm->error, AVM_CODEC_UNSUP_BITSTREAM,
@@ -5283,6 +5297,12 @@ static AVM_INLINE void write_uncompressed_header(
     }
     cm->cur_frame->immediate_output_picture = cm->immediate_output_picture;
     cm->cur_frame->implicit_output_picture = cm->implicit_output_picture;
+
+    // Test-only: restore encoder state so subsequent encoding is unaffected.
+    if (test_modified) {
+      cm->immediate_output_picture = 1;
+      cm->implicit_output_picture = 0;
+    }
 
     assert(!seq_params->monotonic_output_order_flag ||
            !cm->implicit_output_picture);

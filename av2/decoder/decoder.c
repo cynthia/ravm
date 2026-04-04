@@ -615,16 +615,16 @@ avm_codec_err_t flush_remaining_frames(struct AV2Decoder *pbi,
       }
       assign_output_frame_buffer_p(
           &pbi->output_frames[pbi->num_output_frames++], output_candidate);
+      if (pbi->print_output_doh)
+        printf("DOH:%u\n", output_candidate->display_order_hint);
       output_candidate->frame_output_done = 1;
     }
   } while (output_candidate != NULL);
   return res;
 }
 
-// check uniqueness and ascending order at output time, then update
-// last_output_doh.  Returns 0 on success, 1 on violation.
-static int check_and_update_output_doh(AV2Decoder *pbi,
-                                       const RefCntBuffer *frame) {
+int av2_check_and_update_output_doh(AV2Decoder *pbi,
+                                    const RefCntBuffer *frame) {
   const int xl = frame->xlayer_id;
   const int ml = frame->mlayer_id;
   const int doh = frame->display_order_hint;
@@ -667,10 +667,12 @@ int output_frame_buffers(AV2Decoder *pbi, int ref_idx) {
     }
     if (output_candidate != trigger_frame) {
       if (cm->seq_params.monotonic_output_order_flag == 0) {
-        doh_error |= check_and_update_output_doh(pbi, output_candidate);
+        doh_error |= av2_check_and_update_output_doh(pbi, output_candidate);
       }
       assign_output_frame_buffer_p(
           &pbi->output_frames[pbi->num_output_frames++], output_candidate);
+      if (pbi->print_output_doh)
+        printf("DOH:%u\n", output_candidate->display_order_hint);
       output_candidate->frame_output_done = 1;
 #if CONFIG_BITSTREAM_DEBUG
       avm_bitstream_queue_set_frame_read(
@@ -684,10 +686,12 @@ int output_frame_buffers(AV2Decoder *pbi, int ref_idx) {
 
   if (cm->seq_params.monotonic_output_order_flag == 0) {
     // Add the output triggering frame into the output queue.
-    doh_error |= check_and_update_output_doh(pbi, trigger_frame);
+    doh_error |= av2_check_and_update_output_doh(pbi, trigger_frame);
   }
   assign_output_frame_buffer_p(&pbi->output_frames[pbi->num_output_frames++],
                                trigger_frame);
+  if (pbi->print_output_doh)
+    printf("DOH:%u\n", trigger_frame->display_order_hint);
   trigger_frame->frame_output_done = 1;
 
 #if CONFIG_BITSTREAM_DEBUG
@@ -715,11 +719,14 @@ int output_frame_buffers(AV2Decoder *pbi, int ref_idx) {
           derive_output_order_idx(cm, cm->ref_frame_map[i]) ==
               next_frame_output_order) {
         if (cm->seq_params.monotonic_output_order_flag == 0) {
-          doh_error |= check_and_update_output_doh(pbi, cm->ref_frame_map[i]);
+          doh_error |=
+              av2_check_and_update_output_doh(pbi, cm->ref_frame_map[i]);
         }
         assign_output_frame_buffer_p(
             &pbi->output_frames[pbi->num_output_frames++],
             cm->ref_frame_map[i]);
+        if (pbi->print_output_doh)
+          printf("DOH:%u\n", cm->ref_frame_map[i]->display_order_hint);
         cm->ref_frame_map[i]->frame_output_done = 1;
         successive_output++;
 #if CONFIG_BITSTREAM_DEBUG

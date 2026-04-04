@@ -366,6 +366,7 @@ typedef struct AV2Decoder {
   // Note: The saved buffers are released at the start of the next time the
   // application calls avm_codec_decode().
   int output_all_layers;
+  int print_output_doh;
   RefCntBuffer
       *output_frames[(REF_FRAMES + 1) *
                      AVM_MAX_NUM_STREAMS];  // RefCntBuffer is used for a single
@@ -758,6 +759,10 @@ static INLINE bool is_frame_eligible_for_output(RefCntBuffer *const buf) {
   return ((buf != NULL) && !buf->frame_output_done &&
           buf->implicit_output_picture);
 }
+
+// Check uniqueness and ascending order at output time, then update
+// last_output_doh.  Returns 0 on success, 1 on violation.
+int av2_check_and_update_output_doh(AV2Decoder *pbi, const RefCntBuffer *frame);
 
 static INLINE void check_ref_count_status_dec(struct AV2Decoder *pbi) {
   AV2_COMMON *volatile const cm = &pbi->common;

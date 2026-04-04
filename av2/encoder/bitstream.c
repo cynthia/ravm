@@ -5262,7 +5262,7 @@ static AVM_INLINE void write_uncompressed_header(
     // Test-only: defer output of non-KEY/non-S inter frames so they
     // accumulate in ref_frame_map for the restricted_prediction_switch path.
     const int test_modified =
-        cpi->oxcf.unit_test_cfg.force_hidden_for_ras_test &&
+        cpi->oxcf.unit_test_cfg.force_deferred_frames_for_ras_test &&
         cm->immediate_output_picture &&
         cm->current_frame.frame_type != KEY_FRAME &&
         cm->current_frame.frame_type != S_FRAME &&

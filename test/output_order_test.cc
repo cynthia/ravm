@@ -17,7 +17,7 @@
 // display_order_hint order
 //
 // Encodes with RA pyramid coding (which stores frames in non-display
-// order in ref_frame_map) and uses AV2E_SET_FORCE_HIDDEN_FOR_RAS_TEST
+// order in ref_frame_map) and uses AV2E_SET_FORCE_DEFERRED_FRAMES_FOR_RAS_TEST
 // to defer output of inter frames so they accumulate in ref_frame_map.
 // When the switch frame is decoded, the restricted_prediction_switch
 // path outputs these deferred frames.
@@ -102,7 +102,8 @@ class OutputOrderTest : public ::libavm_test::CodecTestWithParam<int>,
     cfg_.sframe_dist = 4;
     cfg_.sframe_mode = 0;
     cfg_.sframe_type = 1;
-    //init_flags_ = AVM_CODEC_USE_PER_FRAME_STATS; // Enable to print encoder logs and decoder output order DOH
+    // init_flags_ = AVM_CODEC_USE_PER_FRAME_STATS; // Enable to print encoder
+    // logs and decoder output order DOH
   }
 
   void PreEncodeFrameHook(::libavm_test::VideoSource *video,
@@ -120,7 +121,7 @@ class OutputOrderTest : public ::libavm_test::CodecTestWithParam<int>,
       encoder->Control(AV2E_SET_ENABLE_TPL_MODEL, 0);
       encoder->Control(AV2E_SET_ENABLE_EXPLICIT_REF_FRAME_MAP, 1);
       encoder->SetOption("enable-intrabc-ext", "2");
-      encoder->Control(AV2E_SET_FORCE_HIDDEN_FOR_RAS_TEST, 1);
+      encoder->Control(AV2E_SET_FORCE_DEFERRED_FRAMES_FOR_RAS_TEST, 1);
     }
   }
 

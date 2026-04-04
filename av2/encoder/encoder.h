@@ -700,7 +700,7 @@ typedef struct {
   int multi_layers_lag_test;
   // Test-only: defer output of non-KEY/non-S frames to exercise the
   // restricted_prediction_switch output ordering path.
-  int force_hidden_for_ras_test;
+  int force_deferred_frames_for_ras_test;
   // Signal one sequence header for the entire sequence.
   uint8_t single_seq_header_for_all_test;
 } UnitTestCfg;

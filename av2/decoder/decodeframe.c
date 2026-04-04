@@ -7938,8 +7938,8 @@ int read_obu_extension_bits(const uint8_t *obu_payload, size_t payload_size,
 
 // Comparer function of references based on display order hint: for qsort.
 static int compare_refs(const void *a, const void *b) {
-  const RefCntBuffer *ref1 = a;
-  const RefCntBuffer *ref2 = b;
+  const RefCntBuffer *ref1 = *(const RefCntBuffer *const *)a;
+  const RefCntBuffer *ref2 = *(const RefCntBuffer *const *)b;
 
   if (ref1->display_order_hint < ref2->display_order_hint) return -1;
   if (ref1->display_order_hint > ref2->display_order_hint) return 1;

@@ -7982,6 +7982,7 @@ static void output_references_and_mark_as_restricted(AV2Decoder *pbi) {
   // Output the eligible frames.
   for (int idx = 0; idx < num_output_refs; idx++) {
     RefCntBuffer *ref = output_refs[idx];
+    if (pbi->print_output_doh) printf("DOH:%u\n", ref->display_order_hint);
     if (cm->seq_params.monotonic_output_order_flag == 0) {
       const int doh_error = av2_check_and_update_output_doh(pbi, ref);
       if (doh_error) {
@@ -8136,6 +8137,10 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
     } else if (obu_type == OBU_RAS_FRAME || obu_type == OBU_SWITCH) {
       current_frame->frame_type = S_FRAME;
       cm->restricted_prediction_switch = avm_rb_read_bit(rb);
+      printf(
+          "current_frame->display_order_hint, "
+          "cm->restricted_prediction_switch: %d, %d\n",
+          current_frame->display_order_hint, cm->restricted_prediction_switch);
       if (cm->restricted_prediction_switch) {
         // Output appropriate reference frames and mark them as restricted.
         output_references_and_mark_as_restricted(pbi);

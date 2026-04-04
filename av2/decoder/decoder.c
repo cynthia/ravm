@@ -615,6 +615,8 @@ avm_codec_err_t flush_remaining_frames(struct AV2Decoder *pbi,
       }
       assign_output_frame_buffer_p(
           &pbi->output_frames[pbi->num_output_frames++], output_candidate);
+      if (pbi->print_output_doh)
+        printf("DOH:%u\n", output_candidate->display_order_hint);
       output_candidate->frame_output_done = 1;
     }
   } while (output_candidate != NULL);
@@ -669,6 +671,8 @@ int output_frame_buffers(AV2Decoder *pbi, int ref_idx) {
       }
       assign_output_frame_buffer_p(
           &pbi->output_frames[pbi->num_output_frames++], output_candidate);
+      if (pbi->print_output_doh)
+        printf("DOH:%u\n", output_candidate->display_order_hint);
       output_candidate->frame_output_done = 1;
 #if CONFIG_BITSTREAM_DEBUG
       avm_bitstream_queue_set_frame_read(
@@ -686,6 +690,8 @@ int output_frame_buffers(AV2Decoder *pbi, int ref_idx) {
   }
   assign_output_frame_buffer_p(&pbi->output_frames[pbi->num_output_frames++],
                                trigger_frame);
+  if (pbi->print_output_doh)
+    printf("DOH:%u\n", trigger_frame->display_order_hint);
   trigger_frame->frame_output_done = 1;
 
 #if CONFIG_BITSTREAM_DEBUG
@@ -719,6 +725,8 @@ int output_frame_buffers(AV2Decoder *pbi, int ref_idx) {
         assign_output_frame_buffer_p(
             &pbi->output_frames[pbi->num_output_frames++],
             cm->ref_frame_map[i]);
+        if (pbi->print_output_doh)
+          printf("DOH:%u\n", cm->ref_frame_map[i]->display_order_hint);
         cm->ref_frame_map[i]->frame_output_done = 1;
         successive_output++;
 #if CONFIG_BITSTREAM_DEBUG

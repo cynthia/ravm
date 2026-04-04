@@ -7936,14 +7936,22 @@ int read_obu_extension_bits(const uint8_t *obu_payload, size_t payload_size,
   return (int)extension_data_bits;
 }
 
-// Comparer function of references based on display order hint: for qsort.
-static int compare_refs(const void *a, const void *b) {
-  const RefCntBuffer *ref1 = *(const RefCntBuffer *const *)a;
-  const RefCntBuffer *ref2 = *(const RefCntBuffer *const *)b;
+// Sort references by output order.
+// We use bubble sort as maximum count is small (REF_FRAMES).
+static void sort_refs_by_output_order(AV2_COMMON *cm, RefCntBuffer **refs,
+                                      int count) {
+  for (int i = 0; i < count - 1; ++i) {
+    for (int j = i + 1; j < count; ++j) {
+      const uint64_t order_idx1 = derive_output_order_idx(cm, refs[i]);
+      const uint64_t order_idx2 = derive_output_order_idx(cm, refs[j]);
 
-  if (ref1->display_order_hint < ref2->display_order_hint) return -1;
-  if (ref1->display_order_hint > ref2->display_order_hint) return 1;
-  return 0;
+      if (order_idx1 > order_idx2) {
+        RefCntBuffer *tmp = refs[i];
+        refs[i] = refs[j];
+        refs[j] = tmp;
+      }
+    }
+  }
 }
 
 // Called when we get a restricted SWITCH / RAS frame.
@@ -7968,8 +7976,8 @@ static void output_references_and_mark_as_restricted(AV2Decoder *pbi) {
     }
   }
 
-  // Sort eligible output frames by display order hint.
-  qsort(output_refs, num_output_refs, sizeof(output_refs[0]), compare_refs);
+  // Sort eligible output frames by output order.
+  sort_refs_by_output_order(cm, output_refs, num_output_refs);
 
   // Output the eligible frames.
   for (int idx = 0; idx < num_output_refs; idx++) {

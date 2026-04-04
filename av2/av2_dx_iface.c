@@ -474,7 +474,6 @@ static avm_codec_err_t init_decoder(avm_codec_alg_priv_t *ctx) {
   }
   frame_worker_data->pbi->output_all_layers = ctx->output_all_layers;
   frame_worker_data->pbi->print_output_doh = ctx->print_output_doh;
-  frame_worker_data->pbi->print_output_doh = ctx->print_output_doh;
   frame_worker_data->pbi->row_mt = ctx->row_mt;
   frame_worker_data->pbi->is_fwd_kf_present = 0;
   frame_worker_data->pbi->enable_subgop_stats = ctx->enable_subgop_stats;

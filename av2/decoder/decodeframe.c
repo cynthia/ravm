@@ -8069,6 +8069,10 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
     } else if (obu_type == OBU_RAS_FRAME || obu_type == OBU_SWITCH) {
       current_frame->frame_type = S_FRAME;
       cm->restricted_prediction_switch = avm_rb_read_bit(rb);
+      printf(
+          "current_frame->display_order_hint, "
+          "cm->restricted_prediction_switch: %d, %d\n",
+          current_frame->display_order_hint, cm->restricted_prediction_switch);
       if (cm->restricted_prediction_switch) {
         for (int i = 0; i < REF_FRAMES; i++) {
           if (cm->ref_frame_map[i] != NULL) {
@@ -8086,6 +8090,9 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
                 }
               }
               cm->ref_frame_map[i]->is_restricted = true;
+              if (is_frame_eligible_for_output(cm->ref_frame_map[i]) &&
+                  pbi->print_output_doh)
+                printf("DOH:%u\n", cm->ref_frame_map[i]->display_order_hint);
               cm->ref_frame_map[i]->display_order_hint = REF_RESTRICTED_DOH;
             }
           }

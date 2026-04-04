@@ -1245,6 +1245,10 @@ enum avme_enc_control_id {
    */
   AV2E_SET_MONOTONIC_OUTPUT_ORDER = 184,
 
+  /*!\brief Test-only: defer output of non-KEY/non-S frames to exercise
+   * the restricted_prediction_switch output ordering path.
+   */
+  AV2E_SET_FORCE_HIDDEN_FOR_RAS_TEST = 185,
 };
 
 /*!\brief avm 1-D scaling mode
@@ -1769,6 +1773,9 @@ AVM_CTRL_USE_TYPE(AV2E_SET_ADD_SEF_FOR_HIDDEN_FRAMES, int)
 
 AVM_CTRL_USE_TYPE(AV2E_SET_MONOTONIC_OUTPUT_ORDER, int)
 #define AVME_CTRL_AV2E_SET_MONOTONIC_OUTPUT_ORDER
+
+AVM_CTRL_USE_TYPE(AV2E_SET_FORCE_HIDDEN_FOR_RAS_TEST, int)
+#define AVME_CTRL_AV2E_SET_FORCE_HIDDEN_FOR_RAS_TEST
 /*!\endcond */
 /*! @} - end defgroup avm_encoder */
 #ifdef __cplusplus

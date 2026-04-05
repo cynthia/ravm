@@ -8072,9 +8072,6 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
                 }
               }
               cm->ref_frame_map[i]->is_restricted = true;
-              if (is_frame_eligible_for_output(cm->ref_frame_map[i]) &&
-                  pbi->print_output_doh)
-                printf("DOH:%u\n", cm->ref_frame_map[i]->display_order_hint);
               cm->ref_frame_map[i]->display_order_hint = REF_RESTRICTED_DOH;
             }
           }

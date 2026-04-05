@@ -286,7 +286,7 @@ void ccso_filter_block_hbd_wo_buf_avx2(
 
       if (isSingleBand) {
         idx2 = _mm256_packus_epi16(idx2, idx2);
-        idx2 = _mm256_permute4x64_epi64(idx2, 0b00001000);
+        idx2 = _mm256_permute4x64_epi64(idx2, 0x08);
         offset = _mm256_shuffle_epi8(ccso_lut, idx2);
         offset = _mm256_cvtepi8_epi16(_mm256_extracti128_si256(offset, 0));
       } else {

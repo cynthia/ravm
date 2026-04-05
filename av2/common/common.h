@@ -30,17 +30,17 @@ extern "C" {
 #define PI 3.141592653589793238462643383279502884
 
 // Only need this for fixed-size arrays, for structs just assign.
-#define av2_copy(dest, src)              \
-  {                                      \
-    assert(sizeof(dest) == sizeof(src)); \
-    memcpy(dest, src, sizeof(src));      \
+#define av2_copy(dest, src)                         \
+  {                                                 \
+    static_assert(sizeof(dest) == sizeof(src), ""); \
+    memcpy(dest, src, sizeof(src));                 \
   }
 
 // Use this for variably-sized arrays.
-#define av2_copy_array(dest, src, n)           \
-  {                                            \
-    assert(sizeof(*(dest)) == sizeof(*(src))); \
-    memcpy(dest, src, n * sizeof(*(src)));     \
+#define av2_copy_array(dest, src, n)                      \
+  {                                                       \
+    static_assert(sizeof(*(dest)) == sizeof(*(src)), ""); \
+    memcpy(dest, src, n * sizeof(*(src)));                \
   }
 
 #define av2_zero(dest) memset(&(dest), 0, sizeof(dest))

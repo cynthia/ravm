@@ -71,7 +71,7 @@ void av2_decide_states_avx2(const struct tcq_node_t *prev,
                             struct tcq_node_t *decision) {
   (void)limits;
   assert((rdmult >> 32) == 0);
-  assert(sizeof(tcq_node_t) == 16);
+  static_assert(sizeof(tcq_node_t) == 16, "");
 
   __m256i c_rdmult = _mm256_set1_epi64x(rdmult);
   __m256i c_round = _mm256_set1_epi64x(1 << (AV2_PROB_COST_SHIFT - 1));

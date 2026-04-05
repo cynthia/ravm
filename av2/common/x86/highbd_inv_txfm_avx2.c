@@ -2938,7 +2938,7 @@ void inv_txfm_avx2(const tran_low_t *input, uint16_t *dest, int stride,
           data1 = _mm256_srl_epi64(data1, shift_bits);
           data1 = _mm256_permutevar8x32_epi32(data1, idx);
 
-          data = _mm256_blend_epi32(data0, data1, 0b11110000);
+          data = _mm256_blend_epi32(data0, data1, 0xf0);
 
           data = _mm256_min_epi32(_mm256_max_epi32(data, vcoefmin), vcoefmax);
           _mm256_storeu_si256((__m256i *)(block + y * width + i), data);
@@ -2974,7 +2974,7 @@ void inv_txfm_avx2(const tran_low_t *input, uint16_t *dest, int stride,
         data1 = _mm256_srl_epi64(data1, shift_bits);
         data1 = _mm256_permutevar8x32_epi32(data1, idx);
 
-        data = _mm256_blend_epi32(data0, data1, 0b11110000);
+        data = _mm256_blend_epi32(data0, data1, 0xf0);
 
         data = _mm256_min_epi32(_mm256_max_epi32(data, vcoefmin), vcoefmax);
         _mm256_storeu_si256((__m256i *)(block + i), data);

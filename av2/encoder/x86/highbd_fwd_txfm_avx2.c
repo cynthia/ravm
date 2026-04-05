@@ -5283,7 +5283,7 @@ void fwd_txfm_avx2(const int16_t *resi, tran_low_t *coeff, int diff_stride,
       data1 = _mm256_srl_epi64(data1, shift_bits);
       data1 = _mm256_permutevar8x32_epi32(data1, idx);
 
-      data = _mm256_blend_epi32(data0, data1, 0b11110000);
+      data = _mm256_blend_epi32(data0, data1, 0xf0);
 
       _mm256_storeu_si256((__m256i *)(coeff + i), data);
     }

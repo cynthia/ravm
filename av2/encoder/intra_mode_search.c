@@ -141,7 +141,7 @@ static int rd_pick_intra_dip_sby(const AV2_COMP *const cpi, ThreadData *td,
   int num_transpose = has_transpose ? 2 : 1;
 
 #if CONFIG_DIP_EXT_PRUNING
-  float dip_mode_model_log_rd[12] = {};
+  float dip_mode_model_log_rd[12] = { 0.0f };
 
   MB_MODE_INFO base_mbmi = *mbmi;
   DIPModeRDInfo intra_model_rds[TOP_DIP_INTRA_MODEL_COUNT];

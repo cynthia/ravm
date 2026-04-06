@@ -412,8 +412,6 @@ const arg_def_t *av2_ctrl_args[] = {
 #endif
   &g_av2_codec_arg_defs.subgop_config_str,
   &g_av2_codec_arg_defs.subgop_config_path,
-  &g_av2_codec_arg_defs.frame_hash_metadata,
-  &g_av2_codec_arg_defs.frame_hash_per_plane,
   NULL,
 };
 
@@ -491,6 +489,8 @@ const arg_def_t *av2_key_val_args[] = {
   &g_av2_codec_arg_defs.enable_mfh_obu_signaling,
   &g_av2_codec_arg_defs.operating_points_count,
   &g_av2_codec_arg_defs.cross_frame_cdf_init_mode,
+  &g_av2_codec_arg_defs.frame_hash_metadata,
+  &g_av2_codec_arg_defs.frame_hash_per_plane,
   NULL,
 };
 

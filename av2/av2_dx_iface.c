@@ -884,10 +884,7 @@ static avm_codec_err_t decoder_decode(avm_codec_alg_priv_t *ctx,
     if (pbi->random_accessed && has_leading_frame && is_target_rap) {
       data_start += frame_unit_size;
       continue;
-    } else if (pbi->random_accessed && !has_key_obu && !has_leading_frame) {
-      pbi->random_accessed = false;
-    } else if (pbi->obus_in_frame_unit_data[tlayer_id][mlayer_id]
-                                           [OBU_CLOSED_LOOP_KEY]) {
+    } else if (pbi->random_accessed && !has_leading_frame) {
       pbi->random_accessed = false;
     }
 

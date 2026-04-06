@@ -219,8 +219,6 @@ static const int av2_arg_ctrl_map[] = { AVME_SET_CPUUSED,
 #endif
                                         AV2E_SET_SUBGOP_CONFIG_STR,
                                         AV2E_SET_SUBGOP_CONFIG_PATH,
-                                        AV2E_SET_ENABLE_CDF_AVERAGING,
-                                        AV2E_SET_ENABLE_BRU,
                                         0 };
 
 const arg_def_t *main_args[] = { &g_av2_codec_arg_defs.help,
@@ -411,8 +409,6 @@ const arg_def_t *av2_ctrl_args[] = {
 #endif
   &g_av2_codec_arg_defs.subgop_config_str,
   &g_av2_codec_arg_defs.subgop_config_path,
-  &g_av2_codec_arg_defs.enable_avg_cdf,
-  &g_av2_codec_arg_defs.enable_bru,
   NULL,
 };
 
@@ -490,8 +486,6 @@ const arg_def_t *av2_key_val_args[] = {
   &g_av2_codec_arg_defs.enable_mfh_obu_signaling,
   &g_av2_codec_arg_defs.operating_points_count,
   &g_av2_codec_arg_defs.cross_frame_cdf_init_mode,
-  &g_av2_codec_arg_defs.frame_hash_metadata,
-  &g_av2_codec_arg_defs.frame_hash_per_plane,
   NULL,
 };
 

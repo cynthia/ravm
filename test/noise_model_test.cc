@@ -500,8 +500,10 @@ typedef ::testing::Types<BitDepthParams<uint16_t, 8>,   // lowbd in 16-bit
                          BitDepthParams<uint16_t, 10>,  // highbd data
                          BitDepthParams<uint16_t, 12> >
     AllBitDepthParams;
+// Note the empty final argument can be removed if C++20 is made the minimum
+// requirement.
 INSTANTIATE_TYPED_TEST_SUITE_P(FlatBlockInstatiation, FlatBlockEstimatorTest,
-                               AllBitDepthParams);
+                               AllBitDepthParams, );
 
 template <typename T>
 class NoiseModelUpdateTest : public ::testing::Test, public T {
@@ -936,8 +938,10 @@ REGISTER_TYPED_TEST_SUITE_P(NoiseModelUpdateTest, UpdateFailsNoFlatBlocks,
                             NoiseStrengthChangeSignalsDifferentNoiseType,
                             NoiseCoeffsSignalsDifferentNoiseType);
 
+// Note the empty final argument can be removed if C++20 is made the minimum
+// requirement.
 INSTANTIATE_TYPED_TEST_SUITE_P(NoiseModelUpdateTestInstatiation,
-                               NoiseModelUpdateTest, AllBitDepthParams);
+                               NoiseModelUpdateTest, AllBitDepthParams, );
 
 TEST(NoiseModelGetGrainParameters, TestLagSize) {
   avm_film_grain_t film_grain;
@@ -1339,5 +1343,7 @@ TYPED_TEST_P(WienerDenoiseTest, GradientTest) {
 REGISTER_TYPED_TEST_SUITE_P(WienerDenoiseTest, InvalidBlockSize,
                             InvalidChromaSubsampling, GradientTest);
 
+// Note the empty final argument can be removed if C++20 is made the minimum
+// requirement.
 INSTANTIATE_TYPED_TEST_SUITE_P(WienerDenoiseTestInstatiation, WienerDenoiseTest,
-                               AllBitDepthParams);
+                               AllBitDepthParams, );

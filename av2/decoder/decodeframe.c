@@ -9361,6 +9361,14 @@ BITSTREAM_PROFILE av2_read_profile(struct avm_read_bit_buffer *rb) {
 }
 static AVM_INLINE void tip_mode_legal_check(AV2Decoder *const pbi) {
   AV2_COMMON *const cm = &pbi->common;
+  const bool is_tip_frame =
+      pbi->obu_type == OBU_LEADING_TIP || pbi->obu_type == OBU_REGULAR_TIP;
+  if (is_tip_frame && cm->features.tip_frame_mode != TIP_FRAME_AS_OUTPUT) {
+    avm_internal_error(
+        &cm->error, AVM_CODEC_CORRUPT_FRAME,
+        "tip_frame_mode is not equal to TIP_FRAME_AS_OUTPUT for a TIP frame");
+  }
+
   if (cm->features.tip_frame_mode == TIP_FRAME_DISABLED) return;
 
   if (cm->current_frame.frame_type == KEY_FRAME ||

@@ -8857,11 +8857,6 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
               avm_rb_read_bit(rb) ? TIP_FRAME_AS_REF : TIP_FRAME_DISABLED;
         }
 
-        if (features->tip_frame_mode >= TIP_FRAME_MODES) {
-          avm_internal_error(&cm->error, AVM_CODEC_CORRUPT_FRAME,
-                             "Invalid TIP mode.");
-        }
-
         read_frame_opfl_refine_type(cm, rb);
 
         if (features->tip_frame_mode && cm->seq_params.enable_tip_hole_fill) {

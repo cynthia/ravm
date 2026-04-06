@@ -412,6 +412,7 @@ const arg_def_t *av2_ctrl_args[] = {
   &g_av2_codec_arg_defs.subgop_config_str,
   &g_av2_codec_arg_defs.subgop_config_path,
   &g_av2_codec_arg_defs.enable_avg_cdf,
+  &g_av2_codec_arg_defs.enable_bru,
   NULL,
 };
 

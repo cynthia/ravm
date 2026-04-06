@@ -219,7 +219,6 @@ static const int av2_arg_ctrl_map[] = { AVME_SET_CPUUSED,
 #endif
                                         AV2E_SET_SUBGOP_CONFIG_STR,
                                         AV2E_SET_SUBGOP_CONFIG_PATH,
-                                        AV2E_SET_FRAME_OUTPUT_ORDER_DERIVATION,
                                         AV2E_SET_ENABLE_CDF_AVERAGING,
                                         AV2E_SET_ENABLE_BRU,
                                         0 };

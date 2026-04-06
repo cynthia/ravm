@@ -1144,9 +1144,10 @@ enum avme_enc_control_id {
   /*!\brief Control to get frame info
    */
   AV2E_GET_FRAME_INFO = 165,
-  /*!\brief Control to set frame output order derivation method
+
+  /*!\brief Value 166 is unused.
    */
-  AV2E_SET_FRAME_OUTPUT_ORDER_DERIVATION = 166,
+
   /*!\brief Control to enable intra_dip mode
    */
   AV2E_SET_ENABLE_INTRA_DIP = 167,
@@ -1741,9 +1742,6 @@ AVM_CTRL_USE_TYPE(AV2E_SET_SUBGOP_CONFIG_STR, const char *)
 
 AVM_CTRL_USE_TYPE(AV2E_SET_SUBGOP_CONFIG_PATH, const char *)
 #define AVM_CTRL_AV2E_SET_SUBGOP_CONFIG_PATH
-
-AVM_CTRL_USE_TYPE(AV2E_SET_FRAME_OUTPUT_ORDER_DERIVATION, int)
-#define AVM_CTRL_AV2E_SET_FRAME_OUTPUT_ORDER_DERIVATION
 
 AVM_CTRL_USE_TYPE(AV2E_SET_ENABLE_BRU, int)
 #define AVM_CTRL_AV2E_SET_ENABLE_BRU

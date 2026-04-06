@@ -61,6 +61,7 @@ struct avm_codec_alg_priv {
   int local_ops_selections[MAX_NUM_XLAYERS - 1][3];
   int num_local_ops_selections;
   int output_all_layers;
+  int print_output_doh;
 
   AVxWorker *frame_worker;
 
@@ -472,6 +473,7 @@ static avm_codec_err_t init_decoder(avm_codec_alg_priv_t *ctx) {
     }
   }
   frame_worker_data->pbi->output_all_layers = ctx->output_all_layers;
+  frame_worker_data->pbi->print_output_doh = ctx->print_output_doh;
   frame_worker_data->pbi->row_mt = ctx->row_mt;
   frame_worker_data->pbi->is_fwd_kf_present = 0;
   frame_worker_data->pbi->enable_subgop_stats = ctx->enable_subgop_stats;
@@ -1772,6 +1774,12 @@ static avm_codec_err_t ctrl_set_output_all_layers(avm_codec_alg_priv_t *ctx,
   return AVM_CODEC_OK;
 }
 
+static avm_codec_err_t ctrl_set_print_output_doh(avm_codec_alg_priv_t *ctx,
+                                                 va_list args) {
+  ctx->print_output_doh = va_arg(args, int);
+  return AVM_CODEC_OK;
+}
+
 static avm_codec_err_t ctrl_set_sub_bitstream_extraction(
     avm_codec_alg_priv_t *ctx, va_list args) {
   ctx->enable_sub_bitstream_extraction = va_arg(args, int);
@@ -1832,6 +1840,7 @@ static avm_codec_ctrl_fn_map_t decoder_ctrl_maps[] = {
   { AV2D_SET_SUB_BITSTREAM_EXTRACTION, ctrl_set_sub_bitstream_extraction },
   { AV2D_SET_SELECTED_LOCAL_OPS, ctrl_set_selected_local_ops },
   { AV2D_SET_OUTPUT_ALL_LAYERS, ctrl_set_output_all_layers },
+  { AV2D_SET_PRINT_OUTPUT_DOH, ctrl_set_print_output_doh },
   { AV2_SET_INSPECTION_CALLBACK, ctrl_set_inspection_callback },
   { AV2D_SET_ROW_MT, ctrl_set_row_mt },
   { AV2D_SET_SKIP_FILM_GRAIN, ctrl_set_skip_film_grain },

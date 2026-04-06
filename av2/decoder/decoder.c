@@ -615,6 +615,8 @@ avm_codec_err_t flush_remaining_frames(struct AV2Decoder *pbi,
       }
       assign_output_frame_buffer_p(
           &pbi->output_frames[pbi->num_output_frames++], output_candidate);
+      if (pbi->print_output_doh)
+        printf("DOH:%u\n", output_candidate->display_order_hint);
       output_candidate->frame_output_done = 1;
     }
   } while (output_candidate != NULL);
@@ -636,16 +638,7 @@ static int check_and_update_output_doh(AV2Decoder *pbi,
   return 0;
 }
 
-// This function outputs frames that are ready to be output.
-// The output frames may be the output trigger frame along with
-// past frames that have not yet been output,
-// and/or future frames that are continuous with the output trigger frame.
-// The output trigger frame is the current frame or
-// the frame to be flushed out from the ref_frame_map slot.
-// ref_idx == -1 indicates the output process is trigged by
-// decoding the current frame.
-// Returns 0 on success, 1 if a DOH conformance violation was detected.
-int output_frame_buffers(AV2Decoder *pbi, int ref_idx) {
+int av2_output_frame_buffers(AV2Decoder *pbi, int ref_idx) {
   AV2_COMMON *const cm = &pbi->common;
   RefCntBuffer *trigger_frame = NULL;
   RefCntBuffer *output_candidate = NULL;
@@ -671,6 +664,8 @@ int output_frame_buffers(AV2Decoder *pbi, int ref_idx) {
       }
       assign_output_frame_buffer_p(
           &pbi->output_frames[pbi->num_output_frames++], output_candidate);
+      if (pbi->print_output_doh)
+        printf("DOH:%u\n", output_candidate->display_order_hint);
       output_candidate->frame_output_done = 1;
 #if CONFIG_BITSTREAM_DEBUG
       avm_bitstream_queue_set_frame_read(
@@ -688,6 +683,8 @@ int output_frame_buffers(AV2Decoder *pbi, int ref_idx) {
   }
   assign_output_frame_buffer_p(&pbi->output_frames[pbi->num_output_frames++],
                                trigger_frame);
+  if (pbi->print_output_doh)
+    printf("DOH:%u\n", trigger_frame->display_order_hint);
   trigger_frame->frame_output_done = 1;
 
 #if CONFIG_BITSTREAM_DEBUG
@@ -720,6 +717,8 @@ int output_frame_buffers(AV2Decoder *pbi, int ref_idx) {
         assign_output_frame_buffer_p(
             &pbi->output_frames[pbi->num_output_frames++],
             cm->ref_frame_map[i]);
+        if (pbi->print_output_doh)
+          printf("DOH:%u\n", cm->ref_frame_map[i]->display_order_hint);
         cm->ref_frame_map[i]->frame_output_done = 1;
         successive_output++;
 #if CONFIG_BITSTREAM_DEBUG
@@ -775,7 +774,7 @@ static void update_frame_buffers(AV2Decoder *pbi, int frame_decoded) {
           }
         }
         if (is_frame_eligible_for_output(cm->ref_frame_map[ref_index]))
-          doh_error |= output_frame_buffers(pbi, ref_index);
+          doh_error |= av2_output_frame_buffers(pbi, ref_index);
         decrease_ref_count(cm->ref_frame_map[ref_index], pool);
 
         if (av2_skip_reference_buffer_update(clear_multiple_insert_in_one,
@@ -792,7 +791,7 @@ static void update_frame_buffers(AV2Decoder *pbi, int frame_decoded) {
                         pbi->enable_subgop_stats);
     if (((cm->immediate_output_picture && !cm->cur_frame->frame_output_done) ||
          cm->show_existing_frame)) {
-      doh_error |= output_frame_buffers(pbi, -1);
+      doh_error |= av2_output_frame_buffers(pbi, -1);
       decrease_ref_count(cm->cur_frame, pool);
     } else {
       decrease_ref_count(cm->cur_frame, pool);

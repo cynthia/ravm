@@ -366,6 +366,7 @@ typedef struct AV2Decoder {
   // Note: The saved buffers are released at the start of the next time the
   // application calls avm_codec_decode().
   int output_all_layers;
+  int print_output_doh;
   RefCntBuffer
       *output_frames[(REF_FRAMES + 1) *
                      AVM_MAX_NUM_STREAMS];  // RefCntBuffer is used for a single
@@ -810,6 +811,17 @@ typedef void (*block_visitor_fn_t)(AV2Decoder *const pbi, ThreadData *const td,
                                    int mi_row, int mi_col, avm_reader *r,
                                    PARTITION_TYPE partition, BLOCK_SIZE bsize,
                                    PARTITION_TREE *parent, int index);
+
+// This function outputs frames that are ready to be output.
+// The output frames may be the output trigger frame along with
+// past frames that have not yet been output,
+// and/or future frames that are continuous with the output trigger frame.
+// The output trigger frame is the current frame or
+// the frame to be flushed out from the ref_frame_map slot.
+// ref_idx == -1 indicates the output process is trigged by
+// decoding the current frame.
+// Returns 0 on success, 1 if a DOH conformance violation was detected.
+int av2_output_frame_buffers(AV2Decoder *pbi, int ref_idx);
 
 /*!\endcond */
 

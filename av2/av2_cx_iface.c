@@ -243,6 +243,7 @@ struct av2_extracfg {
   int use_buffer_refresh_multi_layers_test;
   int buffer_refresh_multi_layers_test[REF_FRAMES];
   int multi_layers_lag_test;
+  int force_deferred_frames_for_ras_test;
 };
 
 // Example subgop configs. Currently not used by default.
@@ -571,6 +572,7 @@ static struct av2_extracfg default_extra_cfg = {
   0,  // use_buffer_refresh_multi_layers_test
   { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, // buffer_refresh_multi_layers_test
   0,      // multi_layers_test for nozero lag
+  0,      // force_deferred_frames_for_ras_test
 };
 // clang-format on
 
@@ -1733,6 +1735,8 @@ static avm_codec_err_t set_encoder_config(AV2EncoderConfig *oxcf,
          sizeof(oxcf->target_seq_level_idx));
   oxcf->tier_mask = extra_cfg->tier_mask;
   oxcf->unit_test_cfg.multi_layers_lag_test = extra_cfg->multi_layers_lag_test;
+  oxcf->unit_test_cfg.force_deferred_frames_for_ras_test =
+      extra_cfg->force_deferred_frames_for_ras_test;
 
   if (update_config) {
     update_encoder_config(&cfg->encoder_cfg, extra_cfg);
@@ -2736,6 +2740,14 @@ static avm_codec_err_t ctrl_set_monotonic_output_order(
   struct av2_extracfg extra_cfg = ctx->extra_cfg;
   extra_cfg.monotonic_output_order =
       CAST(AV2E_SET_MONOTONIC_OUTPUT_ORDER, args);
+  return update_extra_cfg(ctx, &extra_cfg);
+}
+
+static avm_codec_err_t ctrl_set_force_deferred_frames_for_ras_test(
+    avm_codec_alg_priv_t *ctx, va_list args) {
+  struct av2_extracfg extra_cfg = ctx->extra_cfg;
+  extra_cfg.force_deferred_frames_for_ras_test =
+      CAST(AV2E_SET_FORCE_DEFERRED_FRAMES_FOR_RAS_TEST, args);
   return update_extra_cfg(ctx, &extra_cfg);
 }
 
@@ -4697,6 +4709,8 @@ static avm_codec_ctrl_fn_map_t encoder_ctrl_maps[] = {
     ctrl_set_enable_flag_multi_layer_lag_test },
   { AV2E_SET_ADD_SEF_FOR_HIDDEN_FRAMES, ctrl_set_add_sef_for_hidden_frames },
   { AV2E_SET_MONOTONIC_OUTPUT_ORDER, ctrl_set_monotonic_output_order },
+  { AV2E_SET_FORCE_DEFERRED_FRAMES_FOR_RAS_TEST,
+    ctrl_set_force_deferred_frames_for_ras_test },
 
   // Getters
   { AVME_GET_LAST_QUANTIZER, ctrl_get_quantizer },

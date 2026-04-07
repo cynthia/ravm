@@ -1,0 +1,30 @@
+[package]
+name = "rustavm"
+version = "0.1.0"
+edition = "2021"
+description = "Rust bindings for the AVM (AV2) video decoder"
+license = "BSD-2-Clause"
+keywords = ["av2", "video", "decoder", "codec"]
+categories = ["multimedia::encoding", "multimedia::video"]
+rust-version = "1.74"
+
+[features]
+default = []
+# Enable to build the `avmdec` binary.  Library consumers do not need this.
+bin = ["dep:clap", "dep:md5"]
+
+[dependencies]
+md5 = { version = "0.7.0", optional = true }
+clap = { version = "4", features = ["derive"], optional = true }
+
+[dev-dependencies]
+md5 = "0.7.0"
+
+[build-dependencies]
+cmake = "0.1.50"
+bindgen = "0.69.4"
+
+[[bin]]
+name = "avmdec"
+path = "src/bin/avmdec.rs"
+required-features = ["bin"]

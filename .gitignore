@@ -26,3 +26,9 @@ build/
 *.swo
 
 tools/convexhull_framework/ctc_result/**/Perframe_*
+
+# Rust/Cargo artifacts (rustavm)
+target/
+*.y4m
+*.yuv
+Cargo.lock

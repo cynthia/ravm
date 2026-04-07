@@ -1,0 +1,20 @@
+[package]
+name = "rustavm-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.rustavm]
+path = ".."
+
+[[bin]]
+name = "ivf_decode"
+path = "fuzz_targets/ivf_decode.rs"
+test = false
+doc = false

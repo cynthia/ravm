@@ -225,6 +225,8 @@ uint32_t av2_read_content_interpretation_obu(struct AV2Decoder *pbi,
     // If this is the first CI OBU in the bitstream but it is signalled not at
     // the random access point, This CI OBU should be the same as the default,
     // which is considered as the exisiting CI.
+    ci_temp.ci_from_leading =
+        cm->ci_params_per_layer[obu_mlayer_id].ci_from_leading;
     if (!av2_ci_params_identical(&cm->ci_params_per_layer[obu_mlayer_id],
                                  &ci_temp)) {
       avm_internal_error(

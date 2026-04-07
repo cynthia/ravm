@@ -858,7 +858,8 @@ static avm_codec_err_t decoder_decode(avm_codec_alg_priv_t *ctx,
       return AVM_CODEC_ERROR;
     }
 
-    const bool has_td = pbi->obus_in_frame_unit_data[0][0][OBU_TEMPORAL_DELIMITER];
+    const bool has_td =
+        pbi->obus_in_frame_unit_data[0][0][OBU_TEMPORAL_DELIMITER];
 
     if (has_td) {
       pbi->last_decoded_xlayer_id = -1;

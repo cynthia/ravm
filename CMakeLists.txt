@@ -985,28 +985,6 @@ if(CONFIG_TENSORFLOW_LITE AND CONFIG_AV2_ENCODER)
   endif()
 endif()
 
-if(ENABLE_EXAMPLES AND "${CMAKE_GENERATOR}" MATCHES "Makefiles$")
-
-  # For historical purposes place the example binaries in the example directory.
-  file(MAKE_DIRECTORY "${AVM_CONFIG_DIR}/examples")
-
-  foreach(target ${AVM_EXAMPLE_TARGETS})
-    if(NOT "${target}" MATCHES "avmdec\|avmenc")
-      set_target_properties(${target} PROPERTIES RUNTIME_OUTPUT_DIRECTORY
-                                                 "${AVM_CONFIG_DIR}/examples")
-    endif()
-  endforeach()
-
-  if(ENABLE_TOOLS AND AVM_TOOL_TARGETS)
-
-    # The same expectation is true for tool targets.
-    file(MAKE_DIRECTORY "${AVM_CONFIG_DIR}/tools")
-    set_target_properties(
-      ${AVM_TOOL_TARGETS} PROPERTIES RUNTIME_OUTPUT_DIRECTORY
-                                     "${AVM_CONFIG_DIR}/tools")
-  endif()
-endif()
-
 if(BUILD_SHARED_LIBS)
   # Don't use -Wl,-z,defs with Clang's sanitizers.
   #

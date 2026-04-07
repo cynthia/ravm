@@ -346,8 +346,8 @@ yuv_raw_input() {
        --height="${YUV_RAW_INPUT_HEIGHT}""
 }
 
-# Echo examples/scalable_encoder command line parameters allowing use of a
-# raw yuv file as input to examples/scalable_encoder (multi_layer encoder).
+# Echo scalable_encoder command line parameters allowing use of a
+# raw yuv file as input to scalable_encoder (multi_layer encoder).
 yuv_raw_input_ml() {
   echo ""${YUV_RAW_INPUT}""
 }

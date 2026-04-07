@@ -279,7 +279,8 @@ endif()
 
 # Test compiler flags.
 if(MSVC)
-  # It isn't possible to specify C99 conformance for MSVC.
+  # C11 conformance is available starting in Visual Studio 2019 version 16.8.
+  require_c_flag("/std:c11" YES)
   add_cxx_flag_if_supported("/std:c++17")
   add_compiler_flag_if_supported("/W3")
 
@@ -289,7 +290,7 @@ if(MSVC)
     add_compiler_flag_if_supported("/WX")
   endif()
 else()
-  require_c_flag("-std=c99" YES)
+  require_c_flag("-std=c11" YES)
   require_cxx_flag_nomsvc("-std=c++17" YES)
   add_compiler_flag_if_supported("-Wall")
   add_compiler_flag_if_supported("-Wdisabled-optimization")
@@ -306,6 +307,7 @@ else()
   add_compiler_flag_if_supported("-Wunreachable-code-return")
   add_compiler_flag_if_supported("-Wunused")
   add_compiler_flag_if_supported("-Wvla")
+  add_c_flag_if_supported("-Wc23-extensions")
   add_cxx_flag_if_supported("-Wc++20-extensions")
   add_cxx_flag_if_supported("-Wc++23-extensions")
 

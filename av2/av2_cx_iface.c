@@ -9,6 +9,7 @@
  * source code in the PATENTS file, you can obtain it at
  * aomedia.org/license/patent-license/.
  */
+#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -3869,17 +3870,10 @@ static avm_codec_err_t encoder_set_option(avm_codec_alg_priv_t *ctx,
   size_t len = strlen(name) + strlen(value) + 4;
   char *err_string = ctx->cpi->common.error.detail;
 
-#if __STDC_VERSION__ >= 201112L
-  // We use the keyword _Static_assert because clang-cl does not allow the
-  // convenience macro static_assert to be used in function scope. See
-  // https://bugs.llvm.org/show_bug.cgi?id=48904.
-  _Static_assert(
+  static_assert(
       sizeof(ctx->cpi->common.error.detail) >= ARG_ERR_MSG_MAX_LEN,
       "The size of the err_msg buffer for avm_arg_match_helper must be "
       "at least ARG_ERR_MSG_MAX_LEN");
-#else
-  assert(sizeof(ctx->cpi->common.error.detail) >= ARG_ERR_MSG_MAX_LEN);
-#endif
 
   argv[0] = avm_malloc(len * sizeof(argv[1][0]));
   snprintf(argv[0], len, "--%s=%s", name, value);

@@ -1085,6 +1085,9 @@ static int parse_stream_params(struct AvxEncoderConfig *global,
   if (strcmp(get_short_name_by_avm_encoder(global->codec), "av2") == 0) {
     // TODO(jingning): Reuse AV2 specific encoder configuration parameters.
     // Consider to expand this set for AV2 encoder control.
+    static_assert(NELEMENTS(av2_ctrl_args) == NELEMENTS(av2_arg_ctrl_map),
+                  "The av2_ctrl_args and av2_arg_ctrl_map arrays must be of "
+                  "the same size.");
     ctrl_args = av2_ctrl_args;
     ctrl_args_map = av2_arg_ctrl_map;
     key_val_args = av2_key_val_args;

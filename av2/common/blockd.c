@@ -10,6 +10,7 @@
  * aomedia.org/license/patent-license/.
  */
 
+#include <assert.h>
 #include <math.h>
 
 #include "avm_ports/system_state.h"
@@ -700,7 +701,8 @@ void av2_update_txk_skip_array(const AV2_COMMON *cm, int mi_row, int mi_col,
   for (int r = 0; r < rows; r++) {
     uint32_t idx = (y + r) * stride + x;
     assert(idx < cm->mi_params.tx_skip_buf_size[plane]);
-    assert(sizeof(uint8_t) == sizeof(cm->mi_params.tx_skip[plane][idx]));
+    static_assert(sizeof(uint8_t) == sizeof(cm->mi_params.tx_skip[plane][idx]),
+                  "");
     memset(&cm->mi_params.tx_skip[plane][idx], 1,
            cols * sizeof(cm->mi_params.tx_skip[plane][idx]));
   }

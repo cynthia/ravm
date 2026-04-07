@@ -10,6 +10,8 @@
  * aomedia.org/license/patent-license/.
  */
 
+#include <assert.h>
+
 #include "config/avm_config.h"
 #include "config/avm_scale_rtcd.h"
 
@@ -1195,7 +1197,7 @@ static void foreach_rest_unit_in_planes_mt(AV2LrStruct *lr_ctxt,
 
   const int num_workers = nworkers;
   int i;
-  assert(MAX_MB_PLANE == 3);
+  static_assert(MAX_MB_PLANE == 3, "");
 
   if (num_rows_lr != lr_sync->rows || num_workers > lr_sync->num_workers) {
     av2_loop_restoration_dealloc(lr_sync, num_workers);

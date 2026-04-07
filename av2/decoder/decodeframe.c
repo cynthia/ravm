@@ -7588,6 +7588,9 @@ static void check_ops_mlayer_tlayer_conformance(
         }
       }
     }
+    // Only check ops_tlayer_map for embedded layers present in ops_mlayer_map,
+    // as ops_tlayer_map is only read from the bitstream for those layers.
+    if (!(mlayer_map & (1 << cur_mlayer_id))) continue;
     const int tlayer_map = ops_mlayer_info->ops_tlayer_map[xLId][cur_mlayer_id];
     for (int cur_tlayer_id = 0; cur_tlayer_id < MAX_NUM_TLAYERS;
          cur_tlayer_id++) {

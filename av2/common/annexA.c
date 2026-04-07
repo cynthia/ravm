@@ -168,7 +168,7 @@ static INLINE int av2_get_max_total_layers_from_profile(int seq_profile_idc) {
 }
 
 static avm_codec_err_t check_total_layer_count(int profile_idc,
-                                                int total_layers) {
+                                               int total_layers) {
   const int max_allowed = av2_get_max_total_layers_from_profile(profile_idc);
   if (max_allowed < 0 || total_layers > max_allowed) {
     return AVM_CODEC_UNSUP_BITSTREAM;

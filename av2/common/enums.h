@@ -290,6 +290,7 @@ enum {
 #define MAX_NUM_TLAYERS 4
 #define MAX_NUM_MLAYERS 8
 #define MAX_NUM_XLAYERS 32
+#define MAX_TOTAL_LAYERS 248  // Max Total Layer # for Configurable profile
 #define RESERVED_NUM_MLAYERS -1
 // bits for temporal, embedded, and extended layers
 #define TLAYER_BITS 2  // 2 bits for MAX_NUM_TLAYERS

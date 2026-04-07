@@ -20,6 +20,7 @@
 #include "av2/decoder/decoder.h"
 #include "av2/decoder/decodeframe.h"
 #include "av2/decoder/obu.h"
+#include "av2/common/annexA.h"
 #include "av2/common/enums.h"
 
 static void validate_lcr_auxiliary_type(int lcr_aux_type, int layer_id,
@@ -301,6 +302,12 @@ static void read_lcr_global_info(struct AV2Decoder *pbi,
       }
     }
     pbi->glcr_num_xlayers = cm->num_streams;
+
+    // Check total layer count against profile's Max Total Layer # limit
+    const int total_layers =
+        cm->num_streams * cm->seq_params.seq_max_mlayer_cnt;
+    av2_check_total_layer_count(cm->seq_params.seq_profile_idc, total_layers,
+                                &cm->error);
   }
 }
 

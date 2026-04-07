@@ -95,6 +95,22 @@ static const int seq_profile_max_mlayer_cnt[MAX_PROFILES] = {
 #endif  // CONFIG_TESTONLY_12BIT_SUPPORT
 };
 
+// From spec Table: AV2 interoperability points
+// Profile → IOP → Max Total Layer #
+// Profile 0 → IOP 0 → 4
+// Profile 1 → IOP 1 → 4
+// Profile 2 → IOP 2 → 8
+// Profile 3 → IOP 1 → 4
+// Profile 4 → IOP 1 → 4
+// Configurable → IOP 15 → 248
+static const int seq_profile_max_total_layers[MAX_PROFILES] = {
+  4,  // MAIN_420_10_IP0 (IOP 0)
+  4,  // MAIN_420_10_IP1 (IOP 1)
+  8,  // MAIN_420_10_IP2 (IOP 2)
+  4,  // MAIN_422_10_IP1 (IOP 1)
+  4,  // MAIN_444_10_IP1 (IOP 1)
+};
+
 /* clang-format off */
 /* Table A4 Allowed values for sub-bitstream syntax elements to conform to a specific AV2 profile
  *  Profile Label          |    seq_profile_idc    |    chroma_format_idc    |    bit_depth_idc    |    max_mlayer_cnt
@@ -140,6 +156,38 @@ static INLINE int av2_get_max_mlayer_cnt_from_profile(int seq_profile_idc) {
     return -1;
   if (seq_profile_idc == CONFIGURABLE) return MAX_NUM_MLAYERS;
   return seq_profile_max_mlayer_cnt[seq_profile_idc];
+}
+
+static INLINE int av2_get_max_total_layers_from_profile(int seq_profile_idc) {
+  if (seq_profile_idc < 0 || seq_profile_idc >= MAX_PROFILES) return -1;
+  if (seq_profile_idc >= RESERVED_PROFILES_START &&
+      seq_profile_idc < CONFIGURABLE)
+    return -1;
+  if (seq_profile_idc == CONFIGURABLE) return MAX_TOTAL_LAYERS;
+  return seq_profile_max_total_layers[seq_profile_idc];
+}
+
+static avm_codec_err_t check_total_layer_count(int profile_idc,
+                                                int total_layers) {
+  const int max_allowed = av2_get_max_total_layers_from_profile(profile_idc);
+  if (max_allowed < 0 || total_layers > max_allowed) {
+    return AVM_CODEC_UNSUP_BITSTREAM;
+  }
+  return AVM_CODEC_OK;
+}
+
+int av2_check_total_layer_count(int profile_idc, int total_layers,
+                                struct avm_internal_error_info *error_info) {
+  avm_codec_err_t err = check_total_layer_count(profile_idc, total_layers);
+  if (err != AVM_CODEC_OK) {
+    avm_internal_error(
+        error_info, AVM_CODEC_UNSUP_BITSTREAM,
+        "Total layer count %d exceeds Max Total Layer # %d for profile %d",
+        total_layers, av2_get_max_total_layers_from_profile(profile_idc),
+        profile_idc);
+    return 0;
+  }
+  return 1;
 }
 
 static int check_bit_depth_8_10(int bit_depth) {

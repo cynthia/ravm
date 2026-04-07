@@ -37,7 +37,7 @@ if("${AVM_ANDROID_NDK_PATH}" STREQUAL "")
   return()
 endif()
 
-include("${AVM_ANDROID_NDK_PATH}/build/cmake/android.toolchain.cmake")
+include("${AVM_ANDROID_NDK_PATH}/cmake/android.toolchain.cmake")
 
 # No intrinsics flag required for arm64-android-clang.
 set(AVM_NEON_INTRIN_FLAG "")

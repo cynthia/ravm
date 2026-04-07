@@ -7532,31 +7532,55 @@ static void check_lcr_mlayer_tlayer_conformance(
 // This function calls check_lcr_mlayer_tlayer_conformance function to perform
 // conformance checks accross the LCRs and xlayers present in the bitstream.
 static void check_lcr_layer_map_conformance(struct AV2Decoder *pbi,
-                                            const int xlayer_id) {
+                                            const int xlayer_id,
+                                            const int seq_lcr_id) {
   AV2_COMMON *const cm = &pbi->common;
   struct SequenceHeader *const seq_header = &cm->seq_params;
-  for (int lcr_id = 0; lcr_id < MAX_NUM_LCR; lcr_id++) {
-    struct LayerConfigurationRecord *lcr_params =
-        &pbi->lcr_list[xlayer_id][lcr_id];
-    if (lcr_params == NULL) continue;
-    const LCRXLayerInfo *lcr_xlayer_info;
-    int isGlobal = xlayer_id == GLOBAL_XLAYER_ID;
-    if (isGlobal) {
-      const GlobalLayerConfigurationRecord *glb_lcr = &lcr_params->global_lcr;
-      if (glb_lcr == NULL) return;
-      for (int i = 0; i < glb_lcr->LcrMaxNumXLayerCount; i++) {
-        int xLId = glb_lcr->LcrXLayerID[i];
-        lcr_xlayer_info = &glb_lcr->xlayer_info[xLId];
-        check_lcr_mlayer_tlayer_conformance(
-            seq_header, &lcr_xlayer_info->mlayer_params, &cm->error);
+
+  if (seq_lcr_id == LCR_ID_UNSPECIFIED) return;
+
+  // Find the activated LCR using the same lookup logic as
+  // activate_layer_configuration_record.
+  struct LayerConfigurationRecord *lcr_params = NULL;
+
+  // Option 1: search for a local LCR whose lcr_local_id matches seq_lcr_id.
+  if (xlayer_id < GLOBAL_XLAYER_ID) {
+    for (int i = 0; i < MAX_NUM_LCR; i++) {
+      struct LayerConfigurationRecord *candidate =
+          &pbi->lcr_list[xlayer_id][i];
+      if (candidate->valid && !candidate->is_global &&
+          candidate->local_lcr.lcr_local_id == seq_lcr_id) {
+        lcr_params = candidate;
+        break;
       }
-    } else {
-      const LocalLayerConfigurationRecord *loc_lcr = &lcr_params->local_lcr;
-      if (loc_lcr == NULL) return;
-      lcr_xlayer_info = &loc_lcr->xlayer_info;
+    }
+  }
+
+  // Option 2: fall back to the global LCR.
+  if (lcr_params == NULL) {
+    struct LayerConfigurationRecord *global_lcr =
+        &pbi->lcr_list[GLOBAL_XLAYER_ID][seq_lcr_id];
+    if (global_lcr->valid && global_lcr->is_global) {
+      lcr_params = global_lcr;
+    }
+  }
+
+  if (lcr_params == NULL) return;
+
+  const LCRXLayerInfo *lcr_xlayer_info;
+  if (lcr_params->is_global) {
+    const GlobalLayerConfigurationRecord *glb_lcr = &lcr_params->global_lcr;
+    for (int i = 0; i < glb_lcr->LcrMaxNumXLayerCount; i++) {
+      int xLId = glb_lcr->LcrXLayerID[i];
+      lcr_xlayer_info = &glb_lcr->xlayer_info[xLId];
       check_lcr_mlayer_tlayer_conformance(
           seq_header, &lcr_xlayer_info->mlayer_params, &cm->error);
     }
+  } else {
+    const LocalLayerConfigurationRecord *loc_lcr = &lcr_params->local_lcr;
+    lcr_xlayer_info = &loc_lcr->xlayer_info;
+    check_lcr_mlayer_tlayer_conformance(
+        seq_header, &lcr_xlayer_info->mlayer_params, &cm->error);
   }
 }
 
@@ -7793,7 +7817,7 @@ static void handle_sequence_header(AV2Decoder *pbi, OBU_TYPE obu_type,
   }
 
   // check dependency map consistency for LCR
-  check_lcr_layer_map_conformance(pbi, xlayer_id);
+  check_lcr_layer_map_conformance(pbi, xlayer_id, seq_header->seq_lcr_id);
   // check dependency map consistency for OPS
   check_ops_layer_map_conformance(pbi, xlayer_id);
 }

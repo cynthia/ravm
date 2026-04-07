@@ -219,9 +219,6 @@ static const int av2_arg_ctrl_map[] = { AVME_SET_CPUUSED,
 #endif
                                         AV2E_SET_SUBGOP_CONFIG_STR,
                                         AV2E_SET_SUBGOP_CONFIG_PATH,
-                                        AV2E_SET_FRAME_OUTPUT_ORDER_DERIVATION,
-                                        AV2E_SET_ENABLE_CDF_AVERAGING,
-                                        AV2E_SET_ENABLE_BRU,
                                         0 };
 
 const arg_def_t *main_args[] = { &g_av2_codec_arg_defs.help,
@@ -412,8 +409,6 @@ const arg_def_t *av2_ctrl_args[] = {
 #endif
   &g_av2_codec_arg_defs.subgop_config_str,
   &g_av2_codec_arg_defs.subgop_config_path,
-  &g_av2_codec_arg_defs.frame_hash_metadata,
-  &g_av2_codec_arg_defs.frame_hash_per_plane,
   NULL,
 };
 

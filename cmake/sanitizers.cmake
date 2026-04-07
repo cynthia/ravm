@@ -17,7 +17,7 @@ if(MSVC OR NOT SANITIZE)
   return()
 endif()
 
-include("${AVM_ROOT}/build/cmake/compiler_flags.cmake")
+include("${AVM_ROOT}/cmake/compiler_flags.cmake")
 
 string(TOLOWER ${SANITIZE} SANITIZE)
 

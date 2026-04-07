@@ -8,7 +8,7 @@
 # for Open Media Patent License 1.0 was not distributed with this source code in
 # the PATENTS file, you can obtain it at aomedia.org/license/patent-license/.
 
-include("${AVM_ROOT}/build/cmake/util.cmake")
+include("${AVM_ROOT}/cmake/util.cmake")
 
 # This file sets default values for libavm configuration variables.All libavm
 # config variables are added to the CMake variable cache via the macros provided

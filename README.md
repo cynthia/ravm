@@ -63,7 +63,7 @@ enables ccache and disables the AVM encoder:
 The available configuration options are too numerous to list here. Build system
 configuration options can be found at the top of the CMakeLists.txt file found
 in the root of the AVM repository, and AVM codec configuration options can
-currently be found in the file `build/cmake/avm_config_defaults.cmake`.
+currently be found in the file `cmake/avm_config_defaults.cmake`.
 
 ### Dylib builds
 
@@ -116,7 +116,7 @@ The following example demonstrates use of the x86-linux.cmake toolchain file on 
 
 ~~~
     $ cmake path/to/avm \
-      -DCMAKE_TOOLCHAIN_FILE=path/to/avm/build/cmake/toolchains/x86-linux.cmake
+      -DCMAKE_TOOLCHAIN_FILE=path/to/avm/cmake/toolchains/x86-linux.cmake
     $ make
 ~~~
 

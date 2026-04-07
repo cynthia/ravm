@@ -27,7 +27,7 @@ foreach(arg ${REQUIRED_ARGS})
   endif()
 endforeach()
 
-include("${AVM_ROOT}/build/cmake/util.cmake")
+include("${AVM_ROOT}/cmake/util.cmake")
 
 extract_version_string("${AVM_CONFIG_DIR}/config/avm_version.h" avm_version)
 

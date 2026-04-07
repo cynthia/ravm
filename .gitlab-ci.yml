@@ -347,7 +347,7 @@ Build (x86-linux-gcc):
   image: registry.gitlab.com/aomediacodec/aom-testing/ubuntu2404-multilib:20250702215355
   variables:
     EXTRA_CMAKE_FLAGS: >-
-      -DCMAKE_TOOLCHAIN_FILE=build/cmake/toolchains/x86-linux.cmake
+      -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/x86-linux.cmake
 
 Build (aarch64-linux-gcc):
   extends: .build-common
@@ -370,7 +370,7 @@ Build (aarch64-linux-gcc):
       -DENABLE_DOCS=0
       -DCONFIG_ML_PART_SPLIT=0
       -DCONFIG_DIP_EXT_PRUNING=0
-      -DCMAKE_TOOLCHAIN_FILE=build/cmake/toolchains/arm64-linux-gcc.cmake
+      -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/arm64-linux-gcc.cmake
 
 Build (armv7-linux-gcc):
   extends: .build-common
@@ -393,7 +393,7 @@ Build (armv7-linux-gcc):
       -DENABLE_DOCS=0
       -DCONFIG_ML_PART_SPLIT=0
       -DCONFIG_DIP_EXT_PRUNING=0
-      -DCMAKE_TOOLCHAIN_FILE=build/cmake/toolchains/armv7-linux-gcc.cmake
+      -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/armv7-linux-gcc.cmake
 
 Build (ppc-linux-gcc):
   extends: .build-common
@@ -402,7 +402,7 @@ Build (ppc-linux-gcc):
       -DCONFIG_ML_PART_SPLIT=0
       -DCONFIG_DIP_EXT_PRUNING=0
       -DCROSS=powerpc64le-linux-gnu-
-      -DCMAKE_TOOLCHAIN_FILE=build/cmake/toolchains/ppc-linux-gcc.cmake
+      -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ppc-linux-gcc.cmake
 
 Build (x86-mingw-gcc):
   extends: .build-common
@@ -422,7 +422,7 @@ Build (x86-mingw-gcc):
     EXTRA_CMAKE_FLAGS: >-
       -DCONFIG_ML_PART_SPLIT=0
       -DCONFIG_DIP_EXT_PRUNING=0
-      -DCMAKE_TOOLCHAIN_FILE=build/cmake/toolchains/x86-mingw-gcc.cmake
+      -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/x86-mingw-gcc.cmake
 
 Build (x86_64-mingw-gcc):
   extends: .build-common
@@ -442,7 +442,7 @@ Build (x86_64-mingw-gcc):
     EXTRA_CMAKE_FLAGS: >-
       -DCONFIG_ML_PART_SPLIT=0
       -DCONFIG_DIP_EXT_PRUNING=0
-      -DCMAKE_TOOLCHAIN_FILE=build/cmake/toolchains/x86_64-mingw-gcc.cmake
+      -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/x86_64-mingw-gcc.cmake
 
 Build Documentation:
   stage: build

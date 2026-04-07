@@ -19,7 +19,7 @@ foreach(arg ${REQUIRED_ARGS})
   endif()
 endforeach()
 
-include("${AVM_ROOT}/build/cmake/exports_sources.cmake")
+include("${AVM_ROOT}/cmake/exports_sources.cmake")
 
 if("${AVM_TARGET_SYSTEM}" STREQUAL "Darwin")
   set(symbol_prefix "_")

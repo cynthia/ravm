@@ -19,7 +19,7 @@ foreach(arg ${REQUIRED_ARGS})
   endif()
 endforeach()
 
-include("${AVM_ROOT}/build/cmake/util.cmake")
+include("${AVM_ROOT}/cmake/util.cmake")
 
 # Generate the version string for this run. Allow optional prefix like 'foo-'
 # before the version string 'v*'.
@@ -70,6 +70,6 @@ if(NOT "${avm_version}" STREQUAL "${last_avm_version}")
   # that is done by version.pl on its own (if a bit more verbosely...).
   execute_process(
     COMMAND
-      ${PERL_EXECUTABLE} "${AVM_ROOT}/build/cmake/version.pl"
+      ${PERL_EXECUTABLE} "${AVM_ROOT}/cmake/version.pl"
       --version_data=${avm_version} --version_filename=${version_file} VERBATIM)
 endif()

@@ -17,12 +17,12 @@ include(FindGit)
 include(FindPerl)
 include(FindThreads)
 
-include("${AVM_ROOT}/build/cmake/avm_config_defaults.cmake")
-include("${AVM_ROOT}/build/cmake/avm_experiment_deps.cmake")
-include("${AVM_ROOT}/build/cmake/avm_optimization.cmake")
-include("${AVM_ROOT}/build/cmake/compiler_flags.cmake")
-include("${AVM_ROOT}/build/cmake/compiler_tests.cmake")
-include("${AVM_ROOT}/build/cmake/util.cmake")
+include("${AVM_ROOT}/cmake/avm_config_defaults.cmake")
+include("${AVM_ROOT}/cmake/avm_experiment_deps.cmake")
+include("${AVM_ROOT}/cmake/avm_optimization.cmake")
+include("${AVM_ROOT}/cmake/compiler_flags.cmake")
+include("${AVM_ROOT}/cmake/compiler_tests.cmake")
+include("${AVM_ROOT}/cmake/util.cmake")
 
 if(DEFINED CONFIG_LOWBITDEPTH)
   message(WARNING "CONFIG_LOWBITDEPTH has been removed. \
@@ -247,7 +247,7 @@ if(NOT WIN32)
   avm_pop_var(CMAKE_REQUIRED_LIBRARIES)
 endif()
 
-include("${AVM_ROOT}/build/cmake/cpu.cmake")
+include("${AVM_ROOT}/cmake/cpu.cmake")
 
 if(ENABLE_CCACHE)
   set_compiler_launcher(ENABLE_CCACHE ccache)
@@ -369,7 +369,7 @@ set(avm_config_h_template "${AVM_CONFIG_DIR}/config/avm_config.h.cmake")
 execute_process(
   COMMAND
     ${CMAKE_COMMAND} -DAVM_CONFIG_DIR=${AVM_CONFIG_DIR} -DAVM_ROOT=${AVM_ROOT}
-    -P "${AVM_ROOT}/build/cmake/generate_avm_config_templates.cmake")
+    -P "${AVM_ROOT}/cmake/generate_avm_config_templates.cmake")
 
 # Generate avm_config.{asm,h}.
 configure_file("${avm_config_asm_template}"
@@ -383,7 +383,7 @@ if(NOT GIT_FOUND)
   message("--- Git missing, version will be read from CHANGELOG.")
 endif()
 
-configure_file("${AVM_ROOT}/build/cmake/avm_config.c.template"
+configure_file("${AVM_ROOT}/cmake/avm_config.c.template"
                "${AVM_CONFIG_DIR}/config/avm_config.c")
 
 # Find Perl and generate the RTCD sources.
@@ -415,8 +415,8 @@ foreach(NUM RANGE ${AVM_RTCD_CUSTOM_COMMAND_COUNT})
   list(GET AVM_RTCD_SYMBOL_LIST ${NUM} AVM_RTCD_SYMBOL)
   execute_process(
     COMMAND
-      ${PERL_EXECUTABLE} "${AVM_ROOT}/build/cmake/rtcd.pl"
-      --arch=${AVM_TARGET_CPU} --sym=${AVM_RTCD_SYMBOL} ${AVM_RTCD_FLAGS}
+      ${PERL_EXECUTABLE} "${AVM_ROOT}/cmake/rtcd.pl" --arch=${AVM_TARGET_CPU}
+      --sym=${AVM_RTCD_SYMBOL} ${AVM_RTCD_FLAGS}
       --config=${AVM_CONFIG_DIR}/config/avm_config.h ${AVM_RTCD_CONFIG_FILE}
     OUTPUT_FILE ${AVM_RTCD_HEADER_FILE})
 endforeach()
@@ -426,4 +426,4 @@ execute_process(
   COMMAND
     ${CMAKE_COMMAND} -DAVM_CONFIG_DIR=${AVM_CONFIG_DIR} -DAVM_ROOT=${AVM_ROOT}
     -DGIT_EXECUTABLE=${GIT_EXECUTABLE} -DPERL_EXECUTABLE=${PERL_EXECUTABLE} -P
-    "${AVM_ROOT}/build/cmake/version.cmake")
+    "${AVM_ROOT}/cmake/version.cmake")

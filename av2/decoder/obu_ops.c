@@ -211,6 +211,29 @@ uint32_t av2_read_operating_point_set_obu(struct AV2Decoder *pbi,
                       "value of ops_embedded_op_index shall not be "
                       "larger than 6.");
                 }
+                // Inherit mlayer_info from the referenced operating point.
+                const int ref_ops_id = op->ops_embedded_ops_id[j];
+                const int ref_op_index = op->ops_embedded_op_index[j];
+                const OperatingPointSet *ref_ops =
+                    &pbi->ops_list[obu_xlayer_id][ref_ops_id];
+                if (ref_op_index >= ref_ops->ops_cnt) {
+                  avm_internal_error(
+                      &pbi->common.error, AVM_CODEC_UNSUP_BITSTREAM,
+                      "ops_embedded_op_index[%d] value %d exceeds ops_cnt %d "
+                      "of referenced OPS %d.",
+                      j, ref_op_index, ref_ops->ops_cnt, ref_ops_id);
+                }
+                const OperatingPoint *ref_op = &ref_ops->op[ref_op_index];
+                op->mlayer_info.ops_mlayer_map[j] =
+                    ref_op->mlayer_info.ops_mlayer_map[j];
+                op->mlayer_info.OPMLayerCount[j] =
+                    ref_op->mlayer_info.OPMLayerCount[j];
+                for (int m = 0; m < MAX_NUM_MLAYERS; m++) {
+                  op->mlayer_info.ops_tlayer_map[j][m] =
+                      ref_op->mlayer_info.ops_tlayer_map[j][m];
+                  op->mlayer_info.OPTLayerCount[j][m] =
+                      ref_op->mlayer_info.OPTLayerCount[j][m];
+                }
               }
             }
           }

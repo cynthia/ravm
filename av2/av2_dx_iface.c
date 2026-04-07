@@ -857,11 +857,16 @@ static avm_codec_err_t decoder_decode(avm_codec_alg_priv_t *ctx,
     if (frame_unit_size == 0 || frame_unit_size == SIZE_MAX) {
       return AVM_CODEC_ERROR;
     }
-    if (pbi->obus_in_frame_unit_data[0][0][OBU_TEMPORAL_DELIMITER]) {
+
+    const bool has_td =
+        pbi->obus_in_frame_unit_data[0][0][OBU_TEMPORAL_DELIMITER];
+
+    if (has_td) {
       pbi->last_decoded_xlayer_id = -1;
       ra_counted_in_tu = false;
     }
-    bool has_key_obu =
+
+    const bool has_key_obu =
         pbi->obus_in_frame_unit_data[tlayer_id][mlayer_id]
                                     [OBU_CLOSED_LOOP_KEY] ||
         pbi->obus_in_frame_unit_data[tlayer_id][mlayer_id][OBU_OPEN_LOOP_KEY] ||
@@ -872,22 +877,20 @@ static avm_codec_err_t decoder_decode(avm_codec_alg_priv_t *ctx,
     // droping leading obus if neccessary
     // pbi->random_accessed is set when random_access_point_count reaches
     // random_access_point_index
-    bool has_leading_frame =
+    const bool has_leading_frame =
         pbi->obus_in_frame_unit_data[tlayer_id][mlayer_id]
                                     [OBU_LEADING_TILE_GROUP] ||
         pbi->obus_in_frame_unit_data[tlayer_id][mlayer_id][OBU_LEADING_SEF] ||
         pbi->obus_in_frame_unit_data[tlayer_id][mlayer_id][OBU_LEADING_TIP];
 
-    bool is_target_rap =
+    const bool is_target_rap =
         (pbi->random_access_point_count - 1 == pbi->random_access_point_index);
 
     if (pbi->random_accessed && has_leading_frame && is_target_rap) {
       data_start += frame_unit_size;
       continue;
-    } else if (pbi->random_accessed && !has_key_obu && !has_leading_frame) {
-      pbi->random_accessed = false;
-    } else if (pbi->obus_in_frame_unit_data[tlayer_id][mlayer_id]
-                                           [OBU_CLOSED_LOOP_KEY]) {
+    } else if (pbi->random_accessed && has_td && !has_leading_frame) {
+      // This is the start of the first non-leading frame TU after RA
       pbi->random_accessed = false;
     }
 

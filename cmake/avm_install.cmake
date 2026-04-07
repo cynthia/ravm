@@ -52,7 +52,7 @@ macro(setup_avm_install_targets)
         -DCMAKE_PROJECT_NAME=${CMAKE_PROJECT_NAME}
         -DCONFIG_MULTITHREAD=${CONFIG_MULTITHREAD}
         -DHAVE_PTHREAD_H=${HAVE_PTHREAD_H} -P
-        "${AVM_ROOT}/build/cmake/pkg_config.cmake"
+        "${AVM_ROOT}/cmake/pkg_config.cmake"
       COMMENT "Writing avm.pc"
       VERBATIM)
 

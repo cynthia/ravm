@@ -13,7 +13,7 @@ if(AVM_BUILD_CMAKE_AVM_OPTIMIZATION_CMAKE_)
 endif() # AVM_BUILD_CMAKE_AVM_OPTIMIZATION_CMAKE_
 set(AVM_BUILD_CMAKE_AVM_OPTIMIZATION_CMAKE_ 1)
 
-include("${AVM_ROOT}/build/cmake/util.cmake")
+include("${AVM_ROOT}/cmake/util.cmake")
 
 # Translate $flag to one which MSVC understands, and write the new flag to the
 # variable named by $translated_flag (or unset it, when MSVC needs no flag).
@@ -268,15 +268,15 @@ function(test_nasm)
   endif()
 endfunction()
 
-# Adds build command for generation of rtcd C source files using
-# build/cmake/rtcd.pl. $config is the input perl file, $output is the output C
-# include file, $source is the C source file, and $symbol is used for the symbol
-# argument passed to rtcd.pl.
+# Adds build command for generation of rtcd C source files using cmake/rtcd.pl.
+# $config is the input perl file, $output is the output C include file, $source
+# is the C source file, and $symbol is used for the symbol argument passed to
+# rtcd.pl.
 function(add_rtcd_build_step config output source symbol)
   add_custom_command(
     OUTPUT ${output}
     COMMAND
-      ${PERL_EXECUTABLE} ARGS "${AVM_ROOT}/build/cmake/rtcd.pl"
+      ${PERL_EXECUTABLE} ARGS "${AVM_ROOT}/cmake/rtcd.pl"
       --arch=${AVM_TARGET_CPU} --sym=${symbol} ${AVM_RTCD_FLAGS}
       --config=${AVM_CONFIG_DIR}/config/avm_config.h ${config} > ${output}
     DEPENDS ${config}

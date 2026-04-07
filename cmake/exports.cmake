@@ -13,7 +13,7 @@ if(AVM_BUILD_CMAKE_EXPORTS_CMAKE_)
 endif() # AVM_BUILD_CMAKE_EXPORTS_CMAKE_
 set(AVM_BUILD_CMAKE_EXPORTS_CMAKE_ 1)
 
-include("${AVM_ROOT}/build/cmake/exports_sources.cmake")
+include("${AVM_ROOT}/cmake/exports_sources.cmake")
 
 # Creates the custom target which handles generation of the symbol export lists.
 function(setup_exports_target)
@@ -37,7 +37,7 @@ function(setup_exports_target)
       -DCONFIG_AV2_DECODER=${CONFIG_AV2_DECODER}
       -DCONFIG_AV2_ENCODER=${CONFIG_AV2_ENCODER}
       -DCONFIG_INSPECTION=${CONFIG_INSPECTION} -DENABLE_TESTS=${ENABLE_TESTS} -P
-      "${AVM_ROOT}/build/cmake/generate_exports.cmake"
+      "${AVM_ROOT}/cmake/generate_exports.cmake"
     SOURCES ${AVM_EXPORTS_SOURCES}
     DEPENDS ${AVM_EXPORTS_SOURCES})
 

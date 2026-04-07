@@ -65,13 +65,13 @@ endfunction()
 check_directory_var(AVM_CONFIG_DIR)
 check_directory_var(AVM_ROOT)
 
-set(AVM_DEFAULTS "${AVM_ROOT}/build/cmake/avm_config_defaults.cmake")
+set(AVM_DEFAULTS "${AVM_ROOT}/cmake/avm_config_defaults.cmake")
 if(NOT EXISTS "${AVM_DEFAULTS}")
   message(
     FATAL_ERROR "Configuration default values file (${AVM_DEFAULTS}) missing.")
 endif()
 
-include("${AVM_ROOT}/build/cmake/avm_config_defaults.cmake")
+include("${AVM_ROOT}/cmake/avm_config_defaults.cmake")
 list(APPEND avm_build_vars ${AVM_DETECT_VARS} ${AVM_CONFIG_VARS})
 list(SORT avm_build_vars)
 

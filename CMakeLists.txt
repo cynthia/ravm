@@ -47,16 +47,16 @@ set(SO_FILE_VERSION 2.0.0)
 # Enable generators like Xcode and Visual Studio to place projects in folders.
 set_property(GLOBAL PROPERTY USE_FOLDERS TRUE)
 
-include("${AVM_ROOT}/build/cmake/avm_configure.cmake")
+include("${AVM_ROOT}/cmake/avm_configure.cmake")
 include("${AVM_ROOT}/avm_dsp/avm_dsp.cmake")
 include("${AVM_ROOT}/avm_mem/avm_mem.cmake")
 include("${AVM_ROOT}/avm_ports/avm_ports.cmake")
 include("${AVM_ROOT}/avm_scale/avm_scale.cmake")
 include("${AVM_ROOT}/avm_util/avm_util.cmake")
 include("${AVM_ROOT}/av2/av2.cmake")
-include("${AVM_ROOT}/build/cmake/avm_install.cmake")
-include("${AVM_ROOT}/build/cmake/sanitizers.cmake")
-include("${AVM_ROOT}/build/cmake/util.cmake")
+include("${AVM_ROOT}/cmake/avm_install.cmake")
+include("${AVM_ROOT}/cmake/sanitizers.cmake")
+include("${AVM_ROOT}/cmake/util.cmake")
 include("${AVM_ROOT}/test/test.cmake")
 
 list(
@@ -71,7 +71,7 @@ list(
   "${AVM_ROOT}/avm_scale/avm_scale_rtcd.c"
   "${AVM_ROOT}/av2/common/av2_rtcd_defs.pl"
   "${AVM_ROOT}/av2/common/av2_rtcd.c"
-  "${AVM_ROOT}/build/cmake/rtcd.pl")
+  "${AVM_ROOT}/cmake/rtcd.pl")
 
 list(
   APPEND
@@ -216,8 +216,7 @@ add_custom_command(
   COMMAND
     ${CMAKE_COMMAND} ARGS -DAVM_CONFIG_DIR=${AVM_CONFIG_DIR}
     -DAVM_ROOT=${AVM_ROOT} -DGIT_EXECUTABLE=${GIT_EXECUTABLE}
-    -DPERL_EXECUTABLE=${PERL_EXECUTABLE} -P
-    "${AVM_ROOT}/build/cmake/version.cmake"
+    -DPERL_EXECUTABLE=${PERL_EXECUTABLE} -P "${AVM_ROOT}/cmake/version.cmake"
   COMMENT "Writing avm_version.h"
   VERBATIM)
 
@@ -226,7 +225,7 @@ add_custom_target(
   COMMAND
     ${CMAKE_COMMAND} -DAVM_CONFIG_DIR=${AVM_CONFIG_DIR} -DAVM_ROOT=${AVM_ROOT}
     -DGIT_EXECUTABLE=${GIT_EXECUTABLE} -DPERL_EXECUTABLE=${PERL_EXECUTABLE} -P
-    "${AVM_ROOT}/build/cmake/version.cmake"
+    "${AVM_ROOT}/cmake/version.cmake"
   COMMENT "Updating version info if necessary."
   VERBATIM)
 
@@ -237,8 +236,7 @@ if(BUILD_SHARED_LIBS AND NOT MSVC)
     COMMAND
       ${CMAKE_COMMAND} -DAVM_CONFIG_DIR=${AVM_CONFIG_DIR}
       -DAVM_ROOT=${AVM_ROOT} -DGIT_EXECUTABLE=${GIT_EXECUTABLE}
-      -DPERL_EXECUTABLE=${PERL_EXECUTABLE} -P
-      "${AVM_ROOT}/build/cmake/version.cmake")
+      -DPERL_EXECUTABLE=${PERL_EXECUTABLE} -P "${AVM_ROOT}/cmake/version.cmake")
 endif()
 
 add_dependencies(avm_version avm_version_check)
@@ -1030,7 +1028,7 @@ if(BUILD_SHARED_LIBS)
     endif()
   endif()
 
-  include("${AVM_ROOT}/build/cmake/exports.cmake")
+  include("${AVM_ROOT}/cmake/exports.cmake")
   setup_exports_target()
 endif()
 

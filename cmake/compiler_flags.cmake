@@ -15,7 +15,7 @@ set(AVM_BUILD_CMAKE_COMPILER_FLAGS_CMAKE_ 1)
 
 include(CheckCCompilerFlag)
 include(CheckCXXCompilerFlag)
-include("${AVM_ROOT}/build/cmake/compiler_tests.cmake")
+include("${AVM_ROOT}/cmake/compiler_tests.cmake")
 
 # Strings used to cache flags.
 set(AVM_C_FLAGS)

@@ -7546,8 +7546,7 @@ static void check_lcr_layer_map_conformance(struct AV2Decoder *pbi,
   // Option 1: search for a local LCR whose lcr_local_id matches seq_lcr_id.
   if (xlayer_id < GLOBAL_XLAYER_ID) {
     for (int i = 0; i < MAX_NUM_LCR; i++) {
-      struct LayerConfigurationRecord *candidate =
-          &pbi->lcr_list[xlayer_id][i];
+      struct LayerConfigurationRecord *candidate = &pbi->lcr_list[xlayer_id][i];
       if (candidate->valid && !candidate->is_global &&
           candidate->local_lcr.lcr_local_id == seq_lcr_id) {
         lcr_params = candidate;
@@ -7817,7 +7816,7 @@ static void handle_sequence_header(AV2Decoder *pbi, OBU_TYPE obu_type,
   }
 
   // check dependency map consistency for LCR
-  check_lcr_layer_map_conformance(pbi, xlayer_id, seq_header->seq_lcr_id);
+  check_lcr_layer_map_conformance(pbi, xlayer_id, cm->seq_params.seq_lcr_id);
   // check dependency map consistency for OPS
   check_ops_layer_map_conformance(pbi, xlayer_id);
 }

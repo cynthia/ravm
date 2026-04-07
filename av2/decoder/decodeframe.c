@@ -6115,7 +6115,7 @@ void read_sequence_inter_group_tool_flags(struct SequenceHeader *seq_params,
                                                          : 0;
 
     seq_params->order_hint_info.order_hint_bits_minus_1 =
-        avm_rb_read_literal(rb, 3);
+        avm_rb_read_literal(rb, 4);
   }
   seq_params->enable_refmvbank = avm_rb_read_bit(rb);
   if (avm_rb_read_bit(rb)) {

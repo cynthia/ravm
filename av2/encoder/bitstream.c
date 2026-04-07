@@ -4630,7 +4630,7 @@ void write_sequence_inter_group_tool_flags(
     }
 
     avm_wb_write_literal(
-        wb, seq_params->order_hint_info.order_hint_bits_minus_1, 3);
+        wb, seq_params->order_hint_info.order_hint_bits_minus_1, 4);
   }
 
   avm_wb_write_bit(wb, seq_params->enable_refmvbank);

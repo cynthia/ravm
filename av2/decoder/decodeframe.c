@@ -7387,18 +7387,18 @@ static void activate_atlas_segment(AV2Decoder *pbi) {
   }
 }
 
-static void activate_layer_configuration_record(AV2Decoder *pbi,
-                                                int seq_lcr_id) {
-  AV2_COMMON *const cm = &pbi->common;
+// Find the active LCR for the given xlayer_id and seq_lcr_id.
+// First searches for a local LCR whose lcr_local_id matches seq_lcr_id,
+// then falls back to the global LCR.
+static LayerConfigurationRecord *find_active_lcr(AV2Decoder *pbi, int xlayer_id,
+                                                 int seq_lcr_id) {
   LayerConfigurationRecord *lcr = NULL;
   // Option 1: search for a local LCR for the current layer whose
   // lcr_global_id matches seq_lcr_id. seq_lcr_id is a global LCR ID, and
   // local LCRs are linked to a global LCR via local_lcr->lcr_global_id.
-  const int current_xlayer_id = cm->xlayer_id;
-  if (current_xlayer_id < GLOBAL_XLAYER_ID) {
+  if (xlayer_id < GLOBAL_XLAYER_ID) {
     for (int i = 0; i < MAX_NUM_LCR; i++) {
-      LayerConfigurationRecord *candidate =
-          &pbi->lcr_list[current_xlayer_id][i];
+      LayerConfigurationRecord *candidate = &pbi->lcr_list[xlayer_id][i];
       if (candidate->valid && !candidate->is_global &&
           candidate->local_lcr.lcr_local_id == seq_lcr_id) {
         lcr = candidate;
@@ -7415,6 +7415,14 @@ static void activate_layer_configuration_record(AV2Decoder *pbi,
       lcr = global_lcr;
     }
   }
+  return lcr;
+}
+
+static void activate_layer_configuration_record(AV2Decoder *pbi,
+                                                int seq_lcr_id) {
+  AV2_COMMON *const cm = &pbi->common;
+  LayerConfigurationRecord *lcr =
+      find_active_lcr(pbi, cm->xlayer_id, seq_lcr_id);
   if (lcr != NULL) {
     if (lcr->lcr_from_leading) {
       avm_internal_error(&cm->error, AVM_CODEC_UNSUP_BITSTREAM,
@@ -7534,29 +7542,32 @@ static void check_lcr_mlayer_tlayer_conformance(
 static void check_lcr_layer_map_conformance(struct AV2Decoder *pbi,
                                             const int xlayer_id) {
   AV2_COMMON *const cm = &pbi->common;
-  struct SequenceHeader *const seq_header = &cm->seq_params;
-  for (int lcr_id = 0; lcr_id < MAX_NUM_LCR; lcr_id++) {
-    struct LayerConfigurationRecord *lcr_params =
-        &pbi->lcr_list[xlayer_id][lcr_id];
-    if (lcr_params == NULL) continue;
-    const LCRXLayerInfo *lcr_xlayer_info;
-    int isGlobal = xlayer_id == GLOBAL_XLAYER_ID;
-    if (isGlobal) {
-      const GlobalLayerConfigurationRecord *glb_lcr = &lcr_params->global_lcr;
-      if (glb_lcr == NULL) return;
-      for (int i = 0; i < glb_lcr->LcrMaxNumXLayerCount; i++) {
-        int xLId = glb_lcr->LcrXLayerID[i];
-        lcr_xlayer_info = &glb_lcr->xlayer_info[xLId];
-        check_lcr_mlayer_tlayer_conformance(
-            seq_header, &lcr_xlayer_info->mlayer_params, &cm->error);
-      }
-    } else {
-      const LocalLayerConfigurationRecord *loc_lcr = &lcr_params->local_lcr;
-      if (loc_lcr == NULL) return;
-      lcr_xlayer_info = &loc_lcr->xlayer_info;
+  SequenceHeader *const seq_header = &cm->seq_params;
+  const int seq_lcr_id = seq_header->seq_lcr_id;
+
+  if (seq_lcr_id == LCR_ID_UNSPECIFIED) return;
+
+  LayerConfigurationRecord *lcr_params =
+      find_active_lcr(pbi, xlayer_id, seq_lcr_id);
+
+  if (lcr_params == NULL) return;
+
+  const LCRXLayerInfo *lcr_xlayer_info;
+  if (lcr_params->is_global) {
+    const GlobalLayerConfigurationRecord *glb_lcr = &lcr_params->global_lcr;
+    if (glb_lcr == NULL) return;
+    for (int i = 0; i < glb_lcr->LcrMaxNumXLayerCount; i++) {
+      int xLId = glb_lcr->LcrXLayerID[i];
+      lcr_xlayer_info = &glb_lcr->xlayer_info[xLId];
       check_lcr_mlayer_tlayer_conformance(
           seq_header, &lcr_xlayer_info->mlayer_params, &cm->error);
     }
+  } else {
+    const LocalLayerConfigurationRecord *loc_lcr = &lcr_params->local_lcr;
+    if (loc_lcr == NULL) return;
+    lcr_xlayer_info = &loc_lcr->xlayer_info;
+    check_lcr_mlayer_tlayer_conformance(
+        seq_header, &lcr_xlayer_info->mlayer_params, &cm->error);
   }
 }
 

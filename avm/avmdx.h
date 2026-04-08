@@ -342,9 +342,6 @@ enum avm_dec_control_id {
 
   AV2D_SET_BRU_OPT_MODE,
 
-  /*!\brief Test-only: print display_order_hint for each output frame. */
-  AV2D_SET_PRINT_OUTPUT_DOH,
-
   AVM_DECODER_CTRL_ID_MAX,
 
   /*!\brief Codec control function to check the presence of forward key frames
@@ -512,9 +509,6 @@ AVM_CTRL_USE_TYPE(AV2D_SET_SELECTED_LOCAL_OPS, int *)
 
 AVM_CTRL_USE_TYPE(AV2D_SET_OUTPUT_ALL_LAYERS, int)
 #define AVM_CTRL_AV2D_SET_OUTPUT_ALL_LAYERS
-
-AVM_CTRL_USE_TYPE(AV2D_SET_PRINT_OUTPUT_DOH, int)
-#define AVM_CTRL_AV2D_SET_PRINT_OUTPUT_DOH
 
 AVM_CTRL_USE_TYPE(AV2_SET_INSPECTION_CALLBACK, avm_inspect_init *)
 #define AVM_CTRL_AV2_SET_INSPECTION_CALLBACK

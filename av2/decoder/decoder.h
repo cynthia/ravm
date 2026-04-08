@@ -366,7 +366,6 @@ typedef struct AV2Decoder {
   // Note: The saved buffers are released at the start of the next time the
   // application calls avm_codec_decode().
   int output_all_layers;
-  int print_output_doh;
   RefCntBuffer
       *output_frames[(REF_FRAMES + 1) *
                      AVM_MAX_NUM_STREAMS];  // RefCntBuffer is used for a single

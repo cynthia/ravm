@@ -14,7 +14,7 @@
 //
 // Verifies that when a switch frame with restricted_prediction_switch=1
 // is decoded, eligible frames in ref_frame_map are output in ascending
-// display_order_hint order
+// display_order_hint order.
 //
 // Encodes with RA pyramid coding (which stores frames in non-display
 // order in ref_frame_map) and uses AV2E_SET_FORCE_DEFERRED_FRAMES_FOR_RAS_TEST
@@ -22,13 +22,11 @@
 // When the switch frame is decoded, the restricted_prediction_switch
 // path outputs these deferred frames.
 //
-// AV2D_SET_PRINT_OUTPUT_DOH prints each output frame's
-// display_order_hint. The test captures this sequence and asserts it
-// is non-decreasing.
+// The decoder's av2_output_frame_buffers() conformance check
+// (check_and_update_output_doh) will cause a decode error if frames
+// are output out of order, so the test simply verifies that decoding
+// succeeds.
 
-#include <cstdio>
-#include <cstring>
-#include <unistd.h>
 #include <vector>
 
 #include "third_party/googletest/src/googletest/include/gtest/gtest.h"
@@ -39,51 +37,6 @@
 #include "av2/common/enums.h"
 
 namespace {
-
-static std::vector<unsigned int> DecodeAndGetDOHs(
-    const std::vector<std::vector<uint8_t>> &pkts, bool echo) {
-  std::vector<unsigned int> dohs;
-  avm_codec_dec_cfg_t c = {};
-  c.threads = 1;
-  libavm_test::AV2Decoder dec(c);
-  dec.Control(AV2D_SET_PRINT_OUTPUT_DOH, 1);
-
-  if (echo) {
-    fflush(stdout);
-    printf("==== decoder output start ====\n");
-  }
-  fflush(stdout);
-  FILE *tmpf = tmpfile();
-  int saved_fd = dup(fileno(stdout));
-  dup2(fileno(tmpf), fileno(stdout));
-
-  for (const auto &p : pkts) {
-    if (dec.DecodeFrame(p.data(), p.size()) != AVM_CODEC_OK) break;
-    libavm_test::DxDataIterator it = dec.GetDxData();
-    while (it.Next()) {
-    }
-  }
-  dec.DecodeFrame(NULL, 0);
-  {
-    libavm_test::DxDataIterator it = dec.GetDxData();
-    while (it.Next()) {
-    }
-  }
-
-  fflush(stdout);
-  dup2(saved_fd, fileno(stdout));
-  close(saved_fd);
-
-  rewind(tmpf);
-  char line[256];
-  while (fgets(line, sizeof(line), tmpf)) {
-    unsigned int doh;
-    if (sscanf(line, "DOH:%u", &doh) == 1) dohs.push_back(doh);
-    if (echo) fputs(line, stdout);
-  }
-  fclose(tmpf);
-  return dohs;
-}
 
 class OutputOrderTest : public ::libavm_test::CodecTestWithParam<int>,
                         public ::libavm_test::EncoderTest {
@@ -102,8 +55,6 @@ class OutputOrderTest : public ::libavm_test::CodecTestWithParam<int>,
     cfg_.sframe_dist = 4;
     cfg_.sframe_mode = 0;
     cfg_.sframe_type = 1;
-    // init_flags_ = AVM_CODEC_USE_PER_FRAME_STATS; // Enable to print encoder
-    // logs and decoder output order DOH
   }
 
   void PreEncodeFrameHook(::libavm_test::VideoSource *video,
@@ -144,18 +95,25 @@ TEST_P(OutputOrderTest, VerifyOutputOrderAtRAS) {
   ASSERT_NO_FATAL_FAILURE(RunLoop(&video));
   ASSERT_FALSE(packets_.empty());
 
-  std::vector<unsigned int> dohs =
-      DecodeAndGetDOHs(packets_, init_flags_ & AVM_CODEC_USE_PER_FRAME_STATS);
+  // Decode all packets. The decoder's conformance check in
+  // av2_output_frame_buffers() will trigger a fatal error if output
+  // frames are not in ascending display_order_hint order.
+  avm_codec_dec_cfg_t c = {};
+  c.threads = 1;
+  libavm_test::AV2Decoder dec(c);
 
-  ASSERT_GE(dohs.size(), 2u) << "Expected at least 2 output frames";
-
-  for (size_t i = 1; i < dohs.size(); ++i) {
-    ASSERT_GE(dohs[i], dohs[i - 1])
-        << "Output frames at positions " << (i - 1) << " and " << i
-        << " are out of DOH order (" << dohs[i - 1] << " before " << dohs[i]
-        << "). "
-        << "Incorrect output order during restricted_prediction_switch "
-        << "processing.";
+  for (const auto &p : packets_) {
+    ASSERT_EQ(dec.DecodeFrame(p.data(), p.size()), AVM_CODEC_OK);
+    libavm_test::DxDataIterator it = dec.GetDxData();
+    while (it.Next()) {
+    }
+  }
+  // Flush the decoder.
+  ASSERT_EQ(dec.DecodeFrame(NULL, 0), AVM_CODEC_OK);
+  {
+    libavm_test::DxDataIterator it = dec.GetDxData();
+    while (it.Next()) {
+    }
   }
 }
 

@@ -16,6 +16,7 @@ bin = ["dep:clap", "dep:md5"]
 [dependencies]
 md5 = { version = "0.7.0", optional = true }
 clap = { version = "4", features = ["derive"], optional = true }
+thiserror = "1"
 
 [dev-dependencies]
 md5 = "0.7.0"

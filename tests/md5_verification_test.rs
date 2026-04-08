@@ -93,46 +93,25 @@ fn skip_if_missing(filename: &str) -> bool {
 ///
 /// Returns a 32-character lowercase hex MD5 string.
 pub fn frame_md5(frame: &Frame) -> String {
-    let fmt = frame.format();
-    let bit_depth = frame.bit_depth();
-    let highbitdepth = (fmt & rustavm::AVM_IMG_FMT_HIGHBITDEPTH) != 0;
-
-    // When bit_depth==8 but storage is 16-bit, the C tests downshift first.
-    // After downshift, bytes_per_sample becomes 1 (no HIGHBITDEPTH in shifted fmt).
-    let needs_downshift = bit_depth == 8 && highbitdepth;
-    let bytes_per_sample: usize = if highbitdepth && !needs_downshift { 2 } else { 1 };
+    let needs_downshift = frame.bit_depth() == 8 && frame.bytes_per_sample() == 2;
 
     let mut ctx = md5::Context::new();
 
-    for plane in 0..3_usize {
-        let plane_data = match frame.plane(plane) {
-            Some(d) => d,
-            // Null plane (e.g. monochrome chroma) — C code would hash garbage,
-            // but the test vectors never have null non-luma planes; skip safely.
-            None => continue,
-        };
-        let stride = frame.stride(plane);
-        let w = frame.plane_width(plane);      // pixel width
-        let h = frame.height_for_plane(plane); // pixel height
+    for plane_idx in 0..3_usize {
+        let Some(rows) = frame.rows(plane_idx) else { continue };
+        let w = frame.plane_width(plane_idx);
+        let mut row_buf = if needs_downshift { vec![0u8; w] } else { Vec::new() };
 
-        if needs_downshift {
-            // avm_img_downshift(dst, src, shift=0, depth=8):
-            // For each sample, extract plane[x*2] (the low byte of the 16-bit word).
-            // Hash w bytes (one per pixel) per row.
-            let mut row_buf = vec![0u8; w];
-            for row in 0..h {
-                let base = row * stride;
-                for x in 0..w {
-                    row_buf[x] = plane_data[base + x * 2];
+        for row in rows {
+            if needs_downshift {
+                // avm_img_downshift(dst, src, shift=0, depth=8): take the low
+                // byte of each 16-bit sample so we hash one byte per pixel.
+                for (x, dst) in row_buf.iter_mut().enumerate() {
+                    *dst = row.get(x * 2).copied().unwrap_or(0);
                 }
                 ctx.consume(&row_buf);
-            }
-        } else {
-            // Standard path: hash w * bytes_per_sample bytes per row.
-            let row_bytes = w * bytes_per_sample;
-            for row in 0..h {
-                let base = row * stride;
-                ctx.consume(&plane_data[base..base + row_bytes]);
+            } else {
+                ctx.consume(row);
             }
         }
     }
@@ -144,7 +123,7 @@ pub fn frame_md5(frame: &Frame) -> String {
 
 /// Decode every frame in an IVF file and return per-frame MD5 hex strings.
 ///
-/// `threads` is forwarded to `Decoder::with_config`; `None` uses the codec
+/// `threads` is forwarded to [`Decoder::builder`]; `None` uses the codec
 /// default.  Each call creates a fresh decoder, so the function is safe to
 /// call multiple times with different thread counts.
 pub fn decode_to_md5s(
@@ -153,7 +132,11 @@ pub fn decode_to_md5s(
 ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let file = File::open(ivf_path)?;
     let mut ivf = IvfReader::new(BufReader::new(file))?;
-    let mut decoder = Decoder::with_config(threads)?;
+    let mut builder = Decoder::builder();
+    if let Some(t) = threads {
+        builder = builder.threads(t);
+    }
+    let mut decoder = builder.build()?;
     let mut md5s = Vec::new();
 
     while let Some(pkt) = ivf.next_frame()? {

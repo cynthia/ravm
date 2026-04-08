@@ -1,52 +1,279 @@
-use crate::{
-    avm_codec_av2_dx, avm_codec_ctx_t, avm_codec_dec_cfg_t, avm_codec_dec_init_ver,
-    avm_codec_decode, avm_codec_destroy, avm_codec_err_t, avm_codec_err_t_AVM_CODEC_OK,
-    avm_codec_frame_buffer_t, avm_codec_get_frame, avm_codec_get_stream_info, avm_codec_iter_t,
-    avm_codec_set_frame_buffer_functions, avm_codec_stream_info_t, avm_image_t, avm_img_fmt,
-    AVM_DECODER_ABI_VERSION,
-};
+use crate::format::{ChromaSamplePosition, ColorRange, PixelFormat, PlaneView};
 use std::fmt;
+use crate::sys::{
+    avm_codec_av2_dx, avm_codec_ctx_t, avm_codec_dec_cfg_t, avm_codec_dec_init_ver,
+    avm_codec_decode, avm_codec_destroy, avm_codec_err_t,
+    avm_codec_err_t_AVM_CODEC_ABI_MISMATCH, avm_codec_err_t_AVM_CODEC_CORRUPT_FRAME,
+    avm_codec_err_t_AVM_CODEC_ERROR, avm_codec_err_t_AVM_CODEC_INCAPABLE,
+    avm_codec_err_t_AVM_CODEC_INVALID_PARAM, avm_codec_err_t_AVM_CODEC_MEM_ERROR,
+    avm_codec_err_t_AVM_CODEC_OK, avm_codec_err_t_AVM_CODEC_UNSUP_BITSTREAM,
+    avm_codec_err_t_AVM_CODEC_UNSUP_FEATURE, avm_codec_frame_buffer_t, avm_codec_get_frame,
+    avm_codec_get_stream_info, avm_codec_iter_t, avm_codec_set_frame_buffer_functions,
+    avm_codec_stream_info_t, avm_image_t, avm_img_fmt, AVM_DECODER_ABI_VERSION,
+    AVM_IMG_FMT_HIGHBITDEPTH,
+};
 use std::marker::PhantomData;
 use std::os::raw::{c_int, c_void};
 use std::ptr;
 use std::ptr::NonNull;
 use std::slice;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DecoderError {
-    CodecError(avm_codec_err_t),
-    InitFailed(avm_codec_err_t),
-    DecodeFailed(avm_codec_err_t),
+/// One specific libavm error code, modeled as a Rust enum.
+///
+/// Mirrors the `avm_codec_err_t_*` constants from the C header.  Use
+/// [`ErrorKind::from_raw`] to convert from the raw integer.  Unknown codes
+/// are preserved via [`ErrorKind::Other`] so future libavm releases that add
+/// new error variants degrade gracefully.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, thiserror::Error)]
+#[non_exhaustive]
+pub enum ErrorKind {
+    /// `AVM_CODEC_ERROR` — generic, unspecified error.
+    #[error("libavm reported a generic error")]
+    Generic,
+    /// `AVM_CODEC_MEM_ERROR` — internal allocation failed.
+    #[error("libavm allocation failed")]
+    OutOfMemory,
+    /// `AVM_CODEC_ABI_MISMATCH` — wrapper compiled against a different ABI
+    /// than the loaded libavm.
+    #[error("libavm ABI version mismatch")]
+    AbiMismatch,
+    /// `AVM_CODEC_INCAPABLE` — the decoder cannot perform the operation.
+    #[error("decoder is incapable of this operation")]
     Incapable,
+    /// `AVM_CODEC_UNSUP_BITSTREAM` — bitstream profile/level is unsupported.
+    #[error("unsupported bitstream profile or level")]
+    UnsupportedBitstream,
+    /// `AVM_CODEC_UNSUP_FEATURE` — bitstream uses an unsupported feature.
+    #[error("unsupported bitstream feature")]
+    UnsupportedFeature,
+    /// `AVM_CODEC_CORRUPT_FRAME` — the input is malformed.
+    #[error("corrupt bitstream frame")]
+    CorruptFrame,
+    /// `AVM_CODEC_INVALID_PARAM` — an invalid argument was passed.
+    #[error("invalid parameter")]
+    InvalidParam,
+    /// libavm returned a code unknown to this version of `rustavm`.
+    #[error("libavm returned unknown error code {0}")]
+    Other(avm_codec_err_t),
 }
 
-impl fmt::Display for DecoderError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            DecoderError::CodecError(e) => write!(f, "Codec error: {e}"),
-            DecoderError::InitFailed(e) => write!(f, "Initialization failed: {e}"),
-            DecoderError::DecodeFailed(e) => write!(f, "Decode failed: {e}"),
-            DecoderError::Incapable => write!(f, "Decoder is incapable of this operation"),
+impl ErrorKind {
+    /// Convert a raw libavm `avm_codec_err_t` into a typed `ErrorKind`.
+    ///
+    /// Returns `None` for `AVM_CODEC_OK` (i.e. no error).  All non-zero
+    /// codes produce `Some(_)`, with unrecognized values mapped to
+    /// [`ErrorKind::Other`].
+    pub fn from_raw(code: avm_codec_err_t) -> Option<Self> {
+        if code == avm_codec_err_t_AVM_CODEC_OK {
+            return None;
         }
+        let kind = match code {
+            x if x == avm_codec_err_t_AVM_CODEC_ERROR => Self::Generic,
+            x if x == avm_codec_err_t_AVM_CODEC_MEM_ERROR => Self::OutOfMemory,
+            x if x == avm_codec_err_t_AVM_CODEC_ABI_MISMATCH => Self::AbiMismatch,
+            x if x == avm_codec_err_t_AVM_CODEC_INCAPABLE => Self::Incapable,
+            x if x == avm_codec_err_t_AVM_CODEC_UNSUP_BITSTREAM => Self::UnsupportedBitstream,
+            x if x == avm_codec_err_t_AVM_CODEC_UNSUP_FEATURE => Self::UnsupportedFeature,
+            x if x == avm_codec_err_t_AVM_CODEC_CORRUPT_FRAME => Self::CorruptFrame,
+            x if x == avm_codec_err_t_AVM_CODEC_INVALID_PARAM => Self::InvalidParam,
+            other => Self::Other(other),
+        };
+        Some(kind)
     }
 }
 
-impl std::error::Error for DecoderError {}
+/// Errors returned by the safe [`Decoder`] API.
+///
+/// Each variant carries the [`ErrorKind`] returned by libavm and identifies
+/// the operation that produced the error so callers can react appropriately
+/// (e.g. retry decode after `OutOfMemory`, abort after `AbiMismatch`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, thiserror::Error)]
+#[non_exhaustive]
+pub enum DecoderError {
+    /// `Decoder::new` / `Decoder::with_config` / `DecoderBuilder::build` failed.
+    #[error("decoder initialization failed: {0}")]
+    Init(ErrorKind),
+    /// `Decoder::decode` rejected the input.
+    #[error("decode failed: {0}")]
+    Decode(ErrorKind),
+    /// `Decoder::flush` failed.
+    #[error("flush failed: {0}")]
+    Flush(ErrorKind),
+    /// `Decoder::get_stream_info` failed.
+    #[error("stream info query failed: {0}")]
+    StreamInfo(ErrorKind),
+    /// `Decoder::set_frame_buffer_functions` rejected the request.
+    #[error("set_frame_buffer_functions failed: {0}")]
+    SetFrameBufferFunctions(ErrorKind),
+}
 
 pub struct Decoder {
     ctx: avm_codec_ctx_t,
+    /// Boxed-and-leaked frame-buffer manager handle.  Null when no manager
+    /// is registered.  Reclaimed in `Drop`.
+    fb_manager: *mut ManagerHandle,
     // The libavm decoder context has internal mutable state that is unsafe for cross-thread
     // access.  Multi-threaded decoding is configured via `avm_codec_dec_cfg_t::threads`.
     // `*const ()` is `!Send + !Sync`, making this explicit.
     _not_send: PhantomData<*const ()>,
 }
 
-impl Decoder {
-    pub fn new() -> Result<Self, DecoderError> {
-        Self::with_config(None)
+impl fmt::Debug for Decoder {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Decoder")
+            .field("has_frame_buffer_manager", &!self.fb_manager.is_null())
+            .finish_non_exhaustive()
+    }
+}
+
+/// Per-buffer record returned from [`FrameBufferManager::allocate`] and
+/// passed back to [`FrameBufferManager::release`].
+///
+/// `data` and `len` describe the buffer; `token` is opaque to libavm and
+/// to the wrapper — managers typically use it as an index, slot ID, or
+/// reinterpret it as a pointer to per-buffer metadata.
+#[derive(Debug, Clone, Copy)]
+pub struct FrameBuffer {
+    /// Pointer to the start of the buffer.  Must remain valid until the
+    /// matching [`FrameBufferManager::release`] call.
+    pub data: NonNull<u8>,
+    /// Length of the buffer in bytes.  Must be `>= min_size` from
+    /// [`FrameBufferManager::allocate`].
+    pub len: usize,
+    /// Opaque per-buffer token that libavm hands back unchanged in the
+    /// matching `release` call.
+    pub token: usize,
+}
+
+// SAFETY: `FrameBuffer` is metadata only.  The pointer aliases storage that
+// the manager owns and is responsible for keeping alive across threads
+// according to the trait contract.
+unsafe impl Send for FrameBuffer {}
+
+/// User-implementable trait for supplying decoded-frame storage to libavm.
+///
+/// Replaces the older `unsafe fn set_frame_buffer_functions` API.  Implement
+/// this on a type that owns a pool of `Vec<u8>`s (or `mmap` regions, etc.),
+/// install it via [`Decoder::set_frame_buffer_manager`], and the safe
+/// wrapper installs panic-catching `extern "C"` shims that drive the
+/// trait.
+///
+/// Implementations must be `Send` because the manager is owned by the
+/// `Decoder` and may be moved across threads when the decoder is
+/// (although the decoder itself is `!Send`, future builders may relax that
+/// — keeping the trait bound `Send` makes the API forward-compatible).
+pub trait FrameBufferManager: Send {
+    /// Allocate a buffer of at least `min_size` bytes.  Return `None` to
+    /// signal allocation failure (libavm will report `OutOfMemory`).
+    ///
+    /// The returned [`FrameBuffer`] must remain valid (data pointer alive,
+    /// length unchanged) until the matching [`Self::release`] call.
+    fn allocate(&mut self, min_size: usize) -> Option<FrameBuffer>;
+
+    /// Release a buffer previously returned by [`Self::allocate`].  After
+    /// this call returns, the manager may free or recycle the storage.
+    fn release(&mut self, buffer: FrameBuffer);
+}
+
+/// Internal heap allocation that holds the boxed trait object.  We
+/// allocate a thin wrapper struct so that we can hand libavm a thin raw
+/// pointer (`*mut ManagerHandle`) instead of a fat `*mut dyn Trait`.
+struct ManagerHandle {
+    inner: Box<dyn FrameBufferManager>,
+}
+
+/// Shim invoked by libavm to allocate a frame buffer.
+///
+/// SAFETY contract for the caller (libavm):
+/// - `priv_` was registered by [`Decoder::set_frame_buffer_manager`] and
+///   points to a valid `ManagerHandle` for the lifetime of the decoder.
+/// - `fb` points to a valid `avm_codec_frame_buffer_t` that we may write.
+unsafe extern "C" fn fb_get_shim(
+    priv_: *mut c_void,
+    min_size: usize,
+    fb: *mut avm_codec_frame_buffer_t,
+) -> c_int {
+    // Wrap the entire body in catch_unwind so a panic in user code becomes
+    // a clean -1 return instead of unwinding through the C frame above us.
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if priv_.is_null() || fb.is_null() {
+            return -1;
+        }
+        // SAFETY: priv_ is the *mut ManagerHandle from set_frame_buffer_manager.
+        let handle = unsafe { &mut *(priv_ as *mut ManagerHandle) };
+        // SAFETY: libavm guarantees `fb` is a valid mutable pointer.
+        let fb_ref = unsafe { &mut *fb };
+        match handle.inner.allocate(min_size) {
+            Some(buf) => {
+                fb_ref.data = buf.data.as_ptr();
+                fb_ref.size = buf.len;
+                fb_ref.priv_ = buf.token as *mut c_void;
+                0
+            }
+            None => -1,
+        }
+    }));
+    result.unwrap_or(-1)
+}
+
+/// Shim invoked by libavm to release a frame buffer.  See [`fb_get_shim`].
+unsafe extern "C" fn fb_release_shim(
+    priv_: *mut c_void,
+    fb: *mut avm_codec_frame_buffer_t,
+) -> c_int {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if priv_.is_null() || fb.is_null() {
+            return -1;
+        }
+        // SAFETY: priv_ is the *mut ManagerHandle from set_frame_buffer_manager.
+        let handle = unsafe { &mut *(priv_ as *mut ManagerHandle) };
+        // SAFETY: libavm guarantees `fb` is a valid pointer.
+        let fb_ref = unsafe { &*fb };
+        let Some(data) = NonNull::new(fb_ref.data) else {
+            return -1;
+        };
+        let buf = FrameBuffer {
+            data,
+            len: fb_ref.size,
+            token: fb_ref.priv_ as usize,
+        };
+        handle.inner.release(buf);
+        0
+    }));
+    result.unwrap_or(-1)
+}
+
+/// Fluent builder for configuring a [`Decoder`] before construction.
+///
+/// # Example
+///
+/// ```no_run
+/// use rustavm::decoder::Decoder;
+/// let decoder = Decoder::builder().threads(4).build()?;
+/// # Ok::<(), rustavm::decoder::DecoderError>(())
+/// ```
+#[derive(Debug, Default, Clone)]
+#[must_use = "DecoderBuilder does nothing until `.build()` is called"]
+pub struct DecoderBuilder {
+    threads: Option<u32>,
+}
+
+impl DecoderBuilder {
+    /// Create a new builder with default settings.
+    pub fn new() -> Self {
+        Self { threads: None }
     }
 
-    pub fn with_config(threads: Option<u32>) -> Result<Self, DecoderError> {
+    /// Set the worker thread count for libavm's internal thread pool.
+    ///
+    /// `0` lets the codec choose; non-zero values cap the pool size.
+    pub fn threads(mut self, n: u32) -> Self {
+        self.threads = Some(n);
+        self
+    }
+
+    /// Construct the [`Decoder`].
+    pub fn build(self) -> Result<Decoder, DecoderError> {
         use std::mem::MaybeUninit;
         // SAFETY: `avm_codec_av2_dx()` returns a non-null static interface pointer.
         // `cfg` is zeroed, which is valid for `avm_codec_dec_cfg_t` (all-integer fields).
@@ -55,7 +282,7 @@ impl Decoder {
         unsafe {
             let mut ctx = MaybeUninit::<avm_codec_ctx_t>::uninit();
             let mut cfg = MaybeUninit::<avm_codec_dec_cfg_t>::zeroed();
-            if let Some(t) = threads {
+            if let Some(t) = self.threads {
                 // SAFETY: zeroed() produces a valid avm_codec_dec_cfg_t (all-integer fields).
                 (*cfg.as_mut_ptr()).threads = t;
             }
@@ -69,16 +296,44 @@ impl Decoder {
                 AVM_DECODER_ABI_VERSION as i32,
             );
 
-            if res == avm_codec_err_t_AVM_CODEC_OK {
-                // SAFETY: avm_codec_dec_init_ver fully initializes ctx on success.
-                Ok(Self {
-                    ctx: ctx.assume_init(),
-                    _not_send: PhantomData,
-                })
-            } else {
-                Err(DecoderError::InitFailed(res))
+            match ErrorKind::from_raw(res) {
+                None => {
+                    // SAFETY: avm_codec_dec_init_ver fully initializes ctx on success.
+                    Ok(Decoder {
+                        ctx: ctx.assume_init(),
+                        fb_manager: ptr::null_mut(),
+                        _not_send: PhantomData,
+                    })
+                }
+                Some(kind) => Err(DecoderError::Init(kind)),
             }
         }
+    }
+}
+
+impl Decoder {
+    /// Create a decoder with default configuration (no threading hint).
+    ///
+    /// Equivalent to `Decoder::builder().build()`.
+    pub fn new() -> Result<Self, DecoderError> {
+        DecoderBuilder::new().build()
+    }
+
+    /// Returns a [`DecoderBuilder`] for configuring optional parameters.
+    pub fn builder() -> DecoderBuilder {
+        DecoderBuilder::new()
+    }
+
+    /// Create a decoder with an optional explicit thread count.
+    ///
+    /// Prefer [`Decoder::builder`] for new code.
+    #[deprecated(since = "0.2.0", note = "use `Decoder::builder().threads(n).build()` instead")]
+    pub fn with_config(threads: Option<u32>) -> Result<Self, DecoderError> {
+        let mut builder = DecoderBuilder::new();
+        if let Some(t) = threads {
+            builder = builder.threads(t);
+        }
+        builder.build()
     }
 
     /// Submit compressed data to the decoder.
@@ -105,10 +360,9 @@ impl Decoder {
                 ptr::null_mut(),
             );
 
-            if res == avm_codec_err_t_AVM_CODEC_OK {
-                Ok(())
-            } else {
-                Err(DecoderError::DecodeFailed(res))
+            match ErrorKind::from_raw(res) {
+                None => Ok(()),
+                Some(kind) => Err(DecoderError::Decode(kind)),
             }
         }
     }
@@ -128,10 +382,9 @@ impl Decoder {
                 0,
                 ptr::null_mut(),
             );
-            if res == avm_codec_err_t_AVM_CODEC_OK {
-                Ok(())
-            } else {
-                Err(DecoderError::DecodeFailed(res))
+            match ErrorKind::from_raw(res) {
+                None => Ok(()),
+                Some(kind) => Err(DecoderError::Flush(kind)),
             }
         }
     }
@@ -159,19 +412,20 @@ impl Decoder {
         unsafe {
             let mut si = MaybeUninit::<avm_codec_stream_info_t>::zeroed();
             let res = avm_codec_get_stream_info(&mut self.ctx, si.as_mut_ptr());
-            if res == avm_codec_err_t_AVM_CODEC_OK {
-                // SAFETY: avm_codec_get_stream_info fully initializes si on success.
-                let si = si.assume_init();
-                Ok(StreamInfo {
-                    width: si.w,
-                    height: si.h,
-                    is_kf: si.is_kf != 0,
-                    number_tlayers: si.number_tlayers,
-                    number_mlayers: si.number_mlayers,
-                    number_xlayers: si.number_xlayers,
-                })
-            } else {
-                Err(DecoderError::CodecError(res))
+            match ErrorKind::from_raw(res) {
+                None => {
+                    // SAFETY: avm_codec_get_stream_info fully initializes si on success.
+                    let si = si.assume_init();
+                    Ok(StreamInfo {
+                        width: si.w,
+                        height: si.h,
+                        is_kf: si.is_kf != 0,
+                        number_tlayers: si.number_tlayers,
+                        number_mlayers: si.number_mlayers,
+                        number_xlayers: si.number_xlayers,
+                    })
+                }
+                Some(kind) => Err(DecoderError::StreamInfo(kind)),
             }
         }
     }
@@ -217,10 +471,66 @@ impl Decoder {
                 priv_,
             );
 
-            if res == avm_codec_err_t_AVM_CODEC_OK {
+            match ErrorKind::from_raw(res) {
+                None => Ok(()),
+                Some(kind) => Err(DecoderError::SetFrameBufferFunctions(kind)),
+            }
+        }
+    }
+
+    /// Install a safe [`FrameBufferManager`] on this decoder.
+    ///
+    /// The manager takes ownership of decoded frame storage allocation:
+    /// libavm calls back into [`FrameBufferManager::allocate`] when it
+    /// needs storage and [`FrameBufferManager::release`] when a frame is
+    /// no longer referenced.  Panics in the trait methods are caught
+    /// (`std::panic::catch_unwind`) and translated to error returns so
+    /// they cannot unwind through the C frame.
+    ///
+    /// Replacing an existing manager is allowed: the previous manager is
+    /// dropped after libavm has switched to the new shim registration.
+    pub fn set_frame_buffer_manager<M: FrameBufferManager + 'static>(
+        &mut self,
+        manager: M,
+    ) -> Result<(), DecoderError> {
+        let handle = Box::new(ManagerHandle {
+            inner: Box::new(manager),
+        });
+        let handle_ptr = Box::into_raw(handle);
+
+        // SAFETY: `handle_ptr` was just produced by `Box::into_raw` and will
+        // remain valid until `Drop` reclaims it.  The shims dereference
+        // `priv_` as `*mut ManagerHandle`, which is what we pass.
+        let result = unsafe {
+            self.set_frame_buffer_functions(
+                fb_get_shim,
+                fb_release_shim,
+                handle_ptr as *mut c_void,
+            )
+        };
+
+        match result {
+            Ok(()) => {
+                // Drop the previous manager AFTER libavm switched, so any
+                // in-flight callbacks always see a valid handle.
+                if !self.fb_manager.is_null() {
+                    // SAFETY: this pointer was produced by an earlier
+                    // `Box::into_raw` in this function.
+                    unsafe {
+                        drop(Box::from_raw(self.fb_manager));
+                    }
+                }
+                self.fb_manager = handle_ptr;
                 Ok(())
-            } else {
-                Err(DecoderError::CodecError(res))
+            }
+            Err(e) => {
+                // Reclaim the box we just leaked since libavm rejected.
+                // SAFETY: `handle_ptr` came from `Box::into_raw` moments ago
+                // and was not stored anywhere else.
+                unsafe {
+                    drop(Box::from_raw(handle_ptr));
+                }
+                Err(e)
             }
         }
     }
@@ -254,19 +564,32 @@ impl<'a> Iterator for FrameIterator<'a> {
 impl Drop for Decoder {
     // Safety note: a panic inside a registered frame-buffer callback cannot unwind through
     // the `extern "C"` boundary — since Rust 1.71 the runtime aborts the process instead of
-    // exhibiting UB.  `avm_codec_destroy` therefore never runs during such an unwind.  If a
-    // future safe callback wrapper wants panics to be recoverable, it must wrap the closure
-    // body in `std::panic::catch_unwind` and translate the panic into an error code.
+    // exhibiting UB.  The safe callback path (`set_frame_buffer_manager`) additionally wraps
+    // each trait call in `std::panic::catch_unwind` so even an in-progress panic is caught
+    // before it reaches the FFI boundary.
     fn drop(&mut self) {
         // SAFETY: `self.ctx` was fully initialized in `with_config()`.
         // `avm_codec_destroy` is called exactly once — Rust's ownership model
-        // guarantees a single `drop()` call.
+        // guarantees a single `drop()` call.  The destroy call may invoke
+        // any registered release callbacks, so the manager handle must
+        // remain valid through this call.
         unsafe {
             avm_codec_destroy(&mut self.ctx);
+        }
+        // Reclaim the manager handle (if any) AFTER libavm has finished
+        // releasing buffers via the shim callbacks.
+        if !self.fb_manager.is_null() {
+            // SAFETY: produced by `Box::into_raw` in `set_frame_buffer_manager`.
+            unsafe {
+                drop(Box::from_raw(self.fb_manager));
+            }
         }
     }
 }
 
+/// Bitstream-level information reported by the decoder once at least one
+/// packet has been parsed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct StreamInfo {
     pub width: u32,
     pub height: u32,
@@ -281,7 +604,20 @@ pub struct Frame<'a> {
     _marker: PhantomData<&'a Decoder>,
 }
 
+impl<'a> fmt::Debug for Frame<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Frame")
+            .field("width", &self.width())
+            .field("height", &self.height())
+            .field("bit_depth", &self.bit_depth())
+            .field("format", &self.format())
+            .field("monochrome", &self.monochrome())
+            .finish_non_exhaustive()
+    }
+}
+
 impl<'a> Frame<'a> {
+    #[must_use]
     pub fn width(&self) -> u32 {
         // SAFETY: `self.img` is non-null (NonNull invariant). The pointee is valid
         // for the lifetime `'a` which borrows the Decoder, preventing use-after-free.
@@ -300,7 +636,17 @@ impl<'a> Frame<'a> {
         unsafe { (*self.img.as_ptr()).bit_depth }
     }
 
-    pub fn format(&self) -> avm_img_fmt {
+    /// Returns the type-safe pixel format of this frame, or `None` if the
+    /// underlying libavm value is not one recognized by [`PixelFormat`].
+    ///
+    /// Use [`Frame::format_raw`] for the underlying integer if you need to
+    /// handle a format this crate does not yet model.
+    pub fn format(&self) -> Option<PixelFormat> {
+        PixelFormat::from_raw(self.format_raw())
+    }
+
+    /// Returns the raw libavm `avm_img_fmt` integer for this frame.
+    pub fn format_raw(&self) -> crate::sys::avm_img_fmt {
         // SAFETY: `self.img` is non-null (NonNull invariant). The pointee is valid
         // for the lifetime `'a` which borrows the Decoder, preventing use-after-free.
         unsafe { (*self.img.as_ptr()).fmt }
@@ -312,16 +658,18 @@ impl<'a> Frame<'a> {
         unsafe { (*self.img.as_ptr()).monochrome != 0 }
     }
 
-    pub fn chroma_sample_position(&self) -> crate::avm_chroma_sample_position_t {
+    /// Returns the position of chroma samples relative to the luma grid.
+    pub fn chroma_sample_position(&self) -> ChromaSamplePosition {
         // SAFETY: `self.img` is non-null (NonNull invariant). The pointee is valid
         // for the lifetime `'a` which borrows the Decoder, preventing use-after-free.
-        unsafe { (*self.img.as_ptr()).csp }
+        ChromaSamplePosition::from_raw(unsafe { (*self.img.as_ptr()).csp })
     }
 
-    pub fn color_range(&self) -> crate::avm_color_range_t {
+    /// Returns the sample value range — limited or full.
+    pub fn color_range(&self) -> ColorRange {
         // SAFETY: `self.img` is non-null (NonNull invariant). The pointee is valid
         // for the lifetime `'a` which borrows the Decoder, preventing use-after-free.
-        unsafe { (*self.img.as_ptr()).range }
+        ColorRange::from_raw(unsafe { (*self.img.as_ptr()).range })
     }
 
     /// Returns a byte slice covering the full (stride × height) storage of the given plane.
@@ -363,7 +711,7 @@ impl<'a> Frame<'a> {
             // Sanity: stride (in bytes) must cover at least the active pixel row.
             // For high-bitdepth formats each pixel is 2 bytes.
             let plane_w = self.plane_width(index);
-            let bps: usize = if ((*img).fmt & crate::AVM_IMG_FMT_HIGHBITDEPTH) != 0 { 2 } else { 1 };
+            let bps: usize = if ((*img).fmt & AVM_IMG_FMT_HIGHBITDEPTH) != 0 { 2 } else { 1 };
             let row_bytes = plane_w.checked_mul(bps)?;
             if stride < row_bytes {
                 return None;
@@ -456,12 +804,189 @@ impl<'a> Frame<'a> {
         }
     }
 
+    /// Returns the number of bytes per sample for this frame's storage:
+    /// 1 for 8-bit formats, 2 for high-bit-depth (10/12/16-bit) formats.
+    pub fn bytes_per_sample(&self) -> usize {
+        if self.format_raw() & AVM_IMG_FMT_HIGHBITDEPTH != 0 {
+            2
+        } else {
+            1
+        }
+    }
+
+    /// Returns the number of bytes occupied by one row of active pixel data
+    /// in the given plane (i.e. `plane_width(index) * bytes_per_sample`).
+    ///
+    /// Returns 0 if `index >= 3`.
+    pub fn row_bytes(&self, index: usize) -> usize {
+        if index >= 3 {
+            return 0;
+        }
+        self.plane_width(index)
+            .saturating_mul(self.bytes_per_sample())
+    }
+
+    /// Returns a typed view over the full plane storage, choosing
+    /// [`PlaneView::U8`] for 8-bit formats and [`PlaneView::U16`] for
+    /// high-bit-depth formats.
+    ///
+    /// Returns `None` under the same conditions as [`Frame::plane`], plus
+    /// when the underlying buffer is not properly aligned for `u16` access
+    /// (HBD case only — libavm's allocator always satisfies this in
+    /// practice, but the check is performed defensively).
+    pub fn plane_view(&self, index: usize) -> Option<PlaneView<'_>> {
+        let plane = self.plane(index)?;
+        if self.bytes_per_sample() == 2 {
+            // Verify u16 alignment and even byte length before reinterpreting.
+            if plane.as_ptr() as usize % core::mem::align_of::<u16>() != 0 {
+                return None;
+            }
+            if plane.len() % 2 != 0 {
+                return None;
+            }
+            // SAFETY: `plane` is a valid `&[u8]` of the right length and we
+            // verified alignment for `u16`.  libavm's allocator always
+            // produces correctly aligned plane buffers.  The reinterpreted
+            // slice borrows from `Frame<'a>` so the lifetime is correct.
+            let u16_slice = unsafe {
+                slice::from_raw_parts(plane.as_ptr().cast::<u16>(), plane.len() / 2)
+            };
+            Some(PlaneView::U16(u16_slice))
+        } else {
+            Some(PlaneView::U8(plane))
+        }
+    }
+
+    /// Returns an iterator over the rows of the given plane, each row
+    /// cropped to exactly `row_bytes(index)` bytes (i.e. with stride
+    /// padding stripped).
+    ///
+    /// For high-bit-depth content this still yields `&[u8]`; reinterpret
+    /// each row to `&[u16]` via `bytemuck::cast_slice` or
+    /// [`Frame::plane_view`] if you want typed access.
+    ///
+    /// Returns `None` under the same conditions as [`Frame::plane`].
+    pub fn rows(&self, index: usize) -> Option<impl Iterator<Item = &[u8]> + '_> {
+        let plane = self.plane(index)?;
+        let stride = self.stride(index);
+        let h = self.height_for_plane(index);
+        let row_bytes = self.row_bytes(index);
+        // `plane` is exactly `stride * h` bytes (validated by `plane()`),
+        // so each `chunks(stride)` chunk is exactly `stride` long, and
+        // `row_bytes <= stride` is also validated.
+        Some(
+            plane
+                .chunks(stride)
+                .take(h)
+                .map(move |row| &row[..row_bytes]),
+        )
+    }
+
     #[cfg(test)]
     pub(crate) fn from_raw_for_test(img: NonNull<avm_image_t>) -> Frame<'a> {
         Frame {
             img,
             _marker: PhantomData,
         }
+    }
+
+    /// Copy this frame's data into an [`OwnedFrame`] that has no lifetime
+    /// tie to the [`Decoder`].
+    ///
+    /// The plane buffers in the returned [`OwnedFrame`] are **packed** —
+    /// each row contains exactly `row_bytes(i)` bytes with no per-row
+    /// padding — so `strides[i] == row_bytes(i)`.
+    ///
+    /// `OwnedFrame` is `Send + Sync` and can be moved across thread
+    /// boundaries or held across subsequent `Decoder::decode` calls.
+    pub fn to_owned(&self) -> OwnedFrame {
+        let mut planes = [Vec::new(), Vec::new(), Vec::new()];
+        let mut strides = [0usize; 3];
+        for (i, plane_buf) in planes.iter_mut().enumerate() {
+            let row_bytes = self.row_bytes(i);
+            let h = self.height_for_plane(i);
+            if let Some(rows) = self.rows(i) {
+                plane_buf.reserve_exact(row_bytes.saturating_mul(h));
+                for row in rows {
+                    plane_buf.extend_from_slice(row);
+                }
+                strides[i] = row_bytes;
+            }
+        }
+        OwnedFrame {
+            width: self.width(),
+            height: self.height(),
+            bit_depth: self.bit_depth(),
+            format: self.format(),
+            format_raw: self.format_raw(),
+            color_range: self.color_range(),
+            chroma_sample_position: self.chroma_sample_position(),
+            monochrome: self.monochrome(),
+            bytes_per_sample: self.bytes_per_sample(),
+            planes,
+            strides,
+        }
+    }
+}
+
+/// An owned snapshot of a decoded frame, decoupled from the [`Decoder`]
+/// that produced it.
+///
+/// Plane data is stored **packed** — each row contains exactly
+/// `row_bytes` bytes with no stride padding.  This makes `OwnedFrame`
+/// `Send + Sync` and safe to hold across subsequent
+/// [`Decoder::decode`] calls.
+///
+/// Construct via [`Frame::to_owned`].
+#[derive(Debug, Clone)]
+pub struct OwnedFrame {
+    /// Active pixel width.
+    pub width: u32,
+    /// Active pixel height.
+    pub height: u32,
+    /// Bit depth of each sample (8, 10, 12, or 16).
+    pub bit_depth: u32,
+    /// Type-safe pixel format, or `None` if libavm reported an unknown one.
+    pub format: Option<PixelFormat>,
+    /// Raw libavm `avm_img_fmt` integer for the format.
+    pub format_raw: avm_img_fmt,
+    /// Sample value range.
+    pub color_range: ColorRange,
+    /// Chroma sample position.
+    pub chroma_sample_position: ChromaSamplePosition,
+    /// `true` for monochrome (Y-only) frames.
+    pub monochrome: bool,
+    /// Bytes per sample (1 for 8-bit, 2 for high-bit-depth).
+    pub bytes_per_sample: usize,
+    /// Per-plane packed pixel data.  Index 0 is luma, 1/2 are chroma.
+    /// Empty for planes that were absent (e.g. chroma on a monochrome
+    /// frame) or that failed validation.
+    pub planes: [Vec<u8>; 3],
+    /// Per-plane row stride in bytes (equals `row_bytes` since the
+    /// data is packed).
+    pub strides: [usize; 3],
+}
+
+impl OwnedFrame {
+    /// Returns a slice over the bytes of the given plane, or `None` if
+    /// `index >= 3` or the plane is empty.
+    pub fn plane(&self, index: usize) -> Option<&[u8]> {
+        if index >= 3 {
+            return None;
+        }
+        let p = &self.planes[index];
+        if p.is_empty() { None } else { Some(p) }
+    }
+
+    /// Returns an iterator over the rows of the given plane.  Each row
+    /// is exactly `strides[index]` bytes.
+    pub fn rows(&self, index: usize) -> Option<impl Iterator<Item = &[u8]>> {
+        let plane = self.plane(index)?;
+        let stride = self.strides[index];
+        if stride == 0 {
+            return None;
+        }
+        Some(plane.chunks_exact(stride))
     }
 }
 

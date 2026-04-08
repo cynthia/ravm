@@ -21,6 +21,10 @@ struct Cli {
     /// Output raw video without Y4M container headers
     #[arg(long)]
     rawvideo: bool,
+
+    /// Number of decoder worker threads (0 = codec default).
+    #[arg(long, value_name = "N")]
+    threads: Option<u32>,
 }
 
 fn write_frame(
@@ -40,49 +44,28 @@ fn write_frame(
         }
     }
 
-    let bytes_per_sample = if img.bit_depth() > 8 || (img.format() & rustavm::AVM_IMG_FMT_HIGHBITDEPTH) != 0 { 2 } else { 1 };
+    let downshift_8bit = img.bytes_per_sample() == 2 && img.bit_depth() == 8;
     for i in 0..3 {
-        if let Some(plane) = img.plane(i) {
-            let stride = img.stride(i);
-            let w = img.plane_width(i);
-            let h = img.height_for_plane(i);
+        let Some(rows) = img.rows(i) else { continue };
+        let w = img.plane_width(i);
+        let mut row_buf = if downshift_8bit { vec![0u8; w] } else { Vec::new() };
 
-            if bytes_per_sample == 2 && img.bit_depth() == 8 {
-                let mut row_buf = vec![0u8; w];
-                for row_data in plane.chunks(stride).take(h) {
-                    for (x, byte) in row_buf.iter_mut().enumerate().take(w) {
-                        *byte = match row_data.get(x * 2) {
-                            Some(&b) => b,
-                            None => {
-                                eprintln!("Warning: truncated plane data at row");
-                                0
-                            }
-                        };
-                    }
-                    if compute_md5 {
-                        md5_ctx.consume(&row_buf);
-                    }
-                    if let Some(ref mut f) = out {
-                        f.write_all(&row_buf)?;
-                    }
+        for row in rows {
+            let bytes: &[u8] = if downshift_8bit {
+                // 16-bit container holding 8-bit content: take the low byte
+                // of each sample so the output is one byte per pixel.
+                for (x, dst) in row_buf.iter_mut().enumerate() {
+                    *dst = row.get(x * 2).copied().unwrap_or(0);
                 }
+                &row_buf
             } else {
-                let row_bytes = w * bytes_per_sample;
-                for row_data in plane.chunks(stride).take(h) {
-                    let row_slice = match row_data.get(..row_bytes) {
-                        Some(s) => s,
-                        None => {
-                            eprintln!("Warning: truncated plane data at row");
-                            break;
-                        }
-                    };
-                    if compute_md5 {
-                        md5_ctx.consume(row_slice);
-                    }
-                    if let Some(ref mut f) = out {
-                        f.write_all(row_slice)?;
-                    }
-                }
+                row
+            };
+            if compute_md5 {
+                md5_ctx.consume(bytes);
+            }
+            if let Some(ref mut f) = out {
+                f.write_all(bytes)?;
             }
         }
     }
@@ -98,11 +81,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Input: {input_path}");
     println!("IVF Header: {}x{} @ {}/{} fps, FourCC: {:?}",
-        ivf_reader.header().width, ivf_reader.header().height,
-        ivf_reader.header().framerate_num, ivf_reader.header().framerate_den,
-        ivf_reader.header().fourcc);
+        ivf_reader.header.width, ivf_reader.header.height,
+        ivf_reader.header.framerate_num, ivf_reader.header.framerate_den,
+        ivf_reader.header.fourcc);
 
-    let mut decoder = Decoder::new()?;
+    let mut builder = Decoder::builder();
+    if let Some(t) = cli.threads {
+        builder = builder.threads(t);
+    }
+    let mut decoder = builder.build()?;
     let mut out_file: Option<BufWriter<File>> = if let Some(ref path) = cli.output {
         Some(BufWriter::with_capacity(1 << 20, File::create(path)?))
     } else {
@@ -123,7 +110,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         for img in decoder.get_frames() {
             if frame_count == 0 {
                 println!("Frame 0: Format: {:x}, Bit Depth: {}, WxH: {}x{}", 
-                    img.format(), img.bit_depth(), img.width(), img.height());
+                    img.format_raw(), img.bit_depth(), img.width(), img.height());
 
                 if !raw_video {
                     // Generate Y4M file header matching C's logic
@@ -137,29 +124,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             _ => "Cmono",
                         })
                     } else if img.bit_depth() == 8 {
-                        Cow::Borrowed(match img.format() {
-                            rustavm::avm_img_fmt_AVM_IMG_FMT_I444 => "C444",
-                            rustavm::avm_img_fmt_AVM_IMG_FMT_I422 => "C422",
+                        Cow::Borrowed(match img.format_raw() {
+                            rustavm::sys::avm_img_fmt_AVM_IMG_FMT_I444 => "C444",
+                            rustavm::sys::avm_img_fmt_AVM_IMG_FMT_I422 => "C422",
                             _ => {
-                                if img.chroma_sample_position() == rustavm::avm_chroma_sample_position_AVM_CSP_LEFT {
-                                    "C420mpeg2 XYSCSS=420MPEG2"
-                                } else if img.chroma_sample_position() == rustavm::avm_chroma_sample_position_AVM_CSP_TOPLEFT {
-                                    "C420"
-                                } else {
-                                    "C420jpeg"
+                                use rustavm::format::ChromaSamplePosition;
+                                match img.chroma_sample_position() {
+                                    ChromaSamplePosition::Left => "C420mpeg2 XYSCSS=420MPEG2",
+                                    ChromaSamplePosition::TopLeft => "C420",
+                                    _ => "C420jpeg",
                                 }
                             }
                         })
                     } else {
-                        let template = match img.format() {
-                            rustavm::avm_img_fmt_AVM_IMG_FMT_I44416 => "C444p{} XYSCSS=444P{}",
-                            rustavm::avm_img_fmt_AVM_IMG_FMT_I42216 => "C422p{} XYSCSS=422P{}",
+                        let template = match img.format_raw() {
+                            rustavm::sys::avm_img_fmt_AVM_IMG_FMT_I44416 => "C444p{} XYSCSS=444P{}",
+                            rustavm::sys::avm_img_fmt_AVM_IMG_FMT_I42216 => "C422p{} XYSCSS=422P{}",
                             _ => "C420p{} XYSCSS=420P{}",
                         };
                         Cow::Owned(template.replace("{}", &img.bit_depth().to_string()))
                     };
 
-                    let range = if img.color_range() == rustavm::avm_color_range_AVM_CR_FULL_RANGE {
+                    let range = if img.color_range() == rustavm::format::ColorRange::Full {
                         " XCOLORRANGE=FULL"
                     } else {
                         ""
@@ -167,7 +153,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     let header = format!("YUV4MPEG2 W{} H{} F{}:{} Ip {}{}\n", 
                         img.width(), img.height(), 
-                        ivf_reader.header().framerate_num, ivf_reader.header().framerate_den,
+                        ivf_reader.header.framerate_num, ivf_reader.header.framerate_den,
                         colorspace, range);
 
                     if compute_md5 {

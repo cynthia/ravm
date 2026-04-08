@@ -13,13 +13,13 @@
 use std::os::raw::{c_int, c_void};
 use std::path::{Path, PathBuf};
 
-use rustavm::{
+use rustavm::decoder::{Decoder, DecoderError, ErrorKind};
+use rustavm::ffi::{
     avm_codec_av2_dx, avm_codec_ctx_t, avm_codec_dec_init_ver, avm_codec_destroy,
-    avm_codec_frame_buffer_t, avm_codec_set_frame_buffer_functions,
     avm_codec_err_t_AVM_CODEC_INVALID_PARAM, avm_codec_err_t_AVM_CODEC_OK,
-    AVM_DECODER_ABI_VERSION, AVM_MAXIMUM_REF_BUFFERS, AVM_MAXIMUM_WORK_BUFFERS,
+    avm_codec_frame_buffer_t, avm_codec_set_frame_buffer_functions, AVM_DECODER_ABI_VERSION,
+    AVM_MAXIMUM_REF_BUFFERS, AVM_MAXIMUM_WORK_BUFFERS,
 };
-use rustavm::decoder::{Decoder, DecoderError};
 use rustavm::ivf::IvfReader;
 
 // ---------------------------------------------------------------------------
@@ -694,11 +694,11 @@ fn test_frame_buffer_insufficient_buffers() {
     // With only 2 buffers, the decoder should eventually run out.
     // Very short clips may still succeed — we accept both outcomes but
     // verify the error type if one occurs.
-    if let Err(DecoderError::DecodeFailed(code)) = result {
+    if let Err(DecoderError::Decode(kind)) = result {
         assert_eq!(
-            code,
-            rustavm::avm_codec_err_t_AVM_CODEC_MEM_ERROR,
-            "insufficient buffers should produce MEM_ERROR, got code {code}"
+            kind,
+            ErrorKind::OutOfMemory,
+            "insufficient buffers should produce OutOfMemory, got {kind:?}"
         );
     }
     // If it succeeded, the clip was too short to exhaust 2 buffers — that's OK.
@@ -715,14 +715,14 @@ fn test_frame_buffer_null_allocation() {
     let (result, _manager) =
         decode_with_ext_fb(&path, num_buffers, FailMode::NullData, None);
     match result {
-        Err(DecoderError::DecodeFailed(code)) => {
+        Err(DecoderError::Decode(kind)) => {
             assert_eq!(
-                code,
-                rustavm::avm_codec_err_t_AVM_CODEC_MEM_ERROR,
-                "null allocation should produce MEM_ERROR, got code {code}"
+                kind,
+                ErrorKind::OutOfMemory,
+                "null allocation should produce OutOfMemory, got {kind:?}"
             );
         }
-        other => panic!("expected MEM_ERROR from null allocation, got: {other:?}"),
+        other => panic!("expected OutOfMemory from null allocation, got: {other:?}"),
     }
 }
 
@@ -737,15 +737,15 @@ fn test_frame_buffer_insufficient_size() {
     let (result, _manager) =
         decode_with_ext_fb(&path, num_buffers, FailMode::OneLessByte, None);
     match result {
-        Err(DecoderError::DecodeFailed(code)) => {
+        Err(DecoderError::Decode(kind)) => {
             assert_eq!(
-                code,
-                rustavm::avm_codec_err_t_AVM_CODEC_MEM_ERROR,
-                "undersized buffer should produce MEM_ERROR, got code {code}"
+                kind,
+                ErrorKind::OutOfMemory,
+                "undersized buffer should produce OutOfMemory, got {kind:?}"
             );
         }
         other => panic!(
-            "expected MEM_ERROR from undersized buffer, got: {other:?}"
+            "expected OutOfMemory from undersized buffer, got: {other:?}"
         ),
     }
 }
@@ -765,11 +765,11 @@ fn test_frame_buffer_no_release() {
         Some(do_not_release_frame_buffer),
     );
     // The first frame may decode OK, but eventually we should run out of buffers.
-    if let Err(DecoderError::DecodeFailed(code)) = result {
+    if let Err(DecoderError::Decode(kind)) = result {
         assert_eq!(
-            code,
-            rustavm::avm_codec_err_t_AVM_CODEC_MEM_ERROR,
-            "no-release should produce MEM_ERROR, got code {code}"
+            kind,
+            ErrorKind::OutOfMemory,
+            "no-release should produce OutOfMemory, got {kind:?}"
         );
     }
     // Very short clip might succeed before exhaustion.

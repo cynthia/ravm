@@ -31,8 +31,15 @@ fuzz_target!(|data: &[u8]| {
             let _ = img.height();
             let _ = img.bit_depth();
             let _ = img.format();
+            let _ = img.bytes_per_sample();
             for i in 0..3 {
                 let _ = img.plane(i);
+                let _ = img.plane_view(i);
+                if let Some(rows) = img.rows(i) {
+                    for row in rows {
+                        std::hint::black_box(row);
+                    }
+                }
             }
         }
     }
@@ -43,6 +50,11 @@ fuzz_target!(|data: &[u8]| {
         let _ = img.width();
         for i in 0..3 {
             let _ = img.plane(i);
+            if let Some(rows) = img.rows(i) {
+                for row in rows {
+                    std::hint::black_box(row);
+                }
+            }
         }
     }
 });

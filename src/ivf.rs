@@ -1,4 +1,6 @@
-use std::io::{self, Read};
+use std::fs::File;
+use std::io::{self, BufReader, Read};
+use std::path::Path;
 
 const DEFAULT_MAX_FRAME_SIZE: usize = 64 * 1024 * 1024; // 64 MiB
 
@@ -21,7 +23,7 @@ pub struct IvfFrame {
 #[derive(Debug)]
 pub struct IvfReader<R: Read> {
     reader: R,
-    header: IvfHeader,
+    pub header: IvfHeader,
     max_frame_size: usize,
 }
 
@@ -75,10 +77,6 @@ impl<R: Read> IvfReader<R> {
         Ok(Self { reader, header, max_frame_size: max })
     }
 
-    pub fn header(&self) -> &IvfHeader {
-        &self.header
-    }
-
     pub fn next_frame(&mut self) -> io::Result<Option<IvfFrame>> {
         let mut size_buf = [0u8; 4];
         if let Err(e) = self.reader.read_exact(&mut size_buf) {
@@ -107,5 +105,35 @@ impl<R: Read> IvfReader<R> {
         self.reader.read_exact(&mut data)?;
 
         Ok(Some(IvfFrame { timestamp, data }))
+    }
+}
+
+impl IvfReader<BufReader<File>> {
+    /// Open an IVF file at `path`, wrapping it in a buffered reader and
+    /// parsing the header.  Convenience for the common case.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use rustavm::ivf::IvfReader;
+    /// let reader = IvfReader::open("clip.ivf")?;
+    /// println!("{}x{}", reader.header.width, reader.header.height);
+    /// # Ok::<(), std::io::Error>(())
+    /// ```
+    pub fn open<P: AsRef<Path>>(path: P) -> io::Result<Self> {
+        let file = File::open(path)?;
+        Self::new(BufReader::new(file))
+    }
+}
+
+impl<R: Read> Iterator for IvfReader<R> {
+    type Item = io::Result<IvfFrame>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.next_frame() {
+            Ok(Some(frame)) => Some(Ok(frame)),
+            Ok(None) => None,
+            Err(e) => Some(Err(e)),
+        }
     }
 }

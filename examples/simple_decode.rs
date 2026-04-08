@@ -1,31 +1,50 @@
-use rustavm::decoder::Decoder;
-use rustavm::ivf::IvfReader;
-use std::fs::File;
-use std::io::BufReader;
+//! Minimal IVF → frame loop using the streaming convenience helper.
+//!
+//! Usage: `cargo run --example simple_decode -- input.ivf`
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Note: This example expects test.ivf to be in avm/out/
-    let input_path = "../avm/out/test.ivf";
-    let input_file = match File::open(input_path) {
-        Ok(f) => f,
-        Err(_) => {
-            eprintln!("Error: Could not open {input_path}. Please run avmenc to generate it first.");
-            return Ok(());
+use rustavm::decode_ivf;
+use rustavm::ivf::IvfReader;
+use std::env;
+use std::process::ExitCode;
+
+fn main() -> ExitCode {
+    let Some(path) = env::args().nth(1) else {
+        eprintln!("usage: simple_decode <input.ivf>");
+        return ExitCode::FAILURE;
+    };
+
+    let reader = match IvfReader::open(&path) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("failed to open {path}: {e}");
+            return ExitCode::FAILURE;
         }
     };
-    
-    let mut ivf_reader = IvfReader::new(BufReader::new(input_file))?;
-    let mut decoder = Decoder::new()?;
+    println!(
+        "{path}: {}x{} fourcc {:?}",
+        reader.header.width, reader.header.height, reader.header.fourcc
+    );
 
-    println!("Decoding {input_path}...");
-    let mut frame_count = 0;
-    while let Some(frame) = ivf_reader.next_frame()? {
-        decoder.decode(&frame.data)?;
-        for img in decoder.get_frames() {
-            frame_count += 1;
-            println!("Frame {}: {}x{}, format: {:x}", frame_count, img.width(), img.height(), img.format());
+    let mut count = 0usize;
+    let result = decode_ivf(reader, |frame| {
+        count += 1;
+        println!(
+            "Frame {count}: {}x{} bit_depth={} format={:?}",
+            frame.width(),
+            frame.height(),
+            frame.bit_depth(),
+            frame.format()
+        );
+    });
+
+    match result {
+        Ok(total) => {
+            println!("Total frames decoded: {total}");
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("decode error: {e}");
+            ExitCode::FAILURE
         }
     }
-    println!("Total frames decoded: {frame_count}");
-    Ok(())
 }

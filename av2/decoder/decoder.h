@@ -811,6 +811,17 @@ typedef void (*block_visitor_fn_t)(AV2Decoder *const pbi, ThreadData *const td,
                                    PARTITION_TYPE partition, BLOCK_SIZE bsize,
                                    PARTITION_TREE *parent, int index);
 
+// This function outputs frames that are ready to be output.
+// The output frames may be the output trigger frame along with
+// past frames that have not yet been output,
+// and/or future frames that are continuous with the output trigger frame.
+// The output trigger frame is the current frame or
+// the frame to be flushed out from the ref_frame_map slot.
+// ref_idx == -1 indicates the output process is trigged by
+// decoding the current frame.
+// Returns 0 on success, 1 if a DOH conformance violation was detected.
+int av2_output_frame_buffers(AV2Decoder *pbi, int ref_idx);
+
 /*!\endcond */
 
 #if CONFIG_COLLECT_COMPONENT_TIMING

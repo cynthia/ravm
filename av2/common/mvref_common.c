@@ -4722,7 +4722,7 @@ void av2_update_ref_mv_bank(const AV2_COMMON *const cm, MACROBLOCKD *const xd,
 void assign_warpmv(const AV2_COMMON *cm, SUBMB_INFO **submi, BLOCK_SIZE bsize,
                    WarpedMotionParams *wm_params, int mi_row, int mi_col,
                    int ref) {
-  assert(wm_params->invalid == 0);
+  if (wm_params->invalid) return;
   const int bw = mi_size_wide[bsize];
   const int bh = mi_size_high[bsize];
   const int p_x_mis = AVMMIN(bw, cm->mi_params.mi_cols - mi_col) * MI_SIZE;

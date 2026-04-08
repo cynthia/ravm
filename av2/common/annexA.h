@@ -43,6 +43,11 @@ int av2_check_profile_interop_conformance(
     struct SequenceHeader *seq_params,
     struct avm_internal_error_info *error_info, int is_decoder);
 
+// Validates total layer count against profile's Max Total Layer # limit.
+// Returns 1 on success and 0 on failure (sets error_info on failure).
+int av2_check_total_layer_count(int profile_idc, int total_layers,
+                                struct avm_internal_error_info *error_info);
+
 //==========================================
 // Profile Scaling and Bitrate Functions
 //===========================================

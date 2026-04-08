@@ -443,6 +443,11 @@ static uint32_t read_multi_stream_decoder_operation_obu(
   }
   cm->num_streams = num_streams;
 
+  // Check total layer count against profile's Max Total Layer # limit
+  const int total_layers = cm->num_streams * cm->seq_params.seq_max_mlayer_cnt;
+  av2_check_total_layer_count(cm->seq_params.seq_profile_idc, total_layers,
+                              &cm->error);
+
   pbi->common.msdo_params.multistream_profile_idc =
       avm_rb_read_literal(rb, PROFILE_BITS);  // read profile of multistream
 

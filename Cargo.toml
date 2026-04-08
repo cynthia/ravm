@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 description = "Rust bindings for the AVM (AV2) video decoder"
 license = "BSD-2-Clause"
+repository = "https://github.com/cynthia/ravm"
 keywords = ["av2", "video", "decoder", "codec"]
 categories = ["multimedia::encoding", "multimedia::video"]
 rust-version = "1.74"

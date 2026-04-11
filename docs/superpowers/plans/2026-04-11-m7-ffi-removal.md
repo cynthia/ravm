@@ -159,9 +159,10 @@ pub use diff::{
 ```
 
 - [ ] **Step 2: Same for `tests/differential_test.rs` — put `#![cfg(feature = "libavm-diff")]` at the top**
-- [ ] **Step 3: Document in `src/diff.rs` docstring that this is a debugging-only tool**
-- [ ] **Step 4: CI: add a separate job `cargo test -p rustavm --features libavm-diff` so the diff harness stays buildable**
-- [ ] **Step 5: Commit** — `rustavm: gate differential harness behind libavm-diff feature`
+- [ ] **Step 3: Same for `tests/smoke_test.rs` (added in M1 Task 0.3)** — the Xiph smoke test calls `BackendKind::Libavm` which only exists under the feature flag post-M7. Gate the file with `#![cfg(feature = "libavm-diff")]`.
+- [ ] **Step 4: Document in `src/diff.rs` docstring that this is a debugging-only tool**
+- [ ] **Step 5: CI: the existing `cargo test -p rustavm --features libavm-diff` job must now also cover `smoke_test.rs` — verify the smoke test still runs under the feature flag build**
+- [ ] **Step 6: Commit** — `rustavm: gate differential harness and xiph smoke behind libavm-diff feature`
 
 ### Task D.2: Ensure the libavm-diff feature still works end-to-end
 

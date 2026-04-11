@@ -59,6 +59,140 @@ fn kf_only_conformance() {
 
 Commit.
 
+- [ ] **Task 0.3: Xiph smoke-test corpus and harness**
+
+**Files:**
+- Create: `tests/smoke/fetch_xiph.sh`
+- Create: `tests/smoke/manifest.toml`
+- Create: `tests/smoke/cache/` (gitignored)
+- Create: `tests/smoke_test.rs`
+
+Separate from the conformance harness and not a gating oracle. This is a fast CI sanity check: decode a small handful of streams from Xiph's AV2 mirror through both libavm and the Rust backend and assert the reconstructed YUV matches byte-for-byte. Catches crashes, obvious regressions, and gross divergences between runs. Does not replace the conformance-vector gate (the user is sourcing those separately).
+
+- [ ] **Step 1: `tests/smoke/fetch_xiph.sh`**
+
+Downloads ~5 small streams from `https://media.xiph.org/video/av2/` into `tests/smoke/cache/`. Pick streams that are fast to decode (small resolution, few frames) — the smoke test runs on every CI push, so total wall time should stay under 30 seconds.
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+BASE="https://media.xiph.org/video/av2"
+CACHE="$(dirname "$0")/cache"
+mkdir -p "$CACHE"
+# The exact file names are discovered during Task 0.3 Step 1 — list what
+# the Xiph directory actually contains at the time of fetch, pick the
+# smallest 5, and hard-code the list in this script. Commit the script
+# once the list is pinned.
+FILES=(
+    # e.g. "short_clip_1.ivf"
+    # e.g. "short_clip_2.ivf"
+)
+for f in "${FILES[@]}"; do
+    if [ ! -f "$CACHE/$f" ]; then
+        curl -fsSL "$BASE/$f" -o "$CACHE/$f"
+    fi
+done
+```
+
+- [ ] **Step 2: `tests/smoke/manifest.toml`**
+
+Lists each fetched file with a short descriptor. No expected MD5 — the expectation is "Rust output == libavm output," computed at test time.
+
+```toml
+[[stream]]
+file = "short_clip_1.ivf"
+description = "Xiph AV2 mirror, smallest clip"
+
+[[stream]]
+file = "short_clip_2.ivf"
+description = "Xiph AV2 mirror, second-smallest"
+```
+
+- [ ] **Step 3: `tests/smoke_test.rs`**
+
+```rust
+//! Xiph smoke test: decode each pinned stream through both backends and
+//! assert byte-identical YUV. Not a gating oracle — the real gate is the
+//! conformance vector suite in `tests/conformance_test.rs`. This test
+//! catches crashes and gross regressions fast.
+
+use rustavm::{decode_ivf_with_backend, BackendKind};
+
+#[derive(serde::Deserialize)]
+struct Manifest { stream: Vec<Stream> }
+
+#[derive(serde::Deserialize)]
+struct Stream { file: String, description: String }
+
+fn load_manifest() -> Manifest {
+    let text = std::fs::read_to_string("tests/smoke/manifest.toml").expect("manifest");
+    toml::from_str(&text).expect("parse manifest")
+}
+
+#[test]
+fn xiph_smoke_rust_matches_libavm() {
+    let manifest = load_manifest();
+    let mut ran = 0;
+    let mut skipped = 0;
+    for s in manifest.stream {
+        let path = format!("tests/smoke/cache/{}", s.file);
+        let Ok(bytes) = std::fs::read(&path) else {
+            skipped += 1;
+            continue;
+        };
+        let libavm_out = decode_ivf_with_backend(bytes.as_slice(), BackendKind::Libavm)
+            .unwrap_or_else(|e| panic!("libavm decode of {} failed: {e:?}", s.file));
+        let rust_out = decode_ivf_with_backend(bytes.as_slice(), BackendKind::Rust)
+            .unwrap_or_else(|e| panic!("rust decode of {} failed: {e:?} ({})", s.file, s.description));
+        assert_eq!(
+            rust_out.yuv(), libavm_out.yuv(),
+            "YUV mismatch on {}: {}", s.file, s.description,
+        );
+        ran += 1;
+    }
+    if skipped > 0 {
+        eprintln!("xiph smoke: ran {ran}, skipped {skipped} (cache empty — run tests/smoke/fetch_xiph.sh)");
+    }
+    assert!(ran > 0 || skipped > 0, "smoke manifest was empty");
+}
+```
+
+`serde` and `toml` are likely already dev-deps from Task 0.2's manifest parsing; if not, add them as dev-deps in this step.
+
+- [ ] **Step 4: Wire into CI**
+
+The smoke test runs on every CI push. The fetch script runs as a pre-step and caches into `tests/smoke/cache/`. Because `cache/` is gitignored, CI needs to either (a) run `fetch_xiph.sh` on every build or (b) use a CI-level cache action keyed on the pinned file list. Prefer (b) to avoid hammering Xiph.
+
+Add (or modify) a GitHub Actions workflow step:
+
+```yaml
+- name: Cache Xiph smoke corpus
+  uses: actions/cache@v4
+  with:
+    path: tests/smoke/cache
+    key: xiph-av2-smoke-v1
+
+- name: Fetch Xiph smoke corpus
+  run: bash tests/smoke/fetch_xiph.sh
+
+- name: Run smoke test
+  run: cargo test -p rustavm --test smoke_test
+```
+
+If the project doesn't use GitHub Actions, translate the three steps to whichever CI is in use.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add tests/smoke/ tests/smoke_test.rs .github
+git commit -m "rustavm: add Xiph smoke test harness for backend divergence detection"
+```
+
+**Important scope notes:**
+- The smoke test is **not** the M1 exit gate. Conformance vectors still are (Task I.1). If Xiph streams exercise features M1 hasn't implemented yet (most likely inter — Xiph's corpus has plenty of inter-frame content), filter the manifest to pick clips whose content is within M1's capability. As later milestones land, expand the manifest to add clips that exercise their features.
+- Failures in Xiph smoke do not always indicate a Rust-backend bug. libavm has its own bugs. If a stream diverges and the divergence is traceable to libavm misbehavior, add the stream to an `xfail` list in the manifest with a comment pointing at the libavm issue, rather than silencing the test or flipping the assertion.
+- This test is preserved past M7. The spec's M7 FFI-removal plan keeps the libavm backend behind `--features libavm-diff`; the smoke test runs under that feature and remains a CI job forever.
+
 ---
 
 ## Phase A — Frame header completion

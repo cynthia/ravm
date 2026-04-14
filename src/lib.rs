@@ -23,12 +23,24 @@ pub mod sys {
 }
 
 pub mod decoder;
+pub mod backend;
+pub mod bitstream;
+pub mod diff;
 pub mod format;
 pub mod ivf;
 pub mod stream;
 
+pub use backend::BackendKind;
+pub use diff::{
+    compare_ivf_file, compare_ivf_file_outcomes, compare_outcome_overlap, compare_outcomes,
+    decode_ivf_outcome, decode_ivf_snapshot, CompareError, DecodeMismatch, DecodeOutcome,
+    DecodeSnapshot, FrameMismatch,
+};
 pub use format::{ChromaSamplePosition, ColorRange, PixelFormat, Subsampling};
-pub use stream::{decode_ivf, decode_ivf_reader, StreamError};
+pub use stream::{
+    decode_ivf, decode_ivf_reader, decode_ivf_reader_with_backend, decode_ivf_with_backend,
+    StreamError,
+};
 
 /// Raw FFI bindings to libavm.
 ///

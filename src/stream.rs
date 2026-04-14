@@ -4,7 +4,8 @@
 //! every packet to a [`Decoder`], draining each batch of decoded frames,
 //! and finally flushing for B-frame reorder buffers.
 
-use crate::decoder::{Decoder, DecoderError, Frame};
+use crate::backend::BackendKind;
+use crate::decoder::{DecodeProgress, Decoder, DecoderError, Frame};
 use crate::ivf::IvfReader;
 use std::io::Read;
 
@@ -18,6 +19,14 @@ pub enum StreamError {
     /// libavm rejected the bitstream.
     #[error("decoder error: {0}")]
     Decoder(#[from] DecoderError),
+    /// Backend decode failed after parsing some portion of the stream.
+    #[error("decoder error at packet {packet_index}: {source}")]
+    DecoderAtPacket {
+        packet_index: usize,
+        progress: Box<DecodeProgress>,
+        #[source]
+        source: DecoderError,
+    },
 }
 
 /// Decode every frame from an IVF stream, invoking `sink` once per
@@ -45,20 +54,46 @@ pub enum StreamError {
 /// println!("decoded {count} frames");
 /// # Ok::<(), rustavm::stream::StreamError>(())
 /// ```
-pub fn decode_ivf<R, F>(mut ivf: IvfReader<R>, mut sink: F) -> Result<usize, StreamError>
+pub fn decode_ivf<R, F>(ivf: IvfReader<R>, sink: F) -> Result<usize, StreamError>
 where
     R: Read,
     F: FnMut(Frame<'_>),
 {
-    let mut decoder = Decoder::new()?;
+    decode_ivf_with_backend(ivf, BackendKind::Libavm, None, sink)
+}
+
+/// Decode every frame from an IVF stream using an explicit backend.
+pub fn decode_ivf_with_backend<R, F>(
+    mut ivf: IvfReader<R>,
+    backend: BackendKind,
+    threads: Option<u32>,
+    mut sink: F,
+) -> Result<usize, StreamError>
+where
+    R: Read,
+    F: FnMut(Frame<'_>),
+{
+    let mut builder = Decoder::builder().backend(backend);
+    if let Some(t) = threads {
+        builder = builder.threads(t);
+    }
+    let mut decoder = builder.build()?;
     let mut count = 0usize;
+    let mut packet_index = 0usize;
 
     while let Some(packet) = ivf.next_frame()? {
-        decoder.decode(&packet.data)?;
+        decoder
+            .decode(&packet.data)
+            .map_err(|source| StreamError::DecoderAtPacket {
+                packet_index,
+                progress: Box::new(decoder.progress()),
+                source,
+            })?;
         for frame in decoder.get_frames() {
             sink(frame);
             count += 1;
         }
+        packet_index += 1;
     }
 
     decoder.flush()?;
@@ -81,4 +116,20 @@ where
 {
     let ivf = IvfReader::new(reader)?;
     decode_ivf(ivf, sink)
+}
+
+/// Convenience: open an IVF reader from any `Read` source and call
+/// [`decode_ivf_with_backend`] on it.
+pub fn decode_ivf_reader_with_backend<R, F>(
+    reader: R,
+    backend: BackendKind,
+    threads: Option<u32>,
+    sink: F,
+) -> Result<usize, StreamError>
+where
+    R: Read,
+    F: FnMut(Frame<'_>),
+{
+    let ivf = IvfReader::new(reader)?;
+    decode_ivf_with_backend(ivf, backend, threads, sink)
 }

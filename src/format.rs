@@ -50,6 +50,17 @@ pub enum Subsampling {
     Yuv444,
 }
 
+impl Subsampling {
+    /// Return the chroma plane dimensions for a luma frame size.
+    pub fn chroma_dims(self, w: usize, h: usize) -> (usize, usize) {
+        match self {
+            Self::Yuv420 => (w.div_ceil(2), h.div_ceil(2)),
+            Self::Yuv422 => (w.div_ceil(2), h),
+            Self::Yuv444 => (w, h),
+        }
+    }
+}
+
 /// Pixel format of a decoded frame.
 ///
 /// Combines chroma subsampling with the storage container width (8-bit

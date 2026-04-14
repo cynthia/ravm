@@ -32,3 +32,9 @@ target/
 *.y4m
 *.yuv
 Cargo.lock
+
+# rustavm smoke-test cache (populated from Xiph AOMCTC; see M1 plan task 0.3)
+tests/smoke/cache/
+
+# Committed test corpus fixtures are exempt from the blanket *.yuv / *.y4m rules
+!tests/corpora/**

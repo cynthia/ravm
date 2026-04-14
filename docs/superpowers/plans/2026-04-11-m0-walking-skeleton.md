@@ -1643,3 +1643,40 @@ git commit -m "rustavm: add M0 CI lint and Miri coverage"
 - [ ] No `TODO`, `FIXME`, or `unimplemented!()` in `src/decoder/`.
 
 When all boxes are checked, merge the M0 branch and start on M1.
+
+---
+
+## Current Status Note
+
+As of April 14, 2026, the codebase is usable for moving on to M1, but M0 is
+not closed exactly as written above.
+
+What is effectively complete:
+
+- `cargo test -p rustavm` passes.
+- `cargo test -p rustavm --test m0_walking_skeleton_test` passes.
+- `cargo clippy -p rustavm -- -D warnings` passes.
+- `backend::Rust` decodes the checked-in M0 corpus through the public decoder
+  path.
+- The default `mk_m0_final_fixture` regeneration path restores the checked-in
+  oracle fixture and that regenerated fixture decodes with both `libavm` and
+  the Rust backend.
+
+Remaining caveats:
+
+- The checked-in corpus is still the stable fallback oracle stream, not the
+  exact final hand-crafted recursive-4x4-leaf bitstream envisioned earlier in
+  this document.
+- The handcrafted generation path in `tools/mk_m0_final_fixture.c` remains
+  experimental and is not yet treated as a valid corpus source.
+- `cargo miri test -p rustavm` is still blocked by local toolchain setup
+  (`cargo-miri` unavailable on the current stable toolchain), so that checklist
+  item is not yet satisfied here.
+- The CI/Miri wiring work in Phase N.1 should still be treated as open unless
+  completed separately in repo config.
+
+So the practical interpretation is:
+
+- M0 is sufficient to unblock M1 implementation work.
+- M0 still has fixture/tooling and validation caveats that should remain
+  tracked until the exact final corpus and Miri/CI goals are finished.

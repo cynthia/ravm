@@ -1,4 +1,6 @@
 use clap::Parser;
+use rustavm::BackendKind;
+use rustavm::{compare_ivf_file, compare_ivf_file_outcomes};
 use rustavm::decoder::Decoder;
 use rustavm::ivf::IvfReader;
 use std::borrow::Cow;
@@ -25,6 +27,21 @@ struct Cli {
     /// Number of decoder worker threads (0 = codec default).
     #[arg(long, value_name = "N")]
     threads: Option<u32>,
+
+    /// Decoder backend to use.
+    #[arg(long, value_enum, default_value_t = BackendKind::Libavm)]
+    backend: BackendKind,
+
+    /// Optional second backend to compare against for exact output equality.
+    #[arg(long, value_enum)]
+    compare_backend: Option<BackendKind>,
+
+    /// Compare backend outcomes, including parser progress and terminal error.
+    ///
+    /// This is useful while the Rust backend is still parser-only and may stop
+    /// before producing decoded frames.
+    #[arg(long)]
+    compare_outcomes: bool,
 }
 
 fn write_frame(
@@ -75,6 +92,32 @@ fn write_frame(
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
+    if let Some(compare_backend) = cli.compare_backend {
+        if cli.compare_outcomes {
+            let (left, right) =
+                compare_ivf_file_outcomes(&cli.input, cli.backend, compare_backend, cli.threads)?;
+            println!(
+                "Backend outcomes matched: {} vs {} (left frames: {}, right frames: {}, left stop: {:?}, right stop: {:?})",
+                left.snapshot.backend,
+                right.snapshot.backend,
+                left.snapshot.frames.len(),
+                right.snapshot.frames.len(),
+                left.stopped_at_packet,
+                right.stopped_at_packet
+            );
+        } else {
+            let (left, right) =
+                compare_ivf_file(&cli.input, cli.backend, compare_backend, cli.threads)?;
+            println!(
+                "Backends matched exactly: {} vs {} ({} frames)",
+                left.backend,
+                right.backend,
+                left.frames.len()
+            );
+        }
+        return Ok(());
+    }
+
     let input_path = &cli.input;
     let input_file = File::open(input_path)?;
     let mut ivf_reader = IvfReader::new(BufReader::new(input_file))?;
@@ -85,7 +128,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ivf_reader.header.framerate_num, ivf_reader.header.framerate_den,
         ivf_reader.header.fourcc);
 
-    let mut builder = Decoder::builder();
+    let mut builder = Decoder::builder().backend(cli.backend);
     if let Some(t) = cli.threads {
         builder = builder.threads(t);
     }

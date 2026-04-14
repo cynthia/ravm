@@ -68,6 +68,7 @@ pub(crate) fn decode_frame(
         frame_header.frame_height as usize,
         Subsampling::Yuv420,
     );
+    let quant = QuantContext::from_frame_header(&frame_header);
     fill_plane(frame.chroma_u_mut(), 128);
     fill_plane(frame.chroma_v_mut(), 128);
     let exec = Sequential;
@@ -76,7 +77,7 @@ pub(crate) fn decode_frame(
         if result.is_err() {
             return;
         }
-        if let Err(err) = decode_tile(tile_group.data, &mut frame) {
+        if let Err(err) = decode_tile(tile_group.data, &mut frame, quant) {
             result = Err(err);
         }
     });
@@ -84,21 +85,13 @@ pub(crate) fn decode_frame(
     Ok(frame)
 }
 
-fn decode_tile(tile_data: &[u8], fb: &mut FrameBuffer<u8>) -> Result<(), CoreDecodeError> {
+fn decode_tile(
+    tile_data: &[u8],
+    fb: &mut FrameBuffer<u8>,
+    quant: QuantContext,
+) -> Result<(), CoreDecodeError> {
     let kernels = kernels::detect();
     let mut reader = BacReader::new(tile_data);
-    let quant = QuantContext {
-        base_q_idx: 0,
-        delta_q_y_dc: 0,
-        delta_q_u_dc: 0,
-        delta_q_u_ac: 0,
-        delta_q_v_dc: 0,
-        delta_q_v_ac: 0,
-        using_qmatrix: false,
-        qm_y: 0,
-        qm_u: 0,
-        qm_v: 0,
-    };
     decode_partition(&mut reader, kernels, fb, 0, 0, BlockSize::SB_M0, quant)
 }
 
@@ -116,7 +109,7 @@ fn decode_partition(
     }
 
     if bsize.is_min() {
-        return decode_4x4_block(reader, kernels, fb, bx, by);
+        return decode_4x4_block(reader, kernels, fb, bx, by, quant);
     }
 
     match reader.read_partition_none_or_split() {
@@ -251,6 +244,7 @@ mod tests {
         let sh = SequenceHeader {
             profile: 0,
             still_picture: true,
+            single_picture_header_flag: true,
             reduced_still_picture_header: true,
             timing_info_present_flag: false,
             initial_display_delay_present_flag: false,
@@ -267,6 +261,24 @@ mod tests {
             subsampling_y: 1,
             color_range: 0,
             chroma_sample_position: 0,
+            force_screen_content_tools: 0,
+            force_integer_mv: 2,
+            enable_intra_edge_filter: false,
+            enable_cdef: false,
+            enable_restoration: false,
+            separate_uv_delta_q: false,
+            equal_ac_dc_q: false,
+            base_y_dc_delta_q: 0,
+            y_dc_delta_q_enabled: false,
+            base_uv_dc_delta_q: 0,
+            uv_dc_delta_q_enabled: false,
+            base_uv_ac_delta_q: 0,
+            uv_ac_delta_q_enabled: false,
+            reduced_tx_part_set: false,
+            film_grain_params_present: false,
+            num_bits_width: 8,
+            num_bits_height: 8,
+            df_par_bits_minus2: 0,
         };
         let fh = UncompressedFrameHeader {
             frame_type: FrameType::Key,

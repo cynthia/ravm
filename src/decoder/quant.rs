@@ -4,6 +4,7 @@
 use crate::bitstream::UncompressedFrameHeader;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub(crate) enum Plane {
     Y,
     U,
@@ -67,15 +68,6 @@ impl QuantContext {
     }
 }
 
-pub(crate) fn dequant_4x4(qindex: u8, coeffs_in: &[i16; 16], coeffs_out: &mut [i32; 16]) {
-    let dc_q = dc_q_lookup_8bit(qindex);
-    let ac_q = ac_q_lookup_8bit(qindex);
-    coeffs_out[0] = i32::from(coeffs_in[0]) * i32::from(dc_q);
-    for i in 1..16 {
-        coeffs_out[i] = i32::from(coeffs_in[i]) * i32::from(ac_q);
-    }
-}
-
 fn apply_delta(base_q_idx: u8, delta: i8) -> u8 {
     base_q_idx.saturating_add_signed(delta)
 }
@@ -112,9 +104,21 @@ mod tests {
 
     #[test]
     fn dequant_4x4_scales_dc_and_ac_separately() {
+        let q = QuantContext {
+            base_q_idx: 10,
+            delta_q_y_dc: 0,
+            delta_q_u_dc: 0,
+            delta_q_u_ac: 0,
+            delta_q_v_dc: 0,
+            delta_q_v_ac: 0,
+            using_qmatrix: false,
+            qm_y: 0,
+            qm_u: 0,
+            qm_v: 0,
+        };
         let coeffs_in = [1i16; 16];
         let mut out = [0i32; 16];
-        dequant_4x4(10, &coeffs_in, &mut out);
+        q.dequant_4x4(Plane::Y, &coeffs_in, &mut out);
         assert_eq!(out[0], i32::from(dc_q_lookup_8bit(10)));
         assert_eq!(out[1], i32::from(ac_q_lookup_8bit(10)));
     }

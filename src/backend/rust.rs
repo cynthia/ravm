@@ -1,7 +1,7 @@
 use crate::decoder::{DecoderError, FrameBufferManager, StreamInfo};
 use crate::bitstream::{
     classify_frame_packet, parse_frame_header_info, parse_obus_auto, parse_sequence_header,
-    parse_tile_group, parse_uncompressed_frame_header, FrameHeaderInfo, FramePacketKind, ObuType,
+    parse_tile_group, split_frame_obu_payload, FrameHeaderInfo, FramePacketKind, ObuType,
     ParseError, SequenceHeader,
 };
 use crate::decoder::{DecodeEvent, DecodeProgress};
@@ -120,11 +120,11 @@ impl RustDecoder {
                         "Rust backend parsed frame data without a complete frame payload",
                     ));
                 }
-                let uncompressed =
-                    parse_uncompressed_frame_header(&sequence_header, frame_payload)
+                let (uncompressed, tile_payload) =
+                    split_frame_obu_payload(&sequence_header, frame_payload)
                         .map_err(map_parse_error)?;
                 let tile_group =
-                    parse_tile_group(&sequence_header, &uncompressed, &frame_payload[1..])
+                    parse_tile_group(&sequence_header, &uncompressed, tile_payload)
                         .map_err(map_parse_error)?;
                 let frame =
                     decode_frame(sequence_header, uncompressed, &tile_group)

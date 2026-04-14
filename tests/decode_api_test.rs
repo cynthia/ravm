@@ -436,6 +436,63 @@ fn general_non_lossless_qmatrix_keyframe_payload() -> Vec<u8> {
     payload
 }
 
+fn general_non_lossless_qmatrix_uv_split_keyframe_payload() -> Vec<u8> {
+    struct BitWriter {
+        bytes: Vec<u8>,
+        bit_offset: usize,
+    }
+
+    impl BitWriter {
+        fn new() -> Self {
+            Self {
+                bytes: Vec::new(),
+                bit_offset: 0,
+            }
+        }
+
+        fn push_bits(&mut self, value: u32, count: u8) {
+            for shift in (0..count).rev() {
+                let bit = ((value >> shift) & 1) as u8;
+                let byte_index = self.bit_offset / 8;
+                let bit_index = 7 - (self.bit_offset % 8);
+                if self.bytes.len() <= byte_index {
+                    self.bytes.push(0);
+                }
+                self.bytes[byte_index] |= bit << bit_index;
+                self.bit_offset += 1;
+            }
+        }
+
+        fn into_bytes(self) -> Vec<u8> {
+            self.bytes
+        }
+    }
+
+    let mut bits = BitWriter::new();
+    bits.push_bits(0, 1); // show_existing_frame
+    bits.push_bits(0, 2); // frame_type = key
+    bits.push_bits(1, 1); // show_frame
+    bits.push_bits(1, 1); // error_resilient_mode
+    bits.push_bits(0, 1); // disable_cdf_update
+    bits.push_bits(0, 3); // primary_ref_frame
+    bits.push_bits(0xff, 8); // refresh_frame_flags
+    bits.push_bits(0, 1); // frame_size_override_flag
+    bits.push_bits(24, 8); // base_q_idx
+    bits.push_bits(0, 1); // segmentation.enabled
+    bits.push_bits(1, 1); // using_qmatrix
+    bits.push_bits(0b0011, 4); // qm_y = 3
+    bits.push_bits(0, 1); // qm_uv_same_as_y = false
+    bits.push_bits(0b1001, 4); // qm_u = 9
+    bits.push_bits(0, 1); // delta_q_present
+    bits.push_bits(0, 1); // apply_deblocking_filter[0]
+    bits.push_bits(0, 1); // apply_deblocking_filter[1]
+    bits.push_bits(0, 1); // tx_mode = largest
+    bits.push_bits(0, 2); // reduced_tx_set_used
+    let mut payload = bits.into_bytes();
+    payload.push(0x00); // tile payload
+    payload
+}
+
 #[test]
 fn test_rust_backend_parses_sequence_header_stream_info() {
     let mut decoder = Decoder::builder()
@@ -581,6 +638,29 @@ fn test_rust_backend_decodes_general_non_lossless_qmatrix_keyframe_packet() {
     decoder
         .decode(&packet)
         .expect("general non-lossless qmatrix keyframe decode");
+    let frames: Vec<_> = decoder.get_frames().collect();
+    assert_eq!(frames.len(), 1);
+    let info = decoder.get_stream_info().expect("stream info");
+    assert_eq!(info.width, 64);
+    assert_eq!(info.height, 48);
+}
+
+#[test]
+fn test_rust_backend_decodes_general_non_lossless_qmatrix_uv_split_keyframe_packet() {
+    let mut decoder = Decoder::builder()
+        .backend(BackendKind::Rust)
+        .build()
+        .expect("rust backend build");
+    let seq = general_sequence_header_payload(64, 48);
+    let frame = general_non_lossless_qmatrix_uv_split_keyframe_payload();
+    let mut packet = vec![0x0a, seq.len() as u8];
+    packet.extend_from_slice(&seq);
+    packet.extend_from_slice(&[0x22, frame.len() as u8]);
+    packet.extend_from_slice(&frame);
+
+    decoder
+        .decode(&packet)
+        .expect("general non-lossless qmatrix uv-split keyframe decode");
     let frames: Vec<_> = decoder.get_frames().collect();
     assert_eq!(frames.len(), 1);
     let info = decoder.get_stream_info().expect("stream info");

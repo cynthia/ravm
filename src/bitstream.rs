@@ -2233,6 +2233,40 @@ mod tests {
     }
 
     #[test]
+    fn split_non_lossless_general_frame_obu_payload_consumes_qmatrix_uv_split_bits() {
+        let sh = test_sequence_header(false, false, 64, 48);
+        let mut bits = BitWriter::new();
+        bits.push_bits(0, 1); // show_existing_frame
+        bits.push_bits(0, 2); // frame_type = key
+        bits.push_bits(1, 1); // show_frame
+        bits.push_bits(1, 1); // error_resilient_mode
+        bits.push_bits(0, 1); // disable_cdf_update
+        bits.push_bits(0, 3); // primary_ref_frame
+        bits.push_bits(0xff, 8); // refresh_frame_flags
+        bits.push_bits(0, 1); // frame_size_override_flag
+        bits.push_bits(24, 8); // base_q_idx => non-lossless
+        bits.push_bits(0, 1); // segmentation.enabled
+        bits.push_bits(1, 1); // using_qmatrix
+        bits.push_bits(0b0011, 4); // qm_y = 3
+        bits.push_bits(0, 1); // qm_uv_same_as_y = false
+        bits.push_bits(0b1001, 4); // qm_u = 9
+        bits.push_bits(0, 1); // delta_q_present
+        bits.push_bits(0, 1); // apply_deblocking_filter[0]
+        bits.push_bits(0, 1); // apply_deblocking_filter[1]
+        bits.push_bits(0, 1); // tx_mode = largest
+        bits.push_bits(0, 2); // reduced_tx_set_used
+        let mut payload = bits.into_bytes();
+        payload.push(0xaa);
+
+        let (fh, tile_payload) = split_frame_obu_payload(&sh, &payload).expect("frame payload");
+        assert!(fh.quant.using_qmatrix);
+        assert_eq!(fh.quant.qm_y, 3);
+        assert_eq!(fh.quant.qm_u, 9);
+        assert_eq!(fh.quant.qm_v, 9);
+        assert_eq!(tile_payload, &[0xaa]);
+    }
+
+    #[test]
     fn parse_single_tile_group_payload() {
         let sh = test_sequence_header(true, true, 64, 64);
         let fh = UncompressedFrameHeader {

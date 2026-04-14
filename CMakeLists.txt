@@ -828,6 +828,55 @@ if(ENABLE_TOOLS)
     list(APPEND AVM_APP_TARGETS dump_obu)
 
     add_executable(
+      mk_m0_final_fixture
+      "${AVM_GEN_SRC_DIR}/usage_exit.cc"
+      "${AVM_ROOT}/tools/mk_m0_final_fixture.c"
+      "${AVM_ROOT}/avm_dsp/bitwriter.c"
+      "${AVM_ROOT}/avm_dsp/entcode.c"
+      "${AVM_ROOT}/avm_dsp/entenc.c"
+      $<TARGET_OBJECTS:avm_common_app_util>
+      $<TARGET_OBJECTS:avm_decoder_app_util>)
+
+    list(APPEND AVM_TOOL_TARGETS mk_m0_final_fixture)
+    list(APPEND AVM_APP_TARGETS mk_m0_final_fixture)
+
+    if(CONFIG_ACCOUNTING)
+      add_executable(
+        m0_accounting_dump
+        "${AVM_ROOT}/tools/m0_accounting_dump.c"
+        $<TARGET_OBJECTS:avm_common_app_util>
+        $<TARGET_OBJECTS:avm_decoder_app_util>)
+
+      list(APPEND AVM_TOOL_TARGETS m0_accounting_dump)
+      list(APPEND AVM_APP_TARGETS m0_accounting_dump)
+
+      add_executable(
+        m0_entropy_probe
+        "${AVM_GEN_SRC_DIR}/usage_exit.cc"
+        "${AVM_ROOT}/tools/m0_entropy_probe.c"
+        "${AVM_ROOT}/avm_dsp/bitreader.c"
+        "${AVM_ROOT}/avm_dsp/entcode.c"
+        "${AVM_ROOT}/avm_dsp/bitreader_buffer.c"
+        "${AVM_ROOT}/avm_dsp/binary_codes_reader.c"
+        $<TARGET_OBJECTS:avm_common_app_util>
+        $<TARGET_OBJECTS:avm_decoder_app_util>)
+
+      list(APPEND AVM_TOOL_TARGETS m0_entropy_probe)
+      list(APPEND AVM_APP_TARGETS m0_entropy_probe)
+    endif()
+
+    if(CONFIG_INSPECTION)
+      add_executable(
+        m0_native_inspect
+        "${AVM_ROOT}/tools/m0_native_inspect.c"
+        $<TARGET_OBJECTS:avm_common_app_util>
+        $<TARGET_OBJECTS:avm_decoder_app_util>)
+
+      list(APPEND AVM_TOOL_TARGETS m0_native_inspect)
+      list(APPEND AVM_APP_TARGETS m0_native_inspect)
+    endif()
+
+    add_executable(
       stream_multiplexer
       "${AVM_GEN_SRC_DIR}/usage_exit.cc"
       "${AVM_ROOT}/tools/stream_mux.h"

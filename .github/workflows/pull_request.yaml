@@ -152,6 +152,37 @@ jobs:
             fi
           done
 
+  rustavm-smoke:
+    name: rustavm Smoke
+    if: (!cancelled())
+    needs:
+      - vars
+    timeout-minutes: ${{ fromJson(needs.vars.outputs.timeout-minutes) }}
+    runs-on: ${{ needs.vars.outputs.runner }}
+    container:
+      image: ${{ needs.vars.outputs.container-image }}
+    steps:
+      - uses: actions/checkout@v4.1.0
+        with:
+          fetch-depth: 50
+          lfs: true
+
+      - uses: ./.github/actions/common-setup
+
+      - name: Cache Xiph smoke corpus
+        uses: actions/cache@v4
+        with:
+          path: tests/smoke/cache
+          key: rustavm-xiph-smoke-${{ hashFiles('tests/smoke/fetch_xiph.sh', 'tests/smoke/manifest.toml') }}
+
+      - name: Fetch Xiph smoke corpus
+        run: |
+          bash tests/smoke/fetch_xiph.sh
+
+      - name: Run rustavm smoke test
+        run: |
+          cargo test -p rustavm --test smoke_test
+
   previous-build-x86_64-linux-gcc:
     name: Previous Build (x86_64-linux-gcc)
     uses: ./.github/workflows/build-job-reusable.yaml
@@ -159,6 +190,7 @@ jobs:
       - style-checks
       - pr-checks
       - test-data-checks
+      - rustavm-smoke
       - vars
     if: (!cancelled())
     with:

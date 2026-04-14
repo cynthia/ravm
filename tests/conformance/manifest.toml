@@ -1,0 +1,14 @@
+# KF-only conformance vectors for the Rust backend.
+#
+# The upstream files are intentionally not checked into git. Populate
+# `tests/conformance/kf_only/` via `tests/conformance/fetch.sh`.
+#
+# Each entry is one IVF plus the MD5 of the fully decoded frame sequence.
+# `features` is a flat list so the harness can select subsets as M1 grows.
+#
+# Example:
+# [[vector]]
+# file = "example_keyframe.ivf"
+# expected_md5 = "0123456789abcdef0123456789abcdef"
+# features = ["kf_only", "dc_intra"]
+

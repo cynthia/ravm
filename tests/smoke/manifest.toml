@@ -1,0 +1,19 @@
+[[stream]]
+file = "ivf/Big_Easy_chair.ivf"
+description = "Xiph AV2 still image, smallest pinned IVF with 4x4-aligned dimensions"
+
+[[stream]]
+file = "ivf/Washington_Monument.ivf"
+description = "Xiph AV2 still image, second-smallest pinned IVF with 4x4-aligned dimensions"
+
+[[stream]]
+file = "ivf/Claudette.ivf"
+description = "Xiph AV2 still image, third-smallest pinned IVF with 4x4-aligned dimensions"
+
+[[stream]]
+file = "ivf/KellermanBallfieldMefisto.ivf"
+description = "Xiph AV2 still image, fourth-smallest pinned IVF with 4x4-aligned dimensions"
+
+[[stream]]
+file = "ivf/Fontaine_Place_Stanislas.ivf"
+description = "Xiph AV2 still image, fifth-smallest pinned IVF with 4x4-aligned dimensions"

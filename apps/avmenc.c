@@ -1728,15 +1728,6 @@ static void initialize_encoder(struct stream_state *stream,
                      flags);
   ctx_exit_on_error(&stream->encoder, "Failed to initialize encoder");
 
-  for (i = 0; i < stream->config.arg_ctrl_cnt; i++) {
-    int ctrl = stream->config.arg_ctrls[i][0];
-    int value = stream->config.arg_ctrls[i][1];
-    if (avm_codec_control(&stream->encoder, ctrl, value))
-      fprintf(stderr, "Error: Tried to set control %d = %d\n", ctrl, value);
-
-    ctx_exit_on_error(&stream->encoder, "Failed to control codec");
-  }
-
   for (i = 0; i < stream->config.arg_key_val_cnt; i++) {
     const char *name = stream->config.arg_key_vals[i][0];
     const char *val = stream->config.arg_key_vals[i][1];
@@ -1745,6 +1736,18 @@ static void initialize_encoder(struct stream_state *stream,
     }
 
     ctx_exit_on_error(&stream->encoder, "Failed to set codec option");
+  }
+
+  // Apply string options before numeric controls so dependent controls are
+  // validated against the final option state. For example, enable_sdp affects
+  // the valid range of max_partition_size.
+  for (i = 0; i < stream->config.arg_ctrl_cnt; i++) {
+    int ctrl = stream->config.arg_ctrls[i][0];
+    int value = stream->config.arg_ctrls[i][1];
+    if (avm_codec_control(&stream->encoder, ctrl, value))
+      fprintf(stderr, "Error: Tried to set control %d = %d\n", ctrl, value);
+
+    ctx_exit_on_error(&stream->encoder, "Failed to control codec");
   }
 
 #if CONFIG_TUNE_VMAF

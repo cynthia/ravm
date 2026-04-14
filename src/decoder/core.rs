@@ -24,11 +24,6 @@ pub(crate) fn decode_frame(
     frame_header: UncompressedFrameHeader,
     tile_group: &TileGroup<'_>,
 ) -> Result<FrameBuffer<u8>, CoreDecodeError> {
-    if !sequence_header.reduced_still_picture_header {
-        return Err(CoreDecodeError::Unsupported(
-            "walking skeleton only supports reduced-still-picture streams",
-        ));
-    }
     if sequence_header.bit_depth != 8 {
         return Err(CoreDecodeError::Unsupported(
             "walking skeleton only supports 8-bit streams",
@@ -356,5 +351,123 @@ mod tests {
         assert_eq!(frame.luma().height, 48);
         assert_eq!(frame.luma().row(0)[0], 128);
         assert_eq!(frame.luma().row(0)[1], 128);
+    }
+
+    #[test]
+    fn core_shell_accepts_general_keyframe_headers() {
+        let sh = SequenceHeader {
+            profile: 0,
+            still_picture: false,
+            single_picture_header_flag: false,
+            reduced_still_picture_header: false,
+            timing_info_present_flag: false,
+            initial_display_delay_present_flag: false,
+            frame_id_numbers_present_flag: false,
+            operating_points_cnt_minus_1: 0,
+            operating_point_idc_0: 0,
+            seq_level_idx_0: 0,
+            seq_tier_0: None,
+            max_frame_width: 64,
+            max_frame_height: 48,
+            bit_depth: 8,
+            monochrome: false,
+            subsampling_x: 1,
+            subsampling_y: 1,
+            color_range: 0,
+            chroma_sample_position: 0,
+            force_screen_content_tools: 0,
+            force_integer_mv: 2,
+            enable_intra_edge_filter: false,
+            enable_cdef: false,
+            enable_restoration: false,
+            separate_uv_delta_q: false,
+            equal_ac_dc_q: false,
+            base_y_dc_delta_q: 0,
+            y_dc_delta_q_enabled: false,
+            base_uv_dc_delta_q: 0,
+            uv_dc_delta_q_enabled: false,
+            base_uv_ac_delta_q: 0,
+            uv_ac_delta_q_enabled: false,
+            reduced_tx_part_set: false,
+            film_grain_params_present: false,
+            num_bits_width: 8,
+            num_bits_height: 8,
+            df_par_bits_minus2: 0,
+        };
+        let fh = UncompressedFrameHeader {
+            frame_type: FrameType::Key,
+            show_frame: true,
+            error_resilient_mode: true,
+            disable_cdf_update: false,
+            primary_ref_frame: 0,
+            refresh_frame_flags: 0xff,
+            frame_size_override_flag: false,
+            allow_screen_content_tools: false,
+            force_integer_mv: false,
+            order_hint: 0,
+            render_size: crate::bitstream::RenderSize {
+                width: 64,
+                height: 48,
+            },
+            superres: crate::bitstream::SuperresParams {
+                enabled: false,
+                denominator: 8,
+            },
+            loop_filter: crate::bitstream::LoopFilterParams {
+                level: [0; 4],
+                sharpness: 0,
+                delta_enabled: false,
+                delta_update: false,
+            },
+            quant: crate::bitstream::QuantParams {
+                base_q_idx: 0,
+                delta_q_y_dc: 0,
+                delta_q_u_dc: 0,
+                delta_q_u_ac: 0,
+                delta_q_v_dc: 0,
+                delta_q_v_ac: 0,
+                using_qmatrix: false,
+                qm_y: 0,
+                qm_u: 0,
+                qm_v: 0,
+            },
+            segmentation: crate::bitstream::SegmentationParams {
+                enabled: false,
+                update_map: false,
+                temporal_update: false,
+                update_data: false,
+            },
+            delta_q: crate::bitstream::DeltaQParams {
+                present: false,
+                scale: 0,
+            },
+            delta_lf: crate::bitstream::DeltaLfParams {
+                present: false,
+                scale: 0,
+                multi: false,
+            },
+            loop_restoration: crate::bitstream::LoopRestorationParams { uses_lrf: false },
+            tx_mode: 0,
+            reduced_tx_set: false,
+            cdef: crate::bitstream::CdefParams {
+                damping: 0,
+                bits: 0,
+            },
+            film_grain: crate::bitstream::FilmGrainParams { apply_grain: false },
+            num_tile_cols: 1,
+            num_tile_rows: 1,
+            frame_width: 64,
+            frame_height: 48,
+        };
+        let tg = TileGroup {
+            tile_start: 0,
+            tile_end: 0,
+            data: &[0u8; 1],
+        };
+
+        let frame = decode_frame(sh, fh, &tg).expect("core shell decode");
+        assert_eq!(frame.luma().width, 64);
+        assert_eq!(frame.luma().height, 48);
+        assert_eq!(frame.luma().row(0)[0], 128);
     }
 }

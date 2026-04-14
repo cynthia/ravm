@@ -561,8 +561,8 @@ pub fn split_frame_obu_payload<'a>(
         read_force_integer_mv(sequence_header, &mut bits, allow_screen_content_tools)?;
     let base_q_idx = bits.read_bits_with(8, ParseError::TruncatedFrameHeader)? as u8;
     let quant = parse_quant_params(sequence_header, &mut bits, base_q_idx)?;
-    let (segmentation, using_qmatrix, delta_q, tx_mode, reduced_tx_set) =
-        parse_general_keyframe_post_quant_subset(sequence_header, &quant, &mut bits)?;
+    let (loop_filter, segmentation, quant, delta_q, tx_mode, reduced_tx_set) =
+        parse_general_keyframe_post_quant_subset(sequence_header, quant, &mut bits)?;
 
     let header = UncompressedFrameHeader {
         frame_type,
@@ -583,16 +583,8 @@ pub fn split_frame_obu_payload<'a>(
             enabled: false,
             denominator: 8,
         },
-        loop_filter: LoopFilterParams {
-            level: [0; 4],
-            sharpness: 0,
-            delta_enabled: false,
-            delta_update: false,
-        },
-        quant: QuantParams {
-            using_qmatrix,
-            ..quant
-        },
+        loop_filter,
+        quant,
         segmentation,
         delta_q,
         delta_lf: DeltaLfParams {
@@ -619,53 +611,73 @@ pub fn split_frame_obu_payload<'a>(
 
 fn parse_general_keyframe_post_quant_subset(
     sequence_header: &SequenceHeader,
-    quant: &QuantParams,
+    mut quant: QuantParams,
     bits: &mut BitReader<'_>,
-) -> Result<(SegmentationParams, bool, DeltaQParams, u8, bool), ParseError> {
-    let lossless = is_lossless_without_delta_q(sequence_header, quant);
-    if !lossless {
-        return Ok((
-            SegmentationParams {
-                enabled: false,
-                update_map: false,
-                temporal_update: false,
-                update_data: false,
-            },
-            false,
-            DeltaQParams {
-                present: false,
-                scale: 0,
-            },
-            0,
-            false,
-        ));
-    }
-
+) -> Result<
+    (
+        LoopFilterParams,
+        SegmentationParams,
+        QuantParams,
+        DeltaQParams,
+        u8,
+        bool,
+    ),
+    ParseError,
+> {
+    let lossless = is_lossless_without_delta_q(sequence_header, &quant);
     let segmentation_enabled = bits.read_bit_with(ParseError::TruncatedFrameHeader)?;
     if segmentation_enabled {
         return Err(ParseError::UnsupportedFrameHeader);
     }
 
-    let using_qmatrix = bits.read_bit_with(ParseError::TruncatedFrameHeader)?;
-    if using_qmatrix {
-        return Err(ParseError::UnsupportedFrameHeader);
-    }
+    quant = parse_qmatrix_params_subset(sequence_header, quant, bits)?;
 
+    let delta_q = if lossless || quant.base_q_idx == 0 {
+        DeltaQParams {
+            present: false,
+            scale: 0,
+        }
+    } else {
+        let present = bits.read_bit_with(ParseError::TruncatedFrameHeader)?;
+        let scale = if present {
+            1u8 << bits.read_bits_with(2, ParseError::TruncatedFrameHeader)? as u8
+        } else {
+            0
+        };
+        DeltaQParams { present, scale }
+    };
+
+    let loop_filter = if lossless {
+        LoopFilterParams {
+            level: [0; 4],
+            sharpness: 0,
+            delta_enabled: false,
+            delta_update: false,
+        }
+    } else {
+        parse_loop_filter_params_subset(sequence_header, bits)?
+    };
+
+    let tx_mode = if lossless {
+        0
+    } else if bits.read_bit_with(ParseError::TruncatedFrameHeader)? {
+        1
+    } else {
+        0
+    };
     let reduced_tx_set = bits.read_bits_with(2, ParseError::TruncatedFrameHeader)? != 0;
 
     Ok((
+        loop_filter,
         SegmentationParams {
             enabled: false,
             update_map: false,
             temporal_update: false,
             update_data: false,
         },
-        false,
-        DeltaQParams {
-            present: false,
-            scale: 0,
-        },
-        0,
+        quant,
+        delta_q,
+        tx_mode,
         reduced_tx_set,
     ))
 }
@@ -677,6 +689,110 @@ fn is_lossless_without_delta_q(sequence_header: &SequenceHeader, quant: &QuantPa
         && i16::from(quant.delta_q_v_dc) + i16::from(sequence_header.base_uv_dc_delta_q) <= 0
         && i16::from(quant.delta_q_u_ac) + i16::from(sequence_header.base_uv_ac_delta_q) <= 0
         && i16::from(quant.delta_q_v_ac) + i16::from(sequence_header.base_uv_ac_delta_q) <= 0
+}
+
+fn parse_loop_filter_params_subset(
+    sequence_header: &SequenceHeader,
+    bits: &mut BitReader<'_>,
+) -> Result<LoopFilterParams, ParseError> {
+    let apply_h = bits.read_bit_with(ParseError::TruncatedFrameHeader)?;
+    let apply_v = bits.read_bit_with(ParseError::TruncatedFrameHeader)?;
+
+    let (apply_u, apply_v_plane) = if sequence_header.monochrome {
+        (false, false)
+    } else if apply_h || apply_v {
+        (
+            bits.read_bit_with(ParseError::TruncatedFrameHeader)?,
+            bits.read_bit_with(ParseError::TruncatedFrameHeader)?,
+        )
+    } else {
+        (false, false)
+    };
+
+    let df_par_bits = sequence_header.df_par_bits_minus2 + 2;
+    let delta_luma_h = if apply_h {
+        read_optional_signed_literal(bits, df_par_bits)?
+    } else {
+        0
+    };
+    let delta_luma_v = if apply_v {
+        let same = !bits.read_bit_with(ParseError::TruncatedFrameHeader)?;
+        if same {
+            delta_luma_h
+        } else {
+            read_signed_literal(bits, df_par_bits)?
+        }
+    } else {
+        0
+    };
+    let delta_u = if apply_u {
+        read_optional_signed_literal(bits, df_par_bits)?
+    } else {
+        0
+    };
+    let delta_v = if apply_v_plane {
+        read_optional_signed_literal(bits, df_par_bits)?
+    } else {
+        0
+    };
+
+    Ok(LoopFilterParams {
+        level: [
+            u8::from(apply_h),
+            u8::from(apply_v),
+            u8::from(apply_u),
+            u8::from(apply_v_plane),
+        ],
+        sharpness: 0,
+        delta_enabled: delta_luma_h != 0 || delta_luma_v != 0 || delta_u != 0 || delta_v != 0,
+        delta_update: apply_h || apply_v || apply_u || apply_v_plane,
+    })
+}
+
+fn parse_qmatrix_params_subset(
+    sequence_header: &SequenceHeader,
+    mut quant: QuantParams,
+    bits: &mut BitReader<'_>,
+) -> Result<QuantParams, ParseError> {
+    let using_qmatrix = bits.read_bit_with(ParseError::TruncatedFrameHeader)?;
+    if !using_qmatrix {
+        return Ok(quant);
+    }
+
+    quant.using_qmatrix = true;
+    quant.qm_y = bits.read_bits_with(4, ParseError::TruncatedFrameHeader)? as u8;
+    if sequence_header.monochrome {
+        quant.qm_u = 0;
+        quant.qm_v = 0;
+        return Ok(quant);
+    }
+
+    let qm_uv_same_as_y = bits.read_bit_with(ParseError::TruncatedFrameHeader)?;
+    if qm_uv_same_as_y {
+        quant.qm_u = quant.qm_y;
+        quant.qm_v = quant.qm_y;
+        return Ok(quant);
+    }
+
+    quant.qm_u = bits.read_bits_with(4, ParseError::TruncatedFrameHeader)? as u8;
+    if sequence_header.separate_uv_delta_q {
+        quant.qm_v = bits.read_bits_with(4, ParseError::TruncatedFrameHeader)? as u8;
+    } else {
+        quant.qm_v = quant.qm_u;
+    }
+    Ok(quant)
+}
+
+fn read_optional_signed_literal(bits: &mut BitReader<'_>, count: u8) -> Result<i16, ParseError> {
+    if !bits.read_bit_with(ParseError::TruncatedFrameHeader)? {
+        return Ok(0);
+    }
+    read_signed_literal(bits, count)
+}
+
+fn read_signed_literal(bits: &mut BitReader<'_>, count: u8) -> Result<i16, ParseError> {
+    let offset = 1i16 << (count - 1);
+    Ok(bits.read_bits_with(count, ParseError::TruncatedFrameHeader)? as i16 - offset)
 }
 
 fn read_frame_size(
@@ -1934,6 +2050,13 @@ mod tests {
         bits.push_bits(31, 8); // width_minus_1 => 32
         bits.push_bits(15, 8); // height_minus_1 => 16
         bits.push_bits(24, 8); // base_q_idx
+        bits.push_bits(0, 1); // segmentation.enabled
+        bits.push_bits(0, 1); // using_qmatrix
+        bits.push_bits(0, 1); // delta_q_present
+        bits.push_bits(0, 1); // apply_deblocking_filter[0]
+        bits.push_bits(0, 1); // apply_deblocking_filter[1]
+        bits.push_bits(0, 1); // tx_mode = largest
+        bits.push_bits(0, 2); // reduced_tx_set_used
         let mut payload = bits.into_bytes();
         payload.push(0xaa);
 
@@ -1971,6 +2094,141 @@ mod tests {
         assert!(!fh.quant.using_qmatrix);
         assert_eq!(fh.tx_mode, 0);
         assert!(fh.reduced_tx_set);
+        assert_eq!(tile_payload, &[0xaa]);
+    }
+
+    #[test]
+    fn split_non_lossless_general_frame_obu_payload_consumes_supported_tail_bits() {
+        let sh = test_sequence_header(false, false, 64, 48);
+        let mut bits = BitWriter::new();
+        bits.push_bits(0, 1); // show_existing_frame
+        bits.push_bits(0, 2); // frame_type = key
+        bits.push_bits(1, 1); // show_frame
+        bits.push_bits(1, 1); // error_resilient_mode
+        bits.push_bits(0, 1); // disable_cdf_update
+        bits.push_bits(0, 3); // primary_ref_frame
+        bits.push_bits(0xff, 8); // refresh_frame_flags
+        bits.push_bits(0, 1); // frame_size_override_flag
+        bits.push_bits(24, 8); // base_q_idx => non-lossless
+        bits.push_bits(0, 1); // segmentation.enabled
+        bits.push_bits(0, 1); // using_qmatrix
+        bits.push_bits(0, 1); // delta_q_present
+        bits.push_bits(0, 1); // apply_deblocking_filter[0]
+        bits.push_bits(0, 1); // apply_deblocking_filter[1]
+        bits.push_bits(1, 1); // tx_mode = select
+        bits.push_bits(0b01, 2); // reduced_tx_set_used
+        let mut payload = bits.into_bytes();
+        payload.push(0xaa);
+
+        let (fh, tile_payload) = split_frame_obu_payload(&sh, &payload).expect("frame payload");
+        assert_eq!(fh.quant.base_q_idx, 24);
+        assert!(!fh.segmentation.enabled);
+        assert!(!fh.quant.using_qmatrix);
+        assert!(!fh.delta_q.present);
+        assert_eq!(fh.tx_mode, 1);
+        assert!(fh.reduced_tx_set);
+        assert_eq!(tile_payload, &[0xaa]);
+    }
+
+    #[test]
+    fn split_non_lossless_general_frame_obu_payload_consumes_deblocking_bits() {
+        let sh = test_sequence_header(false, false, 64, 48);
+        let mut bits = BitWriter::new();
+        bits.push_bits(0, 1); // show_existing_frame
+        bits.push_bits(0, 2); // frame_type = key
+        bits.push_bits(1, 1); // show_frame
+        bits.push_bits(1, 1); // error_resilient_mode
+        bits.push_bits(0, 1); // disable_cdf_update
+        bits.push_bits(0, 3); // primary_ref_frame
+        bits.push_bits(0xff, 8); // refresh_frame_flags
+        bits.push_bits(0, 1); // frame_size_override_flag
+        bits.push_bits(24, 8); // base_q_idx => non-lossless
+        bits.push_bits(0, 1); // segmentation.enabled
+        bits.push_bits(0, 1); // using_qmatrix
+        bits.push_bits(0, 1); // delta_q_present
+        bits.push_bits(1, 1); // apply_deblocking_filter[0]
+        bits.push_bits(0, 1); // apply_deblocking_filter[1]
+        bits.push_bits(1, 1); // apply_deblocking_filter_u
+        bits.push_bits(0, 1); // apply_deblocking_filter_v
+        bits.push_bits(1, 1); // luma_delta_q present
+        bits.push_bits(0b11, 2); // delta_q_luma[0] => +1
+        bits.push_bits(0, 1); // u_delta_q absent => 0
+        bits.push_bits(0, 1); // tx_mode = largest
+        bits.push_bits(0, 2); // reduced_tx_set_used
+        let mut payload = bits.into_bytes();
+        payload.push(0xaa);
+
+        let (fh, tile_payload) = split_frame_obu_payload(&sh, &payload).expect("frame payload");
+        assert_eq!(fh.loop_filter.level, [1, 0, 1, 0]);
+        assert!(fh.loop_filter.delta_enabled);
+        assert!(fh.loop_filter.delta_update);
+        assert_eq!(fh.tx_mode, 0);
+        assert!(!fh.reduced_tx_set);
+        assert_eq!(tile_payload, &[0xaa]);
+    }
+
+    #[test]
+    fn split_non_lossless_general_frame_obu_payload_consumes_delta_q_bits() {
+        let sh = test_sequence_header(false, false, 64, 48);
+        let mut bits = BitWriter::new();
+        bits.push_bits(0, 1); // show_existing_frame
+        bits.push_bits(0, 2); // frame_type = key
+        bits.push_bits(1, 1); // show_frame
+        bits.push_bits(1, 1); // error_resilient_mode
+        bits.push_bits(0, 1); // disable_cdf_update
+        bits.push_bits(0, 3); // primary_ref_frame
+        bits.push_bits(0xff, 8); // refresh_frame_flags
+        bits.push_bits(0, 1); // frame_size_override_flag
+        bits.push_bits(24, 8); // base_q_idx => non-lossless
+        bits.push_bits(0, 1); // segmentation.enabled
+        bits.push_bits(0, 1); // using_qmatrix
+        bits.push_bits(1, 1); // delta_q_present
+        bits.push_bits(0b10, 2); // delta_q_res => 4
+        bits.push_bits(0, 1); // apply_deblocking_filter[0]
+        bits.push_bits(0, 1); // apply_deblocking_filter[1]
+        bits.push_bits(0, 1); // tx_mode = largest
+        bits.push_bits(0, 2); // reduced_tx_set_used
+        let mut payload = bits.into_bytes();
+        payload.push(0xaa);
+
+        let (fh, tile_payload) = split_frame_obu_payload(&sh, &payload).expect("frame payload");
+        assert!(fh.delta_q.present);
+        assert_eq!(fh.delta_q.scale, 4);
+        assert_eq!(fh.tx_mode, 0);
+        assert!(!fh.reduced_tx_set);
+        assert_eq!(tile_payload, &[0xaa]);
+    }
+
+    #[test]
+    fn split_non_lossless_general_frame_obu_payload_consumes_qmatrix_bits() {
+        let sh = test_sequence_header(false, false, 64, 48);
+        let mut bits = BitWriter::new();
+        bits.push_bits(0, 1); // show_existing_frame
+        bits.push_bits(0, 2); // frame_type = key
+        bits.push_bits(1, 1); // show_frame
+        bits.push_bits(1, 1); // error_resilient_mode
+        bits.push_bits(0, 1); // disable_cdf_update
+        bits.push_bits(0, 3); // primary_ref_frame
+        bits.push_bits(0xff, 8); // refresh_frame_flags
+        bits.push_bits(0, 1); // frame_size_override_flag
+        bits.push_bits(24, 8); // base_q_idx => non-lossless
+        bits.push_bits(0, 1); // segmentation.enabled
+        bits.push_bits(1, 1); // using_qmatrix
+        bits.push_bits(0b0110, 4); // qm_y = 6
+        bits.push_bits(1, 1); // qm_uv_same_as_y
+        bits.push_bits(0, 1); // delta_q_present
+        bits.push_bits(0, 1); // apply_deblocking_filter[0]
+        bits.push_bits(0, 1); // apply_deblocking_filter[1]
+        bits.push_bits(0, 1); // tx_mode = largest
+        bits.push_bits(0, 2); // reduced_tx_set_used
+        let mut payload = bits.into_bytes();
+        payload.push(0xaa);
+
+        let (fh, tile_payload) = split_frame_obu_payload(&sh, &payload).expect("frame payload");
+        assert!(fh.quant.using_qmatrix);
+        assert_eq!(fh.quant.qm_y, 6);
+        assert_eq!(fh.quant.qm_u, 6);
+        assert_eq!(fh.quant.qm_v, 6);
         assert_eq!(tile_payload, &[0xaa]);
     }
 

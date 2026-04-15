@@ -133,6 +133,28 @@ impl TileContext {
     }
 }
 
+#[cfg(test)]
+fn cdf_u16_bytes(cdf: &[u16]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(cdf.len() * 2);
+    for value in cdf {
+        out.extend_from_slice(&value.to_le_bytes());
+    }
+    out
+}
+
+#[cfg(test)]
+fn active_default_cdf_bytes() -> Vec<u8> {
+    let mut out = Vec::new();
+    out.extend_from_slice(&cdf_u16_bytes(&PARTITION_BINARY_CDF));
+    out.extend_from_slice(&cdf_u16_bytes(&PARTITION_CDF_CTX0));
+    out.extend_from_slice(&cdf_u16_bytes(&PARTITION_CDF_CTX1));
+    out.extend_from_slice(&cdf_u16_bytes(&PARTITION_CDF_CTX2));
+    out.extend_from_slice(&cdf_u16_bytes(&SKIP_CDF));
+    out.extend_from_slice(&cdf_u16_bytes(&INTRA_MODE_CDF));
+    out.extend_from_slice(&cdf_u16_bytes(&ALL_ZERO_CDF));
+    out
+}
+
 pub(crate) fn runtime_partition_variants(legal_variants: &[PartitionType]) -> Vec<PartitionType> {
     use PartitionType::*;
 
@@ -181,5 +203,23 @@ mod tests {
             PartitionType::Split,
         );
         assert_eq!(tile.partition_binary.as_slice(), before.as_slice());
+    }
+
+    #[test]
+    fn active_default_cdfs_hash_stably() {
+        let digest = md5::compute(active_default_cdf_bytes());
+        assert_eq!(format!("{digest:x}"), "6f8dee11da8c4ad18cec0ddc37ba36dc");
+    }
+
+    #[test]
+    fn partition_context_tables_hash_stably_per_family() {
+        let partition_bytes = [
+            cdf_u16_bytes(&PARTITION_CDF_CTX0),
+            cdf_u16_bytes(&PARTITION_CDF_CTX1),
+            cdf_u16_bytes(&PARTITION_CDF_CTX2),
+        ]
+        .concat();
+        let digest = md5::compute(partition_bytes);
+        assert_eq!(format!("{digest:x}"), "e8478417b5bfc0e2e9252c5f7714eafe");
     }
 }

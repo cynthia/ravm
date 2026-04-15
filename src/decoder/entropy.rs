@@ -79,6 +79,10 @@ fn coeff_br_luma_ctx_for_eob_4x4(eob: usize, coeff_base_eob: u8) -> usize {
     }
 }
 
+fn coeff_base_symbols_needed_for_eob_4x4(eob: usize) -> usize {
+    eob.min(14)
+}
+
 fn materialize_coeffs_4x4(
     eob: usize,
     dc_sign: bool,
@@ -1047,6 +1051,32 @@ impl<'a> BacReader<'a> {
         symbol as u8
     }
 
+    fn read_coeff_base_tx4x4_ctx_symbol(
+        &mut self,
+        tile_ctx: &mut TileContext,
+        ctx_idx: usize,
+        q_ctx: usize,
+        tcq_ctx: usize,
+    ) -> u8 {
+        match ctx_idx {
+            0 => self.read_coeff_base_tx4x4_ctx0_symbol(tile_ctx, q_ctx, tcq_ctx),
+            1 => self.read_coeff_base_tx4x4_ctx1_symbol(tile_ctx, q_ctx, tcq_ctx),
+            2 => self.read_coeff_base_tx4x4_ctx2_symbol(tile_ctx, q_ctx, tcq_ctx),
+            3 => self.read_coeff_base_tx4x4_ctx3_symbol(tile_ctx, q_ctx, tcq_ctx),
+            4 => self.read_coeff_base_tx4x4_ctx4_symbol(tile_ctx, q_ctx, tcq_ctx),
+            5 => self.read_coeff_base_tx4x4_ctx5_symbol(tile_ctx, q_ctx, tcq_ctx),
+            6 => self.read_coeff_base_tx4x4_ctx6_symbol(tile_ctx, q_ctx, tcq_ctx),
+            7 => self.read_coeff_base_tx4x4_ctx7_symbol(tile_ctx, q_ctx, tcq_ctx),
+            8 => self.read_coeff_base_tx4x4_ctx8_symbol(tile_ctx, q_ctx, tcq_ctx),
+            9 => self.read_coeff_base_tx4x4_ctx9_symbol(tile_ctx, q_ctx, tcq_ctx),
+            10 => self.read_coeff_base_tx4x4_ctx10_symbol(tile_ctx, q_ctx, tcq_ctx),
+            11 => self.read_coeff_base_tx4x4_ctx11_symbol(tile_ctx, q_ctx, tcq_ctx),
+            12 => self.read_coeff_base_tx4x4_ctx12_symbol(tile_ctx, q_ctx, tcq_ctx),
+            13 => self.read_coeff_base_tx4x4_ctx13_symbol(tile_ctx, q_ctx, tcq_ctx),
+            _ => unreachable!("4x4 staged coeff_base ctx index must be in 0..14"),
+        }
+    }
+
     pub fn read_coeff_br_luma_ctx0_symbol(&mut self, tile_ctx: &mut TileContext, q_ctx: usize) -> u8 {
         let symbol = self.read_symbol(tile_ctx.coeff_br_luma_ctx0[q_ctx.min(3)].as_slice());
         tile_ctx.update_coeff_br_luma_ctx0(q_ctx, symbol);
@@ -1120,20 +1150,14 @@ impl<'a> BacReader<'a> {
             let eob = derive_eob_4x4(eob_pt).ok_or(EntropyError::UnimplementedInM0)?;
             let coeff_base_eob = self.read_coeff_base_eob_tx4x4_symbol(tile_ctx, 0, 0);
             let dc_sign = self.read_dc_sign_luma_symbol(tile_ctx, 0, 0);
-            let coeff_base = self.read_coeff_base_tx4x4_ctx0_symbol(tile_ctx, 0, 0);
-            let coeff_base_ctx1 = self.read_coeff_base_tx4x4_ctx1_symbol(tile_ctx, 0, 0);
-            let coeff_base_ctx2 = self.read_coeff_base_tx4x4_ctx2_symbol(tile_ctx, 0, 0);
-            let coeff_base_ctx3 = self.read_coeff_base_tx4x4_ctx3_symbol(tile_ctx, 0, 0);
-            let coeff_base_ctx4 = self.read_coeff_base_tx4x4_ctx4_symbol(tile_ctx, 0, 0);
-            let coeff_base_ctx5 = self.read_coeff_base_tx4x4_ctx5_symbol(tile_ctx, 0, 0);
-            let coeff_base_ctx6 = self.read_coeff_base_tx4x4_ctx6_symbol(tile_ctx, 0, 0);
-            let coeff_base_ctx7 = self.read_coeff_base_tx4x4_ctx7_symbol(tile_ctx, 0, 0);
-            let coeff_base_ctx8 = self.read_coeff_base_tx4x4_ctx8_symbol(tile_ctx, 0, 0);
-            let coeff_base_ctx9 = self.read_coeff_base_tx4x4_ctx9_symbol(tile_ctx, 0, 0);
-            let coeff_base_ctx10 = self.read_coeff_base_tx4x4_ctx10_symbol(tile_ctx, 0, 0);
-            let coeff_base_ctx11 = self.read_coeff_base_tx4x4_ctx11_symbol(tile_ctx, 0, 0);
-            let coeff_base_ctx12 = self.read_coeff_base_tx4x4_ctx12_symbol(tile_ctx, 0, 0);
-            let coeff_base_ctx13 = self.read_coeff_base_tx4x4_ctx13_symbol(tile_ctx, 0, 0);
+            let mut coeff_bases = [0u8; 14];
+            for (ctx_idx, coeff_base) in coeff_bases
+                .iter_mut()
+                .take(coeff_base_symbols_needed_for_eob_4x4(eob))
+                .enumerate()
+            {
+                *coeff_base = self.read_coeff_base_tx4x4_ctx_symbol(tile_ctx, ctx_idx, 0, 0);
+            }
             let coeff_br = match coeff_br_luma_ctx_for_eob_4x4(eob, coeff_base_eob) {
                 0 => self.read_coeff_br_luma_ctx0_symbol(tile_ctx, 0),
                 1 => self.read_coeff_br_luma_ctx1_symbol(tile_ctx, 0),
@@ -1148,20 +1172,20 @@ impl<'a> BacReader<'a> {
                 eob,
                 dc_sign,
                 coeff_base_eob,
-                coeff_base,
-                coeff_base_ctx1,
-                coeff_base_ctx2,
-                coeff_base_ctx3,
-                coeff_base_ctx4,
-                coeff_base_ctx5,
-                coeff_base_ctx6,
-                coeff_base_ctx7,
-                coeff_base_ctx8,
-                coeff_base_ctx9,
-                coeff_base_ctx10,
-                coeff_base_ctx11,
-                coeff_base_ctx12,
-                coeff_base_ctx13,
+                coeff_bases[0],
+                coeff_bases[1],
+                coeff_bases[2],
+                coeff_bases[3],
+                coeff_bases[4],
+                coeff_bases[5],
+                coeff_bases[6],
+                coeff_bases[7],
+                coeff_bases[8],
+                coeff_bases[9],
+                coeff_bases[10],
+                coeff_bases[11],
+                coeff_bases[12],
+                coeff_bases[13],
                 coeff_br,
                 out,
             )
@@ -1673,6 +1697,16 @@ mod tests {
         for eob in 8..12 {
             assert_eq!(coeff_br_luma_ctx_for_eob_4x4(eob, 0), 1, "eob={eob}");
         }
+    }
+
+    #[test]
+    fn coeff_base_symbol_count_tracks_staged_eob() {
+        assert_eq!(coeff_base_symbols_needed_for_eob_4x4(0), 0);
+        assert_eq!(coeff_base_symbols_needed_for_eob_4x4(1), 1);
+        assert_eq!(coeff_base_symbols_needed_for_eob_4x4(2), 2);
+        assert_eq!(coeff_base_symbols_needed_for_eob_4x4(13), 13);
+        assert_eq!(coeff_base_symbols_needed_for_eob_4x4(14), 14);
+        assert_eq!(coeff_base_symbols_needed_for_eob_4x4(15), 14);
     }
 
     #[test]

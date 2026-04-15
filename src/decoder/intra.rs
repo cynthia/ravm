@@ -87,6 +87,15 @@ pub(crate) fn predict_d67_4x4<P: Pixel + Into<u32> + TryFrom<u32>>(
     predict_z1_4x4(above, 24, dst, stride);
 }
 
+/// Directional 203-degree intra prediction for a 4x4 block.
+pub(crate) fn predict_d203_4x4<P: Pixel + Into<u32> + TryFrom<u32>>(
+    left: Option<&[P; 9]>,
+    dst: &mut [P],
+    stride: usize,
+) {
+    predict_z3_4x4(left, 227, dst, stride);
+}
+
 fn predict_z1_4x4<P: Pixel + Into<u32> + TryFrom<u32>>(
     above: Option<&[P; 9]>,
     dx: i32,
@@ -111,6 +120,41 @@ fn predict_z1_4x4<P: Pixel + Into<u32> + TryFrom<u32>>(
             let b: u32 = extended[(base + 1).min(8)].into();
             let val = a * (32 - shift) + b * shift;
             dst[y * stride + x] = P::try_from(divide_round(val, 5)).ok().unwrap_or_default();
+            base += 1;
+        }
+    }
+}
+
+fn predict_z3_4x4<P: Pixel + Into<u32> + TryFrom<u32>>(
+    left: Option<&[P; 9]>,
+    dy: i32,
+    dst: &mut [P],
+    stride: usize,
+) {
+    let fill = [mid_gray(); 8];
+    let mut extended = [mid_gray(); 9];
+    if let Some(left) = left {
+        extended = *left;
+    } else {
+        extended[..8].copy_from_slice(&fill);
+        extended[8] = fill[7];
+    }
+
+    for x in 0..4 {
+        let y = dy * (x as i32 + 1);
+        let mut base = (y >> 6) as usize;
+        let shift = ((y & 0x3f) >> 1) as u32;
+        for row in 0..4 {
+            let sample = if base < 7 {
+                let a: u32 = extended[base].into();
+                let b: u32 = extended[(base + 1).min(8)].into();
+                P::try_from(divide_round(a * (32 - shift) + b * shift, 5))
+                    .ok()
+                    .unwrap_or_default()
+            } else {
+                extended[7]
+            };
+            dst[row * stride + x] = sample;
             base += 1;
         }
     }
@@ -333,5 +377,13 @@ mod tests {
         let mut dst = [0u8; 16];
         predict_d67_4x4::<u8>(Some(&above), &mut dst, 4);
         assert_eq!(dst, [1, 2, 3, 4, 2, 3, 4, 5, 2, 3, 4, 5, 3, 4, 5, 6]);
+    }
+
+    #[test]
+    fn d203_uses_fractional_left_interpolation() {
+        let left = [1u8, 2, 3, 4, 5, 6, 7, 8, 9];
+        let mut dst = [0u8; 16];
+        predict_d203_4x4::<u8>(Some(&left), &mut dst, 4);
+        assert_eq!(dst, [5, 8, 8, 8, 6, 8, 8, 8, 7, 8, 8, 8, 8, 8, 8, 8]);
     }
 }

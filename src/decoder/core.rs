@@ -7,8 +7,9 @@ use crate::decoder::entropy::{BacReader, EntropyError};
 use crate::decoder::executor::{Sequential, TileExecutor};
 use crate::decoder::frame_buffer::{FrameBuffer, PlaneBuffer};
 use crate::decoder::intra::{
-    predict_d45_4x4, predict_d67_4x4, predict_dc_4x4, predict_h_4x4, predict_paeth_4x4,
-    predict_smooth_4x4, predict_smooth_h_4x4, predict_smooth_v_4x4, predict_v_4x4,
+    predict_d203_4x4, predict_d45_4x4, predict_d67_4x4, predict_dc_4x4, predict_h_4x4,
+    predict_paeth_4x4, predict_smooth_4x4, predict_smooth_h_4x4, predict_smooth_v_4x4,
+    predict_v_4x4,
 };
 use crate::decoder::kernels;
 use crate::decoder::partition::{partition_children, BlockSize};
@@ -245,6 +246,11 @@ fn decode_4x4_block(
     } else {
         None
     };
+    let left_wide = if bx >= 4 {
+        Some(gather_left_9(fb.luma(), bx, by))
+    } else {
+        None
+    };
     let above_left = if bx >= 4 && by >= 4 {
         Some(fb.luma().row(by - 1)[bx - 1])
     } else {
@@ -267,6 +273,9 @@ fn decode_4x4_block(
         }
         crate::decoder::transform::BaseIntraMode::D67 => {
             predict_d67_4x4(above_wide.as_ref(), &mut pred, 4)
+        }
+        crate::decoder::transform::BaseIntraMode::D203 => {
+            predict_d203_4x4(left_wide.as_ref(), &mut pred, 4)
         }
         crate::decoder::transform::BaseIntraMode::Smooth => {
             predict_smooth_4x4(above.as_ref(), left.as_ref(), &mut pred, 4)
@@ -348,6 +357,21 @@ fn gather_left_4(plane: &PlaneBuffer<u8>, bx: usize, by: usize) -> [u8; 4] {
         plane.row(by + 1)[bx - 1],
         plane.row(by + 2)[bx - 1],
         plane.row(by + 3)[bx - 1],
+    ]
+}
+
+fn gather_left_9(plane: &PlaneBuffer<u8>, bx: usize, by: usize) -> [u8; 9] {
+    let last_y = plane.height.saturating_sub(1);
+    [
+        plane.row(by.min(last_y))[bx - 1],
+        plane.row((by + 1).min(last_y))[bx - 1],
+        plane.row((by + 2).min(last_y))[bx - 1],
+        plane.row((by + 3).min(last_y))[bx - 1],
+        plane.row((by + 4).min(last_y))[bx - 1],
+        plane.row((by + 5).min(last_y))[bx - 1],
+        plane.row((by + 6).min(last_y))[bx - 1],
+        plane.row((by + 7).min(last_y))[bx - 1],
+        plane.row((by + 8).min(last_y))[bx - 1],
     ]
 }
 

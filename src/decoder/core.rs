@@ -10,7 +10,7 @@ use crate::decoder::intra::predict_dc_4x4;
 use crate::decoder::kernels;
 use crate::decoder::partition::{partition_children, BlockSize};
 use crate::decoder::quant::{Plane, QuantContext};
-use crate::decoder::symbols::PartitionType;
+use crate::decoder::symbols::{PartitionType, TileContext};
 use crate::decoder::transform::{inverse_transform, TxSize, TxType};
 use crate::format::Subsampling;
 
@@ -74,7 +74,12 @@ pub(crate) fn decode_frame(
         if result.is_err() {
             return;
         }
-        if let Err(err) = decode_tile(tile_group.data, &mut frame, quant) {
+        if let Err(err) = decode_tile(
+            tile_group.data,
+            &mut frame,
+            quant,
+            frame_header.disable_cdf_update,
+        ) {
             result = Err(err);
         }
     });
@@ -86,12 +91,19 @@ fn decode_tile(
     tile_data: &[u8],
     fb: &mut FrameBuffer<u8>,
     quant: QuantContext,
+    disable_cdf_update: bool,
 ) -> Result<(), CoreDecodeError> {
     let kernels = kernels::detect();
     let mut reader = BacReader::new(tile_data);
+    let mut tile_ctx = if disable_cdf_update {
+        TileContext::new(false)
+    } else {
+        TileContext::new_default()
+    };
     let mut block_info = BlockInfoGrid::new(fb.luma().width, fb.luma().height);
     decode_partition(
         &mut reader,
+        &mut tile_ctx,
         kernels,
         fb,
         &mut block_info,
@@ -104,6 +116,7 @@ fn decode_tile(
 
 fn decode_partition(
     reader: &mut BacReader<'_>,
+    tile_ctx: &mut TileContext,
     kernels: &dyn kernels::Kernels,
     fb: &mut FrameBuffer<u8>,
     block_info: &mut BlockInfoGrid,
@@ -117,11 +130,11 @@ fn decode_partition(
     }
 
     if bsize.is_min() {
-        return decode_4x4_block(reader, kernels, fb, block_info, bx, by, quant);
+        return decode_4x4_block(reader, tile_ctx, kernels, fb, block_info, bx, by, quant);
     }
 
     let ctx = block_info.partition_ctx(bx, by, bsize);
-    let partition = reader.read_partition(bsize, ctx);
+    let partition = reader.read_partition(tile_ctx, bsize, ctx);
     if partition == PartitionType::None {
         return decode_none_block(fb, block_info, bx, by, bsize);
     }
@@ -129,6 +142,7 @@ fn decode_partition(
     for (child_x, child_y, child_size) in partition_children(bx, by, bsize, partition) {
         decode_partition(
             reader,
+            tile_ctx,
             kernels,
             fb,
             block_info,
@@ -178,6 +192,7 @@ fn decode_none_block(
 
 fn decode_4x4_block(
     reader: &mut BacReader<'_>,
+    tile_ctx: &mut TileContext,
     kernels: &dyn kernels::Kernels,
     fb: &mut FrameBuffer<u8>,
     block_info: &mut BlockInfoGrid,
@@ -185,7 +200,7 @@ fn decode_4x4_block(
     by: usize,
     quant: QuantContext,
 ) -> Result<(), CoreDecodeError> {
-    if reader.read_intra_mode() != 0 {
+    if reader.read_intra_mode(tile_ctx) != 0 {
         return Err(CoreDecodeError::UnexpectedMode);
     }
 
@@ -205,7 +220,7 @@ fn decode_4x4_block(
 
     let mut coeffs_in = [0i16; 16];
     reader
-        .read_coeffs_4x4(&mut coeffs_in)
+        .read_coeffs_4x4(tile_ctx, &mut coeffs_in)
         .map_err(map_entropy_error)?;
     let mut coeffs_out = [0i32; 16];
     quant.dequant_4x4(Plane::Y, &coeffs_in, &mut coeffs_out);

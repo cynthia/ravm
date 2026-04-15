@@ -3,8 +3,7 @@
 
 use crate::decoder::partition::{partition_variants, BlockSize};
 use crate::decoder::symbols::{
-    ALL_ZERO_CDF, INTRA_MODE_CDF, PARTITION_BINARY_CDF, PARTITION_CDF_CTX0, PARTITION_CDF_CTX1,
-    PARTITION_CDF_CTX2, PartitionType, SKIP_CDF,
+    runtime_partition_variants, PartitionType, TileContext,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -79,38 +78,64 @@ impl<'a> BacReader<'a> {
         cdf.len() - 1
     }
 
-    pub fn read_partition(&mut self, bsize: BlockSize, ctx: usize) -> PartitionType {
+    pub fn read_partition(
+        &mut self,
+        tile_ctx: &mut TileContext,
+        bsize: BlockSize,
+        ctx: usize,
+    ) -> PartitionType {
         let variants = partition_variants(bsize);
         if variants.len() == 1 {
             return variants[0];
         }
         let runtime_variants = runtime_partition_variants(&variants);
         if runtime_variants.len() == 2 {
-            let symbol = self.read_symbol(&PARTITION_BINARY_CDF);
-            return runtime_variants[symbol];
+            let symbol = self.read_symbol(tile_ctx.partition_binary.as_slice());
+            let partition = runtime_variants[symbol];
+            tile_ctx.update_partition(bsize, ctx, partition);
+            return partition;
         }
 
-        let base_cdf = match ctx.min(2) {
-            0 => &PARTITION_CDF_CTX0[..],
-            1 => &PARTITION_CDF_CTX1[..],
-            _ => &PARTITION_CDF_CTX2[..],
-        };
+        let base_cdf = tile_ctx.partition_cdf(ctx);
         let cdf = partition_cdf_for_variants(base_cdf, runtime_variants.len());
         let symbol = self.read_symbol(&cdf);
-        runtime_variants[symbol]
+        let partition = runtime_variants[symbol];
+        tile_ctx.update_partition(bsize, ctx, partition);
+        partition
     }
 
     #[allow(dead_code)]
     pub fn read_skip(&mut self) -> bool {
-        self.read_symbol(&SKIP_CDF) == 1
+        unreachable!("use read_skip_with_cdf")
     }
 
-    pub fn read_intra_mode(&mut self) -> u8 {
-        self.read_symbol(&INTRA_MODE_CDF) as u8
+    #[allow(dead_code)]
+    pub fn read_skip_with_cdf(&mut self, tile_ctx: &mut TileContext) -> bool {
+        let symbol = self.read_symbol(tile_ctx.skip.as_slice());
+        if tile_ctx.updates_enabled() {
+            tile_ctx.skip.update(symbol);
+        }
+        symbol == 1
     }
 
-    pub fn read_coeffs_4x4(&mut self, out: &mut [i16; 16]) -> Result<(), EntropyError> {
-        let all_zero = self.read_symbol(&ALL_ZERO_CDF) == 0;
+    pub fn read_intra_mode(&mut self, tile_ctx: &mut TileContext) -> u8 {
+        let symbol = self.read_symbol(tile_ctx.intra_mode.as_slice());
+        if tile_ctx.updates_enabled() {
+            tile_ctx.intra_mode.update(symbol);
+        }
+        symbol as u8
+    }
+
+    pub fn read_coeffs_4x4(
+        &mut self,
+        tile_ctx: &mut TileContext,
+        out: &mut [i16; 16],
+    ) -> Result<(), EntropyError> {
+        let all_zero_symbol = self.read_symbol(tile_ctx.all_zero.as_slice());
+        if tile_ctx.updates_enabled() {
+            tile_ctx.all_zero.update(all_zero_symbol);
+        }
+        let all_zero = all_zero_symbol == 0;
         if all_zero {
             *out = [0; 16];
             return Ok(());
@@ -158,24 +183,10 @@ fn partition_cdf_for_variants(base_cdf: &[u16], len: usize) -> Vec<u16> {
     out
 }
 
-fn runtime_partition_variants(legal_variants: &[PartitionType]) -> Vec<PartitionType> {
-    use PartitionType::*;
-
-    if legal_variants.contains(&Split) {
-        return vec![None, Split];
-    }
-    if legal_variants.contains(&Horz) && !legal_variants.contains(&Vert) {
-        return vec![None, Horz];
-    }
-    if legal_variants.contains(&Vert) && !legal_variants.contains(&Horz) {
-        return vec![None, Vert];
-    }
-    vec![None, legal_variants[1]]
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::decoder::symbols::{TileContext, PARTITION_CDF_CTX0};
 
     #[test]
     fn bac_reader_on_empty_buffer_reports_error_after_read() {
@@ -205,8 +216,10 @@ mod tests {
     #[test]
     fn symbol_wrappers_use_cdfs() {
         let mut reader = BacReader::new(&[0x00, 0x00, 0x00, 0x00]);
+        let mut tile_ctx = TileContext::new_default();
         assert_eq!(
             reader.read_partition(
+                &mut tile_ctx,
                 BlockSize {
                     width: 64,
                     height: 64,
@@ -215,21 +228,28 @@ mod tests {
             ),
             PartitionType::None
         );
-        assert!(!reader.read_skip());
-        assert_eq!(reader.read_intra_mode(), 0);
+        assert!(!reader.read_skip_with_cdf(&mut tile_ctx));
+        assert_eq!(reader.read_intra_mode(&mut tile_ctx), 0);
     }
 
     #[test]
     fn read_partition_min_block_forces_none_variant() {
         let mut reader = BacReader::new(&[0x00, 0x00, 0x00, 0x00]);
-        assert_eq!(reader.read_partition(BlockSize::MIN, 2), PartitionType::None);
+        let mut tile_ctx = TileContext::new_default();
+        assert_eq!(
+            reader.read_partition(&mut tile_ctx, BlockSize::MIN, 2),
+            PartitionType::None
+        );
     }
 
     #[test]
     fn read_coeffs_4x4_handles_all_zero_case() {
         let mut reader = BacReader::new(&[0x00, 0x00, 0x00, 0x00]);
+        let mut tile_ctx = TileContext::new_default();
         let mut coeffs = [1i16; 16];
-        reader.read_coeffs_4x4(&mut coeffs).expect("all-zero coeffs");
+        reader
+            .read_coeffs_4x4(&mut tile_ctx, &mut coeffs)
+            .expect("all-zero coeffs");
         assert_eq!(coeffs, [0i16; 16]);
     }
 

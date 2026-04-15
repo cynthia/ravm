@@ -46,7 +46,7 @@ fn actual_y_mode_from_joint_mode(joint_mode: u8) -> u8 {
 }
 
 fn derive_eob_4x4(eob_pt: u8) -> Option<usize> {
-    (eob_pt <= 12).then_some(eob_pt as usize)
+    (eob_pt <= 13).then_some(eob_pt as usize)
 }
 
 fn decode_eob_level(coeff_base_eob: u8, coeff_br: u8) -> i16 {
@@ -76,6 +76,7 @@ fn materialize_coeffs_4x4(
     coeff_base_ctx8: u8,
     coeff_base_ctx9: u8,
     coeff_base_ctx10: u8,
+    coeff_base_ctx11: u8,
     coeff_br: u8,
     out: &mut [i16; 16],
 ) -> Result<(), EntropyError> {
@@ -371,6 +372,47 @@ fn materialize_coeffs_4x4(
                 out[DEFAULT_SCAN_4X4[1]] = v;
             }
             out[DEFAULT_SCAN_4X4[12]] = ac_level;
+            Ok(())
+        }
+        13 => {
+            let ac_level = decode_eob_level(coeff_base_eob, coeff_br);
+            if let Some(v) = decode_base_level(coeff_base) {
+                out[DEFAULT_SCAN_4X4[12]] = v;
+            }
+            if let Some(v) = decode_base_level(coeff_base_ctx1) {
+                out[DEFAULT_SCAN_4X4[11]] = v;
+            }
+            if let Some(v) = decode_base_level(coeff_base_ctx2) {
+                out[DEFAULT_SCAN_4X4[10]] = v;
+            }
+            if let Some(v) = decode_base_level(coeff_base_ctx3) {
+                out[DEFAULT_SCAN_4X4[9]] = v;
+            }
+            if let Some(v) = decode_base_level(coeff_base_ctx4) {
+                out[DEFAULT_SCAN_4X4[8]] = v;
+            }
+            if let Some(v) = decode_base_level(coeff_base_ctx5) {
+                out[DEFAULT_SCAN_4X4[7]] = v;
+            }
+            if let Some(v) = decode_base_level(coeff_base_ctx6) {
+                out[DEFAULT_SCAN_4X4[6]] = v;
+            }
+            if let Some(v) = decode_base_level(coeff_base_ctx7) {
+                out[DEFAULT_SCAN_4X4[5]] = v;
+            }
+            if let Some(v) = decode_base_level(coeff_base_ctx8) {
+                out[DEFAULT_SCAN_4X4[4]] = v;
+            }
+            if let Some(v) = decode_base_level(coeff_base_ctx9) {
+                out[DEFAULT_SCAN_4X4[3]] = v;
+            }
+            if let Some(v) = decode_base_level(coeff_base_ctx10) {
+                out[DEFAULT_SCAN_4X4[2]] = v;
+            }
+            if let Some(v) = decode_base_level(coeff_base_ctx11) {
+                out[DEFAULT_SCAN_4X4[1]] = v;
+            }
+            out[DEFAULT_SCAN_4X4[13]] = ac_level;
             Ok(())
         }
         _ => Err(EntropyError::UnimplementedInM0),
@@ -858,6 +900,18 @@ impl<'a> BacReader<'a> {
         symbol as u8
     }
 
+    pub fn read_coeff_base_tx4x4_ctx11_symbol(
+        &mut self,
+        tile_ctx: &mut TileContext,
+        q_ctx: usize,
+        tcq_ctx: usize,
+    ) -> u8 {
+        let symbol = self
+            .read_symbol(tile_ctx.coeff_base_tx4x4_ctx11[q_ctx.min(3)][tcq_ctx.min(1)].as_slice());
+        tile_ctx.update_coeff_base_tx4x4_ctx11(q_ctx, tcq_ctx, symbol);
+        symbol as u8
+    }
+
     pub fn read_coeff_br_luma_ctx0_symbol(&mut self, tile_ctx: &mut TileContext, q_ctx: usize) -> u8 {
         let symbol = self.read_symbol(tile_ctx.coeff_br_luma_ctx0[q_ctx.min(3)].as_slice());
         tile_ctx.update_coeff_br_luma_ctx0(q_ctx, symbol);
@@ -906,6 +960,7 @@ impl<'a> BacReader<'a> {
             let coeff_base_ctx8 = self.read_coeff_base_tx4x4_ctx8_symbol(tile_ctx, 0, 0);
             let coeff_base_ctx9 = self.read_coeff_base_tx4x4_ctx9_symbol(tile_ctx, 0, 0);
             let coeff_base_ctx10 = self.read_coeff_base_tx4x4_ctx10_symbol(tile_ctx, 0, 0);
+            let coeff_base_ctx11 = self.read_coeff_base_tx4x4_ctx11_symbol(tile_ctx, 0, 0);
             let coeff_br = self.read_coeff_br_luma_ctx0_symbol(tile_ctx, 0);
             materialize_coeffs_4x4(
                 eob,
@@ -922,6 +977,7 @@ impl<'a> BacReader<'a> {
                 coeff_base_ctx8,
                 coeff_base_ctx9,
                 coeff_base_ctx10,
+                coeff_base_ctx11,
                 coeff_br,
                 out,
             )
@@ -1067,6 +1123,7 @@ mod tests {
         let coeff_base_ctx8_before = tile_ctx.coeff_base_tx4x4_ctx8[0][0].as_slice().to_vec();
         let coeff_base_ctx9_before = tile_ctx.coeff_base_tx4x4_ctx9[0][0].as_slice().to_vec();
         let coeff_base_ctx10_before = tile_ctx.coeff_base_tx4x4_ctx10[0][0].as_slice().to_vec();
+        let coeff_base_ctx11_before = tile_ctx.coeff_base_tx4x4_ctx11[0][0].as_slice().to_vec();
         let coeff_br_before = tile_ctx.coeff_br_luma_ctx0[0].as_slice().to_vec();
         let all_zero_before = tile_ctx.all_zero.as_slice().to_vec();
 
@@ -1104,6 +1161,7 @@ mod tests {
         assert_eq!(reader.read_coeff_base_tx4x4_ctx8_symbol(&mut tile_ctx, 0, 0), 0);
         assert_eq!(reader.read_coeff_base_tx4x4_ctx9_symbol(&mut tile_ctx, 0, 0), 0);
         assert_eq!(reader.read_coeff_base_tx4x4_ctx10_symbol(&mut tile_ctx, 0, 0), 0);
+        assert_eq!(reader.read_coeff_base_tx4x4_ctx11_symbol(&mut tile_ctx, 0, 0), 0);
         assert_eq!(reader.read_coeff_br_luma_ctx0_symbol(&mut tile_ctx, 0), 0);
         let mut coeffs = [1i16; 16];
         reader
@@ -1209,6 +1267,10 @@ mod tests {
         assert_eq!(
             tile_ctx.coeff_base_tx4x4_ctx10[0][0].as_slice(),
             coeff_base_ctx10_before.as_slice()
+        );
+        assert_eq!(
+            tile_ctx.coeff_base_tx4x4_ctx11[0][0].as_slice(),
+            coeff_base_ctx11_before.as_slice()
         );
         assert_eq!(tile_ctx.coeff_br_luma_ctx0[0].as_slice(), coeff_br_before.as_slice());
         assert_eq!(tile_ctx.all_zero.as_slice(), all_zero_before.as_slice());
@@ -1317,6 +1379,13 @@ mod tests {
         let mut reader = BacReader::new(&[0x00, 0x00, 0x00, 0x00]);
         let mut tile_ctx = TileContext::new_default();
         assert_eq!(reader.read_coeff_base_tx4x4_ctx10_symbol(&mut tile_ctx, 0, 0), 0);
+    }
+
+    #[test]
+    fn read_coeff_base_tx4x4_ctx11_symbol_uses_real_default_table() {
+        let mut reader = BacReader::new(&[0x00, 0x00, 0x00, 0x00]);
+        let mut tile_ctx = TileContext::new_default();
+        assert_eq!(reader.read_coeff_base_tx4x4_ctx11_symbol(&mut tile_ctx, 0, 0), 0);
     }
 
     #[test]
@@ -1663,7 +1732,7 @@ mod tests {
     #[test]
     fn read_coeffs_4x4_can_place_fourth_scanned_ac_from_real_scan_order() {
         let mut coeffs = [0i16; 16];
-        materialize_coeffs_4x4(4, false, 2, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, &mut coeffs)
+        materialize_coeffs_4x4(4, false, 2, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, &mut coeffs)
             .expect("materialize fourth scanned coefficient");
         assert_eq!(coeffs[DEFAULT_SCAN_4X4[1]], 1);
         assert_eq!(coeffs[DEFAULT_SCAN_4X4[2]], 2);
@@ -1681,7 +1750,7 @@ mod tests {
     #[test]
     fn read_coeffs_4x4_can_place_fifth_scanned_ac_from_real_scan_order() {
         let mut coeffs = [0i16; 16];
-        materialize_coeffs_4x4(5, false, 2, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, &mut coeffs)
+        materialize_coeffs_4x4(5, false, 2, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, &mut coeffs)
             .expect("materialize fifth scanned coefficient");
         assert_eq!(coeffs[DEFAULT_SCAN_4X4[1]], 1);
         assert_eq!(coeffs[DEFAULT_SCAN_4X4[2]], 2);
@@ -1701,7 +1770,7 @@ mod tests {
     #[test]
     fn read_coeffs_4x4_can_place_sixth_scanned_ac_from_real_scan_order() {
         let mut coeffs = [0i16; 16];
-        materialize_coeffs_4x4(6, false, 2, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, &mut coeffs)
+        materialize_coeffs_4x4(6, false, 2, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, &mut coeffs)
             .expect("materialize sixth scanned coefficient");
         assert_eq!(coeffs[DEFAULT_SCAN_4X4[1]], 1);
         assert_eq!(coeffs[DEFAULT_SCAN_4X4[2]], 2);
@@ -1723,7 +1792,7 @@ mod tests {
     #[test]
     fn read_coeffs_4x4_can_place_seventh_scanned_ac_from_real_scan_order() {
         let mut coeffs = [0i16; 16];
-        materialize_coeffs_4x4(7, false, 2, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, &mut coeffs)
+        materialize_coeffs_4x4(7, false, 2, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, &mut coeffs)
             .expect("materialize seventh scanned coefficient");
         assert_eq!(coeffs[DEFAULT_SCAN_4X4[1]], 1);
         assert_eq!(coeffs[DEFAULT_SCAN_4X4[2]], 2);
@@ -1747,7 +1816,7 @@ mod tests {
     #[test]
     fn read_coeffs_4x4_can_place_eighth_scanned_ac_from_real_scan_order() {
         let mut coeffs = [0i16; 16];
-        materialize_coeffs_4x4(8, false, 2, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, &mut coeffs)
+        materialize_coeffs_4x4(8, false, 2, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, &mut coeffs)
             .expect("materialize eighth scanned coefficient");
         assert_eq!(coeffs[DEFAULT_SCAN_4X4[1]], 1);
         assert_eq!(coeffs[DEFAULT_SCAN_4X4[2]], 2);
@@ -1773,7 +1842,7 @@ mod tests {
     #[test]
     fn read_coeffs_4x4_can_place_ninth_scanned_ac_from_real_scan_order() {
         let mut coeffs = [0i16; 16];
-        materialize_coeffs_4x4(9, false, 2, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, &mut coeffs)
+        materialize_coeffs_4x4(9, false, 2, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, &mut coeffs)
             .expect("materialize ninth scanned coefficient");
         assert_eq!(coeffs[DEFAULT_SCAN_4X4[1]], 1);
         assert_eq!(coeffs[DEFAULT_SCAN_4X4[2]], 2);
@@ -1801,7 +1870,7 @@ mod tests {
     #[test]
     fn read_coeffs_4x4_can_place_tenth_scanned_ac_from_real_scan_order() {
         let mut coeffs = [0i16; 16];
-        materialize_coeffs_4x4(10, false, 2, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, &mut coeffs)
+        materialize_coeffs_4x4(10, false, 2, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, &mut coeffs)
             .expect("materialize tenth scanned coefficient");
         assert_eq!(coeffs[DEFAULT_SCAN_4X4[1]], 1);
         assert_eq!(coeffs[DEFAULT_SCAN_4X4[2]], 2);
@@ -1831,7 +1900,7 @@ mod tests {
     #[test]
     fn read_coeffs_4x4_can_place_eleventh_scanned_ac_from_real_scan_order() {
         let mut coeffs = [0i16; 16];
-        materialize_coeffs_4x4(11, false, 2, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, &mut coeffs)
+        materialize_coeffs_4x4(11, false, 2, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, &mut coeffs)
             .expect("materialize eleventh scanned coefficient");
         assert_eq!(coeffs[DEFAULT_SCAN_4X4[1]], 1);
         assert_eq!(coeffs[DEFAULT_SCAN_4X4[2]], 2);
@@ -1863,7 +1932,7 @@ mod tests {
     #[test]
     fn read_coeffs_4x4_can_place_twelfth_scanned_ac_from_real_scan_order() {
         let mut coeffs = [0i16; 16];
-        materialize_coeffs_4x4(12, false, 2, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, &mut coeffs)
+        materialize_coeffs_4x4(12, false, 2, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, &mut coeffs)
             .expect("materialize twelfth scanned coefficient");
         assert_eq!(coeffs[DEFAULT_SCAN_4X4[1]], 1);
         assert_eq!(coeffs[DEFAULT_SCAN_4X4[2]], 2);
@@ -1890,6 +1959,60 @@ mod tests {
                 || i == DEFAULT_SCAN_4X4[10]
                 || i == DEFAULT_SCAN_4X4[11]
                 || i == DEFAULT_SCAN_4X4[12]
+                || coeff == 0
+        }));
+    }
+
+    #[test]
+    fn read_coeffs_4x4_can_place_thirteenth_scanned_ac_from_real_scan_order() {
+        let mut coeffs = [0i16; 16];
+        materialize_coeffs_4x4(
+            13,
+            false,
+            2,
+            12,
+            11,
+            10,
+            9,
+            8,
+            7,
+            6,
+            5,
+            4,
+            3,
+            2,
+            1,
+            0,
+            &mut coeffs,
+        )
+        .expect("materialize thirteenth scanned coefficient");
+        assert_eq!(coeffs[DEFAULT_SCAN_4X4[1]], 1);
+        assert_eq!(coeffs[DEFAULT_SCAN_4X4[2]], 2);
+        assert_eq!(coeffs[DEFAULT_SCAN_4X4[3]], 3);
+        assert_eq!(coeffs[DEFAULT_SCAN_4X4[4]], 4);
+        assert_eq!(coeffs[DEFAULT_SCAN_4X4[5]], 5);
+        assert_eq!(coeffs[DEFAULT_SCAN_4X4[6]], 6);
+        assert_eq!(coeffs[DEFAULT_SCAN_4X4[7]], 7);
+        assert_eq!(coeffs[DEFAULT_SCAN_4X4[8]], 8);
+        assert_eq!(coeffs[DEFAULT_SCAN_4X4[9]], 9);
+        assert_eq!(coeffs[DEFAULT_SCAN_4X4[10]], 10);
+        assert_eq!(coeffs[DEFAULT_SCAN_4X4[11]], 11);
+        assert_eq!(coeffs[DEFAULT_SCAN_4X4[12]], 12);
+        assert_eq!(coeffs[DEFAULT_SCAN_4X4[13]], 3);
+        assert!(coeffs.iter().enumerate().all(|(i, &coeff)| {
+            i == DEFAULT_SCAN_4X4[1]
+                || i == DEFAULT_SCAN_4X4[2]
+                || i == DEFAULT_SCAN_4X4[3]
+                || i == DEFAULT_SCAN_4X4[4]
+                || i == DEFAULT_SCAN_4X4[5]
+                || i == DEFAULT_SCAN_4X4[6]
+                || i == DEFAULT_SCAN_4X4[7]
+                || i == DEFAULT_SCAN_4X4[8]
+                || i == DEFAULT_SCAN_4X4[9]
+                || i == DEFAULT_SCAN_4X4[10]
+                || i == DEFAULT_SCAN_4X4[11]
+                || i == DEFAULT_SCAN_4X4[12]
+                || i == DEFAULT_SCAN_4X4[13]
                 || coeff == 0
         }));
     }

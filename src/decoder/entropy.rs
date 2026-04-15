@@ -91,6 +91,10 @@ fn coeff_br_needed_for_eob_level(coeff_base_eob: u8) -> bool {
     coeff_base_eob >= 3
 }
 
+fn dc_sign_needed_for_eob_4x4(eob: usize) -> bool {
+    eob <= 2
+}
+
 fn materialize_coeffs_4x4(
     eob: usize,
     dc_sign: bool,
@@ -1201,7 +1205,11 @@ impl<'a> BacReader<'a> {
             let eob_pt = self.read_eob_pt_16_symbol(tile_ctx, 0, plane_ctx);
             let eob = derive_eob_4x4(eob_pt).ok_or(EntropyError::UnimplementedInM0)?;
             let coeff_base_eob = self.read_coeff_base_eob_tx4x4_symbol(tile_ctx, 0, 0);
-            let dc_sign = self.read_dc_sign_luma_symbol(tile_ctx, 0, 0);
+            let dc_sign = if dc_sign_needed_for_eob_4x4(eob) {
+                self.read_dc_sign_luma_symbol(tile_ctx, 0, 0)
+            } else {
+                false
+            };
             let mut coeff_bases = [0u8; 14];
             for (ctx_idx, coeff_base) in coeff_bases
                 .iter_mut()
@@ -1773,6 +1781,15 @@ mod tests {
         assert!(!coeff_br_needed_for_eob_level(2));
         assert!(coeff_br_needed_for_eob_level(3));
         assert!(coeff_br_needed_for_eob_level(4));
+    }
+
+    #[test]
+    fn dc_sign_requirement_tracks_staged_dc_presence() {
+        assert!(dc_sign_needed_for_eob_4x4(0));
+        assert!(dc_sign_needed_for_eob_4x4(1));
+        assert!(dc_sign_needed_for_eob_4x4(2));
+        assert!(!dc_sign_needed_for_eob_4x4(3));
+        assert!(!dc_sign_needed_for_eob_4x4(15));
     }
 
     #[test]

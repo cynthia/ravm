@@ -5,10 +5,20 @@ use crate::decoder::partition::BlockSize;
 
 /// Partition CDFs keyed by neighbor context count (0, 1, 2).
 ///
-/// These are still placeholder tables; the M1 spec port will replace them with
-/// the full per-block-size AV2 tables. For now the wrapper exposes the full
-/// partition type set and keeps the symbol plumbing/context threading in place.
-pub(crate) const PARTITION_BINARY_CDF: [u16; 2] = [16384, 32767];
+/// `PARTITION_DO_SPLIT_CDF` and `PARTITION_DO_SQUARE_SPLIT_CDF` are ported
+/// from `av2/common/entropy_inits_modes.h` for the active plane-0 path. The
+/// broader multi-symbol partition tables remain placeholder-driven until the
+/// full rect/ext partition syntax lands.
+pub(crate) const PARTITION_DO_SPLIT_CDF: [[u16; 2]; 3] = [
+    [28084, 32767],
+    [23755, 32767],
+    [23634, 32767],
+];
+pub(crate) const PARTITION_DO_SQUARE_SPLIT_CDF: [[u16; 2]; 3] = [
+    [18000, 32767],
+    [10521, 32767],
+    [11395, 32767],
+];
 pub(crate) const PARTITION_CDF_CTX0: [u16; 10] = [
     4096, 8192, 12288, 16384, 19660, 22936, 25600, 28160, 30464, 32767,
 ];
@@ -94,7 +104,8 @@ impl<const N: usize> CdfState<N> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct TileContext {
     updates_enabled: bool,
-    pub partition_binary: CdfState<2>,
+    pub partition_do_split: [CdfState<2>; 3],
+    pub partition_do_square_split: [CdfState<2>; 3],
     pub partition_ctx: [CdfState<10>; 3],
     pub skip: CdfState<2>,
     pub y_mode_set: CdfState<4>,
@@ -106,7 +117,8 @@ pub(crate) struct TileContext {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct DefaultTileCdfs {
-    partition_binary: [u16; 2],
+    partition_do_split: [[u16; 2]; 3],
+    partition_do_square_split: [[u16; 2]; 3],
     partition_ctx: [[u16; 10]; 3],
     skip: [u16; 2],
     y_mode_set: [u16; 4],
@@ -119,7 +131,8 @@ pub(crate) struct DefaultTileCdfs {
 impl DefaultTileCdfs {
     pub const fn new() -> Self {
         Self {
-            partition_binary: PARTITION_BINARY_CDF,
+            partition_do_split: PARTITION_DO_SPLIT_CDF,
+            partition_do_square_split: PARTITION_DO_SQUARE_SPLIT_CDF,
             partition_ctx: [PARTITION_CDF_CTX0, PARTITION_CDF_CTX1, PARTITION_CDF_CTX2],
             skip: SKIP_CDF,
             y_mode_set: Y_MODE_SET_CDF,
@@ -143,7 +156,16 @@ impl TileContext {
     pub fn from_defaults(defaults: DefaultTileCdfs, updates_enabled: bool) -> Self {
         Self {
             updates_enabled,
-            partition_binary: CdfState::new(defaults.partition_binary),
+            partition_do_split: [
+                CdfState::new(defaults.partition_do_split[0]),
+                CdfState::new(defaults.partition_do_split[1]),
+                CdfState::new(defaults.partition_do_split[2]),
+            ],
+            partition_do_square_split: [
+                CdfState::new(defaults.partition_do_square_split[0]),
+                CdfState::new(defaults.partition_do_square_split[1]),
+                CdfState::new(defaults.partition_do_square_split[2]),
+            ],
             partition_ctx: [
                 CdfState::new(defaults.partition_ctx[0]),
                 CdfState::new(defaults.partition_ctx[1]),
@@ -177,6 +199,15 @@ impl TileContext {
 
     pub fn partition_cdf(&self, ctx: usize) -> &[u16] {
         self.partition_ctx[ctx.min(2)].as_slice()
+    }
+
+    pub fn partition_do_split_cdf(&self, ctx: usize) -> &[u16] {
+        self.partition_do_split[ctx.min(2)].as_slice()
+    }
+
+    #[allow(dead_code)]
+    pub fn partition_do_square_split_cdf(&self, ctx: usize) -> &[u16] {
+        self.partition_do_square_split[ctx.min(2)].as_slice()
     }
 
     #[cfg(test)]
@@ -228,7 +259,7 @@ impl TileContext {
         let runtime = runtime_partition_variants(&legal);
         if let Some(index) = runtime.iter().position(|&entry| entry == symbol) {
             if runtime.len() == 2 {
-                self.partition_binary.update(index);
+                self.partition_do_split[ctx.min(2)].update(index);
             } else {
                 self.partition_ctx[ctx.min(2)].update(index);
             }
@@ -248,7 +279,12 @@ fn cdf_u16_bytes(cdf: &[u16]) -> Vec<u8> {
 #[cfg(test)]
 fn active_default_cdf_bytes() -> Vec<u8> {
     let mut out = Vec::new();
-    out.extend_from_slice(&cdf_u16_bytes(&PARTITION_BINARY_CDF));
+    out.extend_from_slice(&cdf_u16_bytes(&PARTITION_DO_SPLIT_CDF[0]));
+    out.extend_from_slice(&cdf_u16_bytes(&PARTITION_DO_SPLIT_CDF[1]));
+    out.extend_from_slice(&cdf_u16_bytes(&PARTITION_DO_SPLIT_CDF[2]));
+    out.extend_from_slice(&cdf_u16_bytes(&PARTITION_DO_SQUARE_SPLIT_CDF[0]));
+    out.extend_from_slice(&cdf_u16_bytes(&PARTITION_DO_SQUARE_SPLIT_CDF[1]));
+    out.extend_from_slice(&cdf_u16_bytes(&PARTITION_DO_SQUARE_SPLIT_CDF[2]));
     out.extend_from_slice(&cdf_u16_bytes(&PARTITION_CDF_CTX0));
     out.extend_from_slice(&cdf_u16_bytes(&PARTITION_CDF_CTX1));
     out.extend_from_slice(&cdf_u16_bytes(&PARTITION_CDF_CTX2));
@@ -297,7 +333,11 @@ mod tests {
     fn tile_context_starts_from_default_tables() {
         let tile = TileContext::new_default();
         assert!(tile.updates_enabled());
-        assert_eq!(tile.partition_binary.as_slice(), &PARTITION_BINARY_CDF);
+        assert_eq!(tile.partition_do_split[0].as_slice(), &PARTITION_DO_SPLIT_CDF[0]);
+        assert_eq!(
+            tile.partition_do_square_split[0].as_slice(),
+            &PARTITION_DO_SQUARE_SPLIT_CDF[0]
+        );
         assert_eq!(tile.y_mode_set.as_slice(), &Y_MODE_SET_CDF);
         assert_eq!(tile.y_mode_idx[0].as_slice(), &Y_MODE_IDX_CDF[0]);
         assert_eq!(tile.uv_mode[0].as_slice(), &UV_MODE_CDF[0]);
@@ -306,7 +346,7 @@ mod tests {
     #[test]
     fn tile_context_can_disable_updates() {
         let mut tile = TileContext::new(false);
-        let before = tile.partition_binary.as_slice().to_vec();
+        let before = tile.partition_do_split[0].as_slice().to_vec();
         tile.update_partition(
             BlockSize {
                 width: 64,
@@ -315,13 +355,14 @@ mod tests {
             0,
             PartitionType::Split,
         );
-        assert_eq!(tile.partition_binary.as_slice(), before.as_slice());
+        assert_eq!(tile.partition_do_split[0].as_slice(), before.as_slice());
     }
 
     #[test]
     fn tile_context_reset_restores_default_tables() {
         let mut tile = TileContext::new_default();
-        tile.partition_binary.update(1);
+        tile.partition_do_split[0].update(1);
+        tile.partition_do_square_split[0].update(1);
         tile.skip.update(1);
         tile.y_mode_set.update(1);
         tile.y_mode_idx[0].update(4);
@@ -329,7 +370,11 @@ mod tests {
         tile.uv_mode[0].update(3);
         tile.all_zero.update(1);
         tile.reset_to_default();
-        assert_eq!(tile.partition_binary.as_slice(), &PARTITION_BINARY_CDF);
+        assert_eq!(tile.partition_do_split[0].as_slice(), &PARTITION_DO_SPLIT_CDF[0]);
+        assert_eq!(
+            tile.partition_do_square_split[0].as_slice(),
+            &PARTITION_DO_SQUARE_SPLIT_CDF[0]
+        );
         assert_eq!(tile.skip.as_slice(), &SKIP_CDF);
         assert_eq!(tile.y_mode_set.as_slice(), &Y_MODE_SET_CDF);
         assert_eq!(tile.y_mode_idx[0].as_slice(), &Y_MODE_IDX_CDF[0]);
@@ -341,7 +386,7 @@ mod tests {
     #[test]
     fn active_default_cdfs_hash_stably() {
         let digest = md5::compute(active_default_cdf_bytes());
-        assert_eq!(format!("{digest:x}"), "c896fd58dc5b57a41fa5081f184be3f5");
+        assert_eq!(format!("{digest:x}"), "7a1c07bda600af4bcf1a1e1a9bba50dc");
     }
 
     #[test]

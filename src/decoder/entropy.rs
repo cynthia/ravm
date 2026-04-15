@@ -89,7 +89,7 @@ impl<'a> BacReader<'a> {
         }
         let runtime_variants = runtime_partition_variants(&variants);
         if runtime_variants.len() == 2 {
-            let symbol = self.read_symbol(tile_ctx.partition_binary.as_slice());
+            let symbol = self.read_symbol(tile_ctx.partition_do_split_cdf(ctx));
             let partition = runtime_variants[symbol];
             tile_ctx.update_partition(bsize, ctx, partition);
             return partition;

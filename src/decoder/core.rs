@@ -217,7 +217,7 @@ fn decode_4x4_block(
         ));
     }
     let tx_type = intra_default_tx_type(intra_mode);
-    if !matches!(tx_type, TxType::DctDct | TxType::Idtx) {
+    if !matches!(tx_type, TxType::DctDct | TxType::Idtx | TxType::AdstDct | TxType::DctAdst) {
         return Err(CoreDecodeError::UnexpectedMode);
     }
 

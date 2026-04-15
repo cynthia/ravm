@@ -13,6 +13,12 @@ pub(crate) trait Kernels: Sync + 'static {
     /// order; output is residual samples written into `dst` with stride in
     /// pixels.
     fn inv_idtx4x4(&self, coeffs: &[i32; 16], dst: &mut [i16], dst_stride: usize);
+
+    /// Inverse 4x4 ADST_DCT. ADST in vertical, DCT in horizontal.
+    fn inv_adstdct4x4(&self, coeffs: &[i32; 16], dst: &mut [i16], dst_stride: usize);
+
+    /// Inverse 4x4 DCT_ADST. DCT in vertical, ADST in horizontal.
+    fn inv_dctadst4x4(&self, coeffs: &[i32; 16], dst: &mut [i16], dst_stride: usize);
 }
 
 /// Return the best available kernel implementation for the host CPU.
@@ -53,6 +59,24 @@ mod tests {
         let coeffs = [0i32; 16];
         let mut dst = [7i16; 16];
         k.inv_idtx4x4(&coeffs, &mut dst, 4);
+        assert_eq!(dst, [0i16; 16]);
+    }
+
+    #[test]
+    fn inv_adstdct4x4_preserves_all_zero_block() {
+        let k = detect();
+        let coeffs = [0i32; 16];
+        let mut dst = [7i16; 16];
+        k.inv_adstdct4x4(&coeffs, &mut dst, 4);
+        assert_eq!(dst, [0i16; 16]);
+    }
+
+    #[test]
+    fn inv_dctadst4x4_preserves_all_zero_block() {
+        let k = detect();
+        let coeffs = [0i32; 16];
+        let mut dst = [7i16; 16];
+        k.inv_dctadst4x4(&coeffs, &mut dst, 4);
         assert_eq!(dst, [0i16; 16]);
     }
 }

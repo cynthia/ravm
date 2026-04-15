@@ -4,6 +4,62 @@ use super::Kernels;
 
 pub(crate) struct Scalar;
 
+const DCT2_4X4: [[i32; 4]; 4] = [
+    [64, 64, 64, 64],
+    [83, 35, -35, -83],
+    [64, -64, -64, 64],
+    [35, -83, 83, -35],
+];
+
+const ADST_4X4: [[i32; 4]; 4] = [
+    [18, 50, 75, 89],
+    [50, 89, 18, -75],
+    [75, 18, -89, 50],
+    [89, -75, 50, -18],
+];
+
+fn apply_matrix_1d_4(input: [i32; 4], mat: &[[i32; 4]; 4], shift: i32) -> [i32; 4] {
+    let offset = 1 << (shift - 1);
+    let mut out = [0i32; 4];
+    for j in 0..4 {
+        let mut sum = 0i32;
+        for k in 0..4 {
+            sum += input[k] * mat[k][j];
+        }
+        out[j] = (sum + offset) >> shift;
+    }
+    out
+}
+
+fn inv_separable_4x4(
+    coeffs: &[i32; 16],
+    dst: &mut [i16],
+    dst_stride: usize,
+    row_mat: &[[i32; 4]; 4],
+    col_mat: &[[i32; 4]; 4],
+) {
+    let mut tmp = [[0i32; 4]; 4];
+    for r in 0..4 {
+        tmp[r] = apply_matrix_1d_4(
+            [
+                coeffs[r * 4],
+                coeffs[r * 4 + 1],
+                coeffs[r * 4 + 2],
+                coeffs[r * 4 + 3],
+            ],
+            row_mat,
+            7,
+        );
+    }
+
+    for c in 0..4 {
+        let out = apply_matrix_1d_4([tmp[0][c], tmp[1][c], tmp[2][c], tmp[3][c]], col_mat, 10);
+        for r in 0..4 {
+            dst[r * dst_stride + c] = out[r].clamp(i16::MIN as i32, i16::MAX as i32) as i16;
+        }
+    }
+}
+
 impl Kernels for Scalar {
     fn inv_dct4x4(&self, coeffs: &[i32; 16], dst: &mut [i16], dst_stride: usize) {
         const COS_BIT: i32 = 12;
@@ -60,5 +116,13 @@ impl Kernels for Scalar {
                     coeffs[y * 4 + x].clamp(i16::MIN as i32, i16::MAX as i32) as i16;
             }
         }
+    }
+
+    fn inv_adstdct4x4(&self, coeffs: &[i32; 16], dst: &mut [i16], dst_stride: usize) {
+        inv_separable_4x4(coeffs, dst, dst_stride, &DCT2_4X4, &ADST_4X4);
+    }
+
+    fn inv_dctadst4x4(&self, coeffs: &[i32; 16], dst: &mut [i16], dst_stride: usize) {
+        inv_separable_4x4(coeffs, dst, dst_stride, &ADST_4X4, &DCT2_4X4);
     }
 }

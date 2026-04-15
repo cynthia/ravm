@@ -9,8 +9,8 @@ use crate::decoder::frame_buffer::{FrameBuffer, PlaneBuffer};
 use crate::decoder::intra::{
     predict_d113_4x4, predict_d135_4x4, predict_d157_4x4, predict_d203_4x4, predict_d45_4x4,
     predict_d67_4x4, predict_dc_4x4, predict_dc_block, predict_h_4x4, predict_h_block,
-    predict_paeth_4x4, predict_smooth_4x4,
-    predict_smooth_h_4x4, predict_smooth_v_4x4, predict_v_4x4,
+    predict_paeth_4x4, predict_smooth_4x4, predict_smooth_h_4x4, predict_smooth_h_block,
+    predict_smooth_v_4x4, predict_smooth_v_block, predict_v_4x4,
     predict_v_block,
 };
 use crate::decoder::kernels;
@@ -244,9 +244,25 @@ fn decode_none_block(
                 visible_height,
                 visible_width,
             ),
+            crate::decoder::transform::BaseIntraMode::SmoothV => predict_smooth_v_block(
+                above.as_deref(),
+                left.as_deref(),
+                &mut pred,
+                visible_width,
+                visible_height,
+                visible_width,
+            ),
+            crate::decoder::transform::BaseIntraMode::SmoothH => predict_smooth_h_block(
+                above.as_deref(),
+                left.as_deref(),
+                &mut pred,
+                visible_width,
+                visible_height,
+                visible_width,
+            ),
             _ => {
                 return Err(CoreDecodeError::Unsupported(
-                    "non-4x4 none blocks currently only support DC/V/H prediction with neighbors",
+                    "non-4x4 none blocks currently only support DC/V/H/SMOOTH_V/SMOOTH_H prediction with neighbors",
                 ))
             }
         }
@@ -755,7 +771,7 @@ mod tests {
         assert_eq!(
             err,
             Some(CoreDecodeError::Unsupported(
-                "non-4x4 none blocks currently only support DC/V/H prediction with neighbors",
+                "non-4x4 none blocks currently only support DC/V/H/SMOOTH_V/SMOOTH_H prediction with neighbors",
             ))
         );
     }

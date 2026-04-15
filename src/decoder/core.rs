@@ -15,8 +15,8 @@ use crate::decoder::partition::{partition_children, BlockSize};
 use crate::decoder::quant::{Plane, QuantContext};
 use crate::decoder::symbols::{PartitionType, TileContext};
 use crate::decoder::transform::{
-    base_intra_mode_from_mode_idx, default_tx_type_for_base_intra_mode, inverse_transform, TxSize,
-    TxType,
+    base_intra_mode_from_actual_mode, default_tx_type_for_base_intra_mode, inverse_transform,
+    TxSize, TxType,
 };
 use crate::format::Subsampling;
 
@@ -213,15 +213,15 @@ fn decode_4x4_block(
     tx_mode: u8,
 ) -> Result<(), CoreDecodeError> {
     let y_mode_ctx = block_info.y_mode_ctx(bx, by);
-    let intra_mode_idx = reader.read_intra_mode(tile_ctx, y_mode_ctx);
+    let intra_mode = reader.read_intra_mode(tile_ctx, y_mode_ctx);
     if tx_mode != 0 {
         return Err(CoreDecodeError::Unsupported(
             "tx_mode select is not integrated into the 4x4 Rust decode path yet",
         ));
     }
-    let intra_mode =
-        base_intra_mode_from_mode_idx(intra_mode_idx).ok_or(CoreDecodeError::UnexpectedMode)?;
-    let tx_type = default_tx_type_for_base_intra_mode(intra_mode);
+    let base_intra_mode = base_intra_mode_from_actual_mode(intra_mode.actual_mode)
+        .ok_or(CoreDecodeError::UnexpectedMode)?;
+    let tx_type = default_tx_type_for_base_intra_mode(base_intra_mode);
     if !matches!(
         tx_type,
         TxType::DctDct | TxType::Idtx | TxType::AdstDct | TxType::DctAdst | TxType::AdstAdst
@@ -246,7 +246,7 @@ fn decode_4x4_block(
     };
 
     let mut pred = [0u8; 16];
-    match intra_mode {
+    match base_intra_mode {
         crate::decoder::transform::BaseIntraMode::Dc => {
             predict_dc_4x4(above.as_ref(), left.as_ref(), &mut pred, 4)
         }
@@ -262,6 +262,7 @@ fn decode_4x4_block(
         crate::decoder::transform::BaseIntraMode::Paeth => {
             predict_paeth_4x4(above.as_ref(), left.as_ref(), above_left, &mut pred, 4)
         }
+        _ => return Err(CoreDecodeError::UnexpectedMode),
     }
 
     let mut coeffs_in = [0i16; 16];
@@ -294,7 +295,7 @@ fn decode_4x4_block(
         BlockSize::MIN,
         BlockInfo {
             present: true,
-            intra_mode: intra_mode_idx,
+            intra_mode: intra_mode.joint_mode,
             skip: false,
             tx_size: 0,
         },

@@ -45,19 +45,35 @@ pub(crate) enum IntraTxFamily {
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub(crate) enum BaseIntraMode {
     Dc,
+    V,
+    H,
+    D45,
+    D135,
+    D113,
+    D157,
+    D203,
+    D67,
     Smooth,
     SmoothV,
     SmoothH,
     Paeth,
 }
 
-pub(crate) fn base_intra_mode_from_mode_idx(mode_idx: u8) -> Option<BaseIntraMode> {
-    match mode_idx {
+pub(crate) fn base_intra_mode_from_actual_mode(mode: u8) -> Option<BaseIntraMode> {
+    match mode {
         0 => Some(BaseIntraMode::Dc),
-        1 => Some(BaseIntraMode::Smooth),
-        2 => Some(BaseIntraMode::SmoothV),
-        3 => Some(BaseIntraMode::SmoothH),
-        4 => Some(BaseIntraMode::Paeth),
+        1 => Some(BaseIntraMode::V),
+        2 => Some(BaseIntraMode::H),
+        3 => Some(BaseIntraMode::D45),
+        4 => Some(BaseIntraMode::D135),
+        5 => Some(BaseIntraMode::D113),
+        6 => Some(BaseIntraMode::D157),
+        7 => Some(BaseIntraMode::D203),
+        8 => Some(BaseIntraMode::D67),
+        9 => Some(BaseIntraMode::Smooth),
+        10 => Some(BaseIntraMode::SmoothV),
+        11 => Some(BaseIntraMode::SmoothH),
+        12 => Some(BaseIntraMode::Paeth),
         _ => None,
     }
 }
@@ -65,6 +81,14 @@ pub(crate) fn base_intra_mode_from_mode_idx(mode_idx: u8) -> Option<BaseIntraMod
 pub(crate) fn default_tx_type_for_base_intra_mode(mode: BaseIntraMode) -> TxType {
     match mode {
         BaseIntraMode::Dc => TxType::DctDct,
+        BaseIntraMode::V => TxType::AdstDct,
+        BaseIntraMode::H => TxType::DctAdst,
+        BaseIntraMode::D45 => TxType::DctDct,
+        BaseIntraMode::D135 => TxType::AdstAdst,
+        BaseIntraMode::D113 => TxType::AdstDct,
+        BaseIntraMode::D157 => TxType::DctAdst,
+        BaseIntraMode::D203 => TxType::DctAdst,
+        BaseIntraMode::D67 => TxType::AdstDct,
         BaseIntraMode::Smooth => TxType::AdstAdst,
         BaseIntraMode::SmoothV => TxType::AdstDct,
         BaseIntraMode::SmoothH => TxType::DctAdst,
@@ -179,13 +203,15 @@ mod tests {
     }
 
     #[test]
-    fn base_intra_mode_mapping_matches_reordered_non_directional_prefix() {
-        assert_eq!(base_intra_mode_from_mode_idx(0), Some(BaseIntraMode::Dc));
-        assert_eq!(base_intra_mode_from_mode_idx(1), Some(BaseIntraMode::Smooth));
-        assert_eq!(base_intra_mode_from_mode_idx(2), Some(BaseIntraMode::SmoothV));
-        assert_eq!(base_intra_mode_from_mode_idx(3), Some(BaseIntraMode::SmoothH));
-        assert_eq!(base_intra_mode_from_mode_idx(4), Some(BaseIntraMode::Paeth));
-        assert_eq!(base_intra_mode_from_mode_idx(5), None);
+    fn base_intra_mode_mapping_matches_actual_predictor_enum() {
+        assert_eq!(base_intra_mode_from_actual_mode(0), Some(BaseIntraMode::Dc));
+        assert_eq!(base_intra_mode_from_actual_mode(1), Some(BaseIntraMode::V));
+        assert_eq!(base_intra_mode_from_actual_mode(2), Some(BaseIntraMode::H));
+        assert_eq!(base_intra_mode_from_actual_mode(9), Some(BaseIntraMode::Smooth));
+        assert_eq!(base_intra_mode_from_actual_mode(10), Some(BaseIntraMode::SmoothV));
+        assert_eq!(base_intra_mode_from_actual_mode(11), Some(BaseIntraMode::SmoothH));
+        assert_eq!(base_intra_mode_from_actual_mode(12), Some(BaseIntraMode::Paeth));
+        assert_eq!(base_intra_mode_from_actual_mode(13), None);
     }
 
     #[test]

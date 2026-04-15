@@ -12,6 +12,40 @@ pub(crate) enum EntropyError {
     UnimplementedInM0,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct IntraMode {
+    pub joint_mode: u8,
+    pub actual_mode: u8,
+}
+
+const FIRST_MODE_COUNT: u8 = 13;
+const SECOND_MODE_COUNT: u8 = 16;
+const NON_DIRECTIONAL_MODES_COUNT: u8 = 5;
+const TOTAL_ANGLE_DELTA_COUNT: u8 = 7;
+const REORDERED_Y_MODE: [u8; 13] = [0, 9, 10, 11, 12, 3, 8, 1, 5, 4, 6, 2, 7];
+const DEFAULT_MODE_LIST_Y: [u8; 56] = [
+    17, 45, 3, 10, 24, 31, 38, 52, 15, 19, 43, 47, 1, 5, 8, 12, 22, 26, 29, 33, 36, 40, 50, 54,
+    16, 18, 44, 46, 2, 4, 9, 11, 23, 25, 30, 32, 37, 39, 51, 53, 14, 20, 42, 48, 0, 6, 7, 13,
+    21, 27, 28, 34, 35, 41, 49, 55,
+];
+
+fn actual_y_mode_from_joint_mode(joint_mode: u8) -> u8 {
+    let base_mode = if joint_mode < NON_DIRECTIONAL_MODES_COUNT {
+        joint_mode
+    } else {
+        ((joint_mode - NON_DIRECTIONAL_MODES_COUNT) / TOTAL_ANGLE_DELTA_COUNT) + NON_DIRECTIONAL_MODES_COUNT
+    };
+    REORDERED_Y_MODE[base_mode as usize]
+}
+
+fn small_block_joint_mode_from_list_index(mode_idx: u8) -> u8 {
+    if mode_idx < NON_DIRECTIONAL_MODES_COUNT {
+        mode_idx
+    } else {
+        DEFAULT_MODE_LIST_Y[(mode_idx - NON_DIRECTIONAL_MODES_COUNT) as usize] + NON_DIRECTIONAL_MODES_COUNT
+    }
+}
+
 pub(crate) struct BacReader<'a> {
     buf: &'a [u8],
     pos: usize,
@@ -283,14 +317,12 @@ impl<'a> BacReader<'a> {
         intra_ext_tx_type_from_symbol(family, symbol)
     }
 
-    pub fn read_intra_mode(&mut self, tile_ctx: &mut TileContext, ctx: usize) -> u8 {
+    pub fn read_intra_mode(&mut self, tile_ctx: &mut TileContext, ctx: usize) -> IntraMode {
         const LUMA_INTRA_MODE_INDEX_COUNT: u8 = 8;
-        const FIRST_MODE_COUNT: u8 = 13;
-        const SECOND_MODE_COUNT: u8 = 16;
 
         let mode_set_index = self.read_symbol(tile_ctx.y_mode_set.as_slice());
         tile_ctx.update_intra_mode(mode_set_index);
-        if mode_set_index == 0 {
+        let mode_idx = if mode_set_index == 0 {
             let mode_idx = self.read_symbol(tile_ctx.y_mode_idx[ctx.min(2)].as_slice());
             tile_ctx.update_y_mode_idx(ctx, mode_idx);
             if mode_idx == usize::from(LUMA_INTRA_MODE_INDEX_COUNT - 1) {
@@ -302,6 +334,11 @@ impl<'a> BacReader<'a> {
             }
         } else {
             FIRST_MODE_COUNT + ((mode_set_index as u8) - 1) * SECOND_MODE_COUNT + self.read_literal(4)
+        };
+        let joint_mode = small_block_joint_mode_from_list_index(mode_idx);
+        IntraMode {
+            joint_mode,
+            actual_mode: actual_y_mode_from_joint_mode(joint_mode),
         }
     }
 
@@ -428,7 +465,13 @@ mod tests {
             PartitionType::None
         );
         assert!(!reader.read_skip_with_cdf(&mut tile_ctx));
-        assert_eq!(reader.read_intra_mode(&mut tile_ctx, 0), 0);
+        assert_eq!(
+            reader.read_intra_mode(&mut tile_ctx, 0),
+            IntraMode {
+                joint_mode: 0,
+                actual_mode: 0,
+            }
+        );
     }
 
     #[test]
@@ -468,7 +511,13 @@ mod tests {
         assert_eq!(reader.read_intra_ext_tx_set1_symbol(&mut tile_ctx, 0), 0);
         assert!(!reader.read_intra_ext_tx_set2_symbol(&mut tile_ctx, 0));
         assert_eq!(reader.read_intra_ext_tx_short_side_symbol(&mut tile_ctx, 0), 0);
-        assert_eq!(reader.read_intra_mode(&mut tile_ctx, 0), 0);
+        assert_eq!(
+            reader.read_intra_mode(&mut tile_ctx, 0),
+            IntraMode {
+                joint_mode: 0,
+                actual_mode: 0,
+            }
+        );
         let mut coeffs = [1i16; 16];
         reader
             .read_coeffs_4x4(&mut tile_ctx, &mut coeffs)

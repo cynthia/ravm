@@ -19,6 +19,16 @@ pub(crate) const PARTITION_DO_SQUARE_SPLIT_CDF: [[u16; 2]; 3] = [
     [10521, 32767],
     [11395, 32767],
 ];
+pub(crate) const PARTITION_RECT_TYPE_CDF: [[u16; 2]; 3] = [
+    [14644, 32767],
+    [10173, 32767],
+    [18529, 32767],
+];
+pub(crate) const PARTITION_DO_EXT_CDF: [[u16; 2]; 3] = [
+    [16384, 32767],
+    [16384, 32767],
+    [16384, 32767],
+];
 pub(crate) const PARTITION_CDF_CTX0: [u16; 10] = [
     4096, 8192, 12288, 16384, 19660, 22936, 25600, 28160, 30464, 32767,
 ];
@@ -106,6 +116,8 @@ pub(crate) struct TileContext {
     updates_enabled: bool,
     pub partition_do_split: [CdfState<2>; 3],
     pub partition_do_square_split: [CdfState<2>; 3],
+    pub partition_rect_type: [CdfState<2>; 3],
+    pub partition_do_ext: [CdfState<2>; 3],
     pub partition_ctx: [CdfState<10>; 3],
     pub skip: CdfState<2>,
     pub y_mode_set: CdfState<4>,
@@ -119,6 +131,8 @@ pub(crate) struct TileContext {
 pub(crate) struct DefaultTileCdfs {
     partition_do_split: [[u16; 2]; 3],
     partition_do_square_split: [[u16; 2]; 3],
+    partition_rect_type: [[u16; 2]; 3],
+    partition_do_ext: [[u16; 2]; 3],
     partition_ctx: [[u16; 10]; 3],
     skip: [u16; 2],
     y_mode_set: [u16; 4],
@@ -133,6 +147,8 @@ impl DefaultTileCdfs {
         Self {
             partition_do_split: PARTITION_DO_SPLIT_CDF,
             partition_do_square_split: PARTITION_DO_SQUARE_SPLIT_CDF,
+            partition_rect_type: PARTITION_RECT_TYPE_CDF,
+            partition_do_ext: PARTITION_DO_EXT_CDF,
             partition_ctx: [PARTITION_CDF_CTX0, PARTITION_CDF_CTX1, PARTITION_CDF_CTX2],
             skip: SKIP_CDF,
             y_mode_set: Y_MODE_SET_CDF,
@@ -165,6 +181,16 @@ impl TileContext {
                 CdfState::new(defaults.partition_do_square_split[0]),
                 CdfState::new(defaults.partition_do_square_split[1]),
                 CdfState::new(defaults.partition_do_square_split[2]),
+            ],
+            partition_rect_type: [
+                CdfState::new(defaults.partition_rect_type[0]),
+                CdfState::new(defaults.partition_rect_type[1]),
+                CdfState::new(defaults.partition_rect_type[2]),
+            ],
+            partition_do_ext: [
+                CdfState::new(defaults.partition_do_ext[0]),
+                CdfState::new(defaults.partition_do_ext[1]),
+                CdfState::new(defaults.partition_do_ext[2]),
             ],
             partition_ctx: [
                 CdfState::new(defaults.partition_ctx[0]),
@@ -285,6 +311,12 @@ fn active_default_cdf_bytes() -> Vec<u8> {
     out.extend_from_slice(&cdf_u16_bytes(&PARTITION_DO_SQUARE_SPLIT_CDF[0]));
     out.extend_from_slice(&cdf_u16_bytes(&PARTITION_DO_SQUARE_SPLIT_CDF[1]));
     out.extend_from_slice(&cdf_u16_bytes(&PARTITION_DO_SQUARE_SPLIT_CDF[2]));
+    out.extend_from_slice(&cdf_u16_bytes(&PARTITION_RECT_TYPE_CDF[0]));
+    out.extend_from_slice(&cdf_u16_bytes(&PARTITION_RECT_TYPE_CDF[1]));
+    out.extend_from_slice(&cdf_u16_bytes(&PARTITION_RECT_TYPE_CDF[2]));
+    out.extend_from_slice(&cdf_u16_bytes(&PARTITION_DO_EXT_CDF[0]));
+    out.extend_from_slice(&cdf_u16_bytes(&PARTITION_DO_EXT_CDF[1]));
+    out.extend_from_slice(&cdf_u16_bytes(&PARTITION_DO_EXT_CDF[2]));
     out.extend_from_slice(&cdf_u16_bytes(&PARTITION_CDF_CTX0));
     out.extend_from_slice(&cdf_u16_bytes(&PARTITION_CDF_CTX1));
     out.extend_from_slice(&cdf_u16_bytes(&PARTITION_CDF_CTX2));
@@ -338,6 +370,8 @@ mod tests {
             tile.partition_do_square_split[0].as_slice(),
             &PARTITION_DO_SQUARE_SPLIT_CDF[0]
         );
+        assert_eq!(tile.partition_rect_type[0].as_slice(), &PARTITION_RECT_TYPE_CDF[0]);
+        assert_eq!(tile.partition_do_ext[0].as_slice(), &PARTITION_DO_EXT_CDF[0]);
         assert_eq!(tile.y_mode_set.as_slice(), &Y_MODE_SET_CDF);
         assert_eq!(tile.y_mode_idx[0].as_slice(), &Y_MODE_IDX_CDF[0]);
         assert_eq!(tile.uv_mode[0].as_slice(), &UV_MODE_CDF[0]);
@@ -363,6 +397,8 @@ mod tests {
         let mut tile = TileContext::new_default();
         tile.partition_do_split[0].update(1);
         tile.partition_do_square_split[0].update(1);
+        tile.partition_rect_type[0].update(1);
+        tile.partition_do_ext[0].update(1);
         tile.skip.update(1);
         tile.y_mode_set.update(1);
         tile.y_mode_idx[0].update(4);
@@ -375,6 +411,8 @@ mod tests {
             tile.partition_do_square_split[0].as_slice(),
             &PARTITION_DO_SQUARE_SPLIT_CDF[0]
         );
+        assert_eq!(tile.partition_rect_type[0].as_slice(), &PARTITION_RECT_TYPE_CDF[0]);
+        assert_eq!(tile.partition_do_ext[0].as_slice(), &PARTITION_DO_EXT_CDF[0]);
         assert_eq!(tile.skip.as_slice(), &SKIP_CDF);
         assert_eq!(tile.y_mode_set.as_slice(), &Y_MODE_SET_CDF);
         assert_eq!(tile.y_mode_idx[0].as_slice(), &Y_MODE_IDX_CDF[0]);
@@ -386,7 +424,7 @@ mod tests {
     #[test]
     fn active_default_cdfs_hash_stably() {
         let digest = md5::compute(active_default_cdf_bytes());
-        assert_eq!(format!("{digest:x}"), "7a1c07bda600af4bcf1a1e1a9bba50dc");
+        assert_eq!(format!("{digest:x}"), "4a6ca338630b9902bec7d9f7392b0f21");
     }
 
     #[test]

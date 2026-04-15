@@ -200,7 +200,9 @@ fn decode_4x4_block(
     by: usize,
     quant: QuantContext,
 ) -> Result<(), CoreDecodeError> {
-    if reader.read_intra_mode(tile_ctx) != 0 {
+    let y_mode_ctx = block_info.y_mode_ctx(bx, by);
+    let intra_mode = reader.read_intra_mode(tile_ctx, y_mode_ctx);
+    if intra_mode != 0 {
         return Err(CoreDecodeError::UnexpectedMode);
     }
 
@@ -248,7 +250,7 @@ fn decode_4x4_block(
         BlockSize::MIN,
         BlockInfo {
             present: true,
-            intra_mode: 0,
+            intra_mode,
             skip: false,
             tx_size: 0,
         },

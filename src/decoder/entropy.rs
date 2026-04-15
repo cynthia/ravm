@@ -55,7 +55,6 @@ impl<'a> BacReader<'a> {
     }
 
     /// Read a single equally-likely bit.
-    #[cfg(test)]
     pub fn read_bool_unbiased(&mut self) -> bool {
         self.read_symbol_binary(16384)
     }
@@ -116,10 +115,26 @@ impl<'a> BacReader<'a> {
         symbol == 1
     }
 
-    pub fn read_intra_mode(&mut self, tile_ctx: &mut TileContext) -> u8 {
-        let symbol = self.read_symbol(tile_ctx.intra_mode.as_slice());
-        tile_ctx.update_intra_mode(symbol);
-        symbol as u8
+    pub fn read_intra_mode(&mut self, tile_ctx: &mut TileContext, ctx: usize) -> u8 {
+        const LUMA_INTRA_MODE_INDEX_COUNT: u8 = 8;
+        const FIRST_MODE_COUNT: u8 = 13;
+        const SECOND_MODE_COUNT: u8 = 16;
+
+        let mode_set_index = self.read_symbol(tile_ctx.y_mode_set.as_slice());
+        tile_ctx.update_intra_mode(mode_set_index);
+        if mode_set_index == 0 {
+            let mode_idx = self.read_symbol(tile_ctx.y_mode_idx[ctx.min(2)].as_slice());
+            tile_ctx.update_y_mode_idx(ctx, mode_idx);
+            if mode_idx == usize::from(LUMA_INTRA_MODE_INDEX_COUNT - 1) {
+                let offset = self.read_symbol(tile_ctx.y_mode_idx_offset[ctx.min(2)].as_slice());
+                tile_ctx.update_y_mode_idx_offset(ctx, offset);
+                (mode_idx as u8) + (offset as u8)
+            } else {
+                mode_idx as u8
+            }
+        } else {
+            FIRST_MODE_COUNT + ((mode_set_index as u8) - 1) * SECOND_MODE_COUNT + self.read_literal(4)
+        }
     }
 
     pub fn read_coeffs_4x4(
@@ -156,6 +171,14 @@ impl<'a> BacReader<'a> {
         }
         self.refill();
         bit
+    }
+
+    fn read_literal(&mut self, bits: u8) -> u8 {
+        let mut value = 0u8;
+        for _ in 0..bits {
+            value = (value << 1) | u8::from(self.read_bool_unbiased());
+        }
+        value
     }
 }
 
@@ -223,7 +246,7 @@ mod tests {
             PartitionType::None
         );
         assert!(!reader.read_skip_with_cdf(&mut tile_ctx));
-        assert_eq!(reader.read_intra_mode(&mut tile_ctx), 0);
+        assert_eq!(reader.read_intra_mode(&mut tile_ctx, 0), 0);
     }
 
     #[test]
@@ -231,18 +254,25 @@ mod tests {
         let mut reader = BacReader::new(&[0x00, 0x00, 0x00, 0x00]);
         let mut tile_ctx = TileContext::new(false);
         let skip_before = tile_ctx.skip.as_slice().to_vec();
-        let intra_before = tile_ctx.intra_mode.as_slice().to_vec();
+        let y_mode_set_before = tile_ctx.y_mode_set.as_slice().to_vec();
+        let y_mode_idx_before = tile_ctx.y_mode_idx[0].as_slice().to_vec();
+        let y_mode_idx_offset_before = tile_ctx.y_mode_idx_offset[0].as_slice().to_vec();
         let all_zero_before = tile_ctx.all_zero.as_slice().to_vec();
 
         assert!(!reader.read_skip_with_cdf(&mut tile_ctx));
-        assert_eq!(reader.read_intra_mode(&mut tile_ctx), 0);
+        assert_eq!(reader.read_intra_mode(&mut tile_ctx, 0), 0);
         let mut coeffs = [1i16; 16];
         reader
             .read_coeffs_4x4(&mut tile_ctx, &mut coeffs)
             .expect("all-zero coeffs");
 
         assert_eq!(tile_ctx.skip.as_slice(), skip_before.as_slice());
-        assert_eq!(tile_ctx.intra_mode.as_slice(), intra_before.as_slice());
+        assert_eq!(tile_ctx.y_mode_set.as_slice(), y_mode_set_before.as_slice());
+        assert_eq!(tile_ctx.y_mode_idx[0].as_slice(), y_mode_idx_before.as_slice());
+        assert_eq!(
+            tile_ctx.y_mode_idx_offset[0].as_slice(),
+            y_mode_idx_offset_before.as_slice()
+        );
         assert_eq!(tile_ctx.all_zero.as_slice(), all_zero_before.as_slice());
     }
 

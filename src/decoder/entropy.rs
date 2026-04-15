@@ -5,6 +5,7 @@ use crate::decoder::partition::{partition_variants, BlockSize};
 use crate::decoder::symbols::{
     runtime_partition_variants, PartitionType, TileContext,
 };
+use crate::decoder::transform::{intra_ext_tx_type_from_symbol, IntraTxFamily, TxType};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum EntropyError {
@@ -262,6 +263,24 @@ impl<'a> BacReader<'a> {
             self.read_symbol(tile_ctx.intra_ext_tx_short_side[tx_size_ctx.min(3)].as_slice());
         tile_ctx.update_intra_ext_tx_short_side(tx_size_ctx, symbol);
         symbol as u8
+    }
+
+    #[allow(dead_code)]
+    pub fn read_intra_tx_type(
+        &mut self,
+        tile_ctx: &mut TileContext,
+        family: IntraTxFamily,
+        tx_size_ctx: usize,
+    ) -> TxType {
+        let symbol = match family {
+            IntraTxFamily::DctOnly => 0,
+            IntraTxFamily::ExtSet1 => usize::from(self.read_intra_ext_tx_set1_symbol(tile_ctx, tx_size_ctx)),
+            IntraTxFamily::ExtSet2 => usize::from(self.read_intra_ext_tx_set2_symbol(tile_ctx, tx_size_ctx)),
+            IntraTxFamily::ShortSide { .. } => {
+                usize::from(self.read_intra_ext_tx_short_side_symbol(tile_ctx, tx_size_ctx))
+            }
+        };
+        intra_ext_tx_type_from_symbol(family, symbol)
     }
 
     pub fn read_intra_mode(&mut self, tile_ctx: &mut TileContext, ctx: usize) -> u8 {
@@ -550,6 +569,30 @@ mod tests {
         assert_eq!(reader.read_intra_ext_tx_set1_symbol(&mut tile_ctx, 0), 0);
         assert!(!reader.read_intra_ext_tx_set2_symbol(&mut tile_ctx, 0));
         assert_eq!(reader.read_intra_ext_tx_short_side_symbol(&mut tile_ctx, 0), 0);
+    }
+
+    #[test]
+    fn read_intra_tx_type_maps_symbols_to_transform_enum() {
+        let mut reader = BacReader::new(&[0x00, 0x00, 0x00, 0x00]);
+        let mut tile_ctx = TileContext::new_default();
+        assert_eq!(
+            reader.read_intra_tx_type(&mut tile_ctx, IntraTxFamily::ExtSet1, 0),
+            TxType::DctDct
+        );
+        let mut reader = BacReader::new(&[0x00, 0x00, 0x00, 0x00]);
+        let mut tile_ctx = TileContext::new_default();
+        assert_eq!(
+            reader.read_intra_tx_type(
+                &mut tile_ctx,
+                IntraTxFamily::ShortSide {
+                    long_side_dct: true,
+                    is_rect_horz: true,
+                    long_side_64: false,
+                },
+                0
+            ),
+            TxType::DctDct
+        );
     }
 
     #[test]

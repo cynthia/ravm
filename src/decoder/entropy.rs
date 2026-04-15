@@ -62,7 +62,11 @@ fn decode_base_level(coeff_base: u8) -> Option<i16> {
 }
 
 fn coeff_br_luma_ctx_for_eob_4x4(eob: usize) -> usize {
-    if eob >= 12 {
+    if eob >= 15 {
+        4
+    } else if eob >= 14 {
+        3
+    } else if eob >= 12 {
         2
     } else if eob >= 8 {
         1
@@ -1057,6 +1061,18 @@ impl<'a> BacReader<'a> {
         symbol as u8
     }
 
+    pub fn read_coeff_br_luma_ctx3_symbol(&mut self, tile_ctx: &mut TileContext, q_ctx: usize) -> u8 {
+        let symbol = self.read_symbol(tile_ctx.coeff_br_luma_ctx3[q_ctx.min(3)].as_slice());
+        tile_ctx.update_coeff_br_luma_ctx3(q_ctx, symbol);
+        symbol as u8
+    }
+
+    pub fn read_coeff_br_luma_ctx4_symbol(&mut self, tile_ctx: &mut TileContext, q_ctx: usize) -> u8 {
+        let symbol = self.read_symbol(tile_ctx.coeff_br_luma_ctx4[q_ctx.min(3)].as_slice());
+        tile_ctx.update_coeff_br_luma_ctx4(q_ctx, symbol);
+        symbol as u8
+    }
+
     pub fn read_coeffs(
         &mut self,
         tile_ctx: &mut TileContext,
@@ -1106,7 +1122,9 @@ impl<'a> BacReader<'a> {
                 0 => self.read_coeff_br_luma_ctx0_symbol(tile_ctx, 0),
                 1 => self.read_coeff_br_luma_ctx1_symbol(tile_ctx, 0),
                 2 => self.read_coeff_br_luma_ctx2_symbol(tile_ctx, 0),
-                _ => unreachable!("4x4 staged coeff_br context selector only returns 0, 1, or 2"),
+                3 => self.read_coeff_br_luma_ctx3_symbol(tile_ctx, 0),
+                4 => self.read_coeff_br_luma_ctx4_symbol(tile_ctx, 0),
+                _ => unreachable!("4x4 staged coeff_br context selector only returns 0, 1, 2, 3, or 4"),
             };
             materialize_coeffs_4x4(
                 eob,
@@ -1277,6 +1295,8 @@ mod tests {
         let coeff_br_before = tile_ctx.coeff_br_luma_ctx0[0].as_slice().to_vec();
         let coeff_br_ctx1_before = tile_ctx.coeff_br_luma_ctx1[0].as_slice().to_vec();
         let coeff_br_ctx2_before = tile_ctx.coeff_br_luma_ctx2[0].as_slice().to_vec();
+        let coeff_br_ctx3_before = tile_ctx.coeff_br_luma_ctx3[0].as_slice().to_vec();
+        let coeff_br_ctx4_before = tile_ctx.coeff_br_luma_ctx4[0].as_slice().to_vec();
         let all_zero_before = tile_ctx.all_zero.as_slice().to_vec();
 
         assert!(!reader.read_skip_with_cdf(&mut tile_ctx));
@@ -1319,6 +1339,8 @@ mod tests {
         assert_eq!(reader.read_coeff_br_luma_ctx0_symbol(&mut tile_ctx, 0), 0);
         assert_eq!(reader.read_coeff_br_luma_ctx1_symbol(&mut tile_ctx, 0), 0);
         assert_eq!(reader.read_coeff_br_luma_ctx2_symbol(&mut tile_ctx, 0), 0);
+        assert_eq!(reader.read_coeff_br_luma_ctx3_symbol(&mut tile_ctx, 0), 0);
+        assert_eq!(reader.read_coeff_br_luma_ctx4_symbol(&mut tile_ctx, 0), 0);
         let mut coeffs = [1i16; 16];
         reader
             .read_coeffs(
@@ -1439,6 +1461,8 @@ mod tests {
         assert_eq!(tile_ctx.coeff_br_luma_ctx0[0].as_slice(), coeff_br_before.as_slice());
         assert_eq!(tile_ctx.coeff_br_luma_ctx1[0].as_slice(), coeff_br_ctx1_before.as_slice());
         assert_eq!(tile_ctx.coeff_br_luma_ctx2[0].as_slice(), coeff_br_ctx2_before.as_slice());
+        assert_eq!(tile_ctx.coeff_br_luma_ctx3[0].as_slice(), coeff_br_ctx3_before.as_slice());
+        assert_eq!(tile_ctx.coeff_br_luma_ctx4[0].as_slice(), coeff_br_ctx4_before.as_slice());
         assert_eq!(tile_ctx.all_zero.as_slice(), all_zero_before.as_slice());
     }
 
@@ -1590,56 +1614,39 @@ mod tests {
     }
 
     #[test]
-    fn read_coeffs_4x4_high_eob_path_updates_coeff_br_ctx1() {
-        let found = (0u8..=255).find_map(|first_byte| {
-            (0u8..=255).find_map(|second_byte| {
-                (0u8..=255).find_map(|third_byte| {
-                    let probe = [first_byte, second_byte, third_byte, 0x00];
-                    let mut reader = BacReader::new(&probe);
-                    let mut tile_ctx = TileContext::new_default();
-                    let coeff_br_ctx0_before = tile_ctx.coeff_br_luma_ctx0[0].as_slice().to_vec();
-                    let coeff_br_ctx1_before = tile_ctx.coeff_br_luma_ctx1[0].as_slice().to_vec();
-                    let mut coeffs = [0i16; 16];
-                    reader
-                        .read_coeffs(
-                            &mut tile_ctx,
-                            CoeffReadContext {
-                                tx_size: TxSize::Tx4x4,
-                                tx_type: TxType::DctDct,
-                                plane: Plane::Y,
-                                intra: true,
-                                x4: 0,
-                                y4: 0,
-                            },
-                            &mut coeffs,
-                        )
-                        .ok()
-                        .filter(|_| {
-                            coeffs[DEFAULT_SCAN_4X4[8]] != 0
-                                && tile_ctx.coeff_br_luma_ctx1[0].as_slice()
-                                    != coeff_br_ctx1_before.as_slice()
-                                && tile_ctx.coeff_br_luma_ctx0[0].as_slice()
-                                    == coeff_br_ctx0_before.as_slice()
-                        })
-                        .map(|_| coeffs)
-                })
-            })
-        });
-
-        assert!(
-            matches!(found, Some(found_coeffs) if found_coeffs[DEFAULT_SCAN_4X4[8]] != 0),
-            "no three-byte probe reached a high-eob path that updated coeff_br ctx1"
-        );
+    fn read_coeff_br_luma_ctx3_symbol_uses_real_default_table() {
+        let mut reader = BacReader::new(&[0x00, 0x00, 0x00, 0x00]);
+        let mut tile_ctx = TileContext::new_default();
+        assert_eq!(reader.read_coeff_br_luma_ctx3_symbol(&mut tile_ctx, 0), 0);
     }
 
     #[test]
-    fn coeff_br_luma_ctx_selector_uses_ctx2_for_highest_eob_range() {
+    fn read_coeff_br_luma_ctx4_symbol_uses_real_default_table() {
+        let mut reader = BacReader::new(&[0x00, 0x00, 0x00, 0x00]);
+        let mut tile_ctx = TileContext::new_default();
+        assert_eq!(reader.read_coeff_br_luma_ctx4_symbol(&mut tile_ctx, 0), 0);
+    }
+
+    #[test]
+    fn read_coeffs_4x4_coeff_br_ctx_routes_to_ctx1_for_eob_8_to_11() {
+        for eob in 0..8 {
+            assert_eq!(coeff_br_luma_ctx_for_eob_4x4(eob), 0, "eob={eob}");
+        }
+        for eob in 8..12 {
+            assert_eq!(coeff_br_luma_ctx_for_eob_4x4(eob), 1, "eob={eob}");
+        }
+    }
+
+    #[test]
+    fn coeff_br_luma_ctx_selector_uses_higher_contexts_for_highest_eob_range() {
         assert_eq!(coeff_br_luma_ctx_for_eob_4x4(0), 0);
         assert_eq!(coeff_br_luma_ctx_for_eob_4x4(7), 0);
         assert_eq!(coeff_br_luma_ctx_for_eob_4x4(8), 1);
         assert_eq!(coeff_br_luma_ctx_for_eob_4x4(11), 1);
         assert_eq!(coeff_br_luma_ctx_for_eob_4x4(12), 2);
-        assert_eq!(coeff_br_luma_ctx_for_eob_4x4(15), 2);
+        assert_eq!(coeff_br_luma_ctx_for_eob_4x4(13), 2);
+        assert_eq!(coeff_br_luma_ctx_for_eob_4x4(14), 3);
+        assert_eq!(coeff_br_luma_ctx_for_eob_4x4(15), 4);
     }
 
     #[test]

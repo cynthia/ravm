@@ -1,8 +1,10 @@
 #![forbid(unsafe_code)]
 //! Boolean arithmetic coder and symbol reading.
 
+use crate::decoder::partition::{partition_variants, BlockSize};
 use crate::decoder::symbols::{
-    ALL_ZERO_CDF, INTRA_MODE_CDF, PARTITION_NONE_SPLIT_CDF, PartitionType, SKIP_CDF,
+    ALL_ZERO_CDF, INTRA_MODE_CDF, PARTITION_BINARY_CDF, PARTITION_CDF_CTX0, PARTITION_CDF_CTX1,
+    PARTITION_CDF_CTX2, PartitionType, SKIP_CDF,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -77,12 +79,25 @@ impl<'a> BacReader<'a> {
         cdf.len() - 1
     }
 
-    pub fn read_partition_none_or_split(&mut self) -> PartitionType {
-        if self.read_symbol(&PARTITION_NONE_SPLIT_CDF) == 0 {
-            PartitionType::None
-        } else {
-            PartitionType::Split
+    pub fn read_partition(&mut self, bsize: BlockSize, ctx: usize) -> PartitionType {
+        let variants = partition_variants(bsize);
+        if variants.len() == 1 {
+            return variants[0];
         }
+        let runtime_variants = runtime_partition_variants(&variants);
+        if runtime_variants.len() == 2 {
+            let symbol = self.read_symbol(&PARTITION_BINARY_CDF);
+            return runtime_variants[symbol];
+        }
+
+        let base_cdf = match ctx.min(2) {
+            0 => &PARTITION_CDF_CTX0[..],
+            1 => &PARTITION_CDF_CTX1[..],
+            _ => &PARTITION_CDF_CTX2[..],
+        };
+        let cdf = partition_cdf_for_variants(base_cdf, runtime_variants.len());
+        let symbol = self.read_symbol(&cdf);
+        runtime_variants[symbol]
     }
 
     #[allow(dead_code)]
@@ -125,6 +140,39 @@ impl<'a> BacReader<'a> {
     }
 }
 
+fn partition_cdf_for_variants(base_cdf: &[u16], len: usize) -> Vec<u16> {
+    if len == base_cdf.len() {
+        return base_cdf.to_vec();
+    }
+
+    let mut out = Vec::with_capacity(len);
+    for i in 0..len {
+        if i + 1 == len {
+            out.push(32767);
+        } else {
+            let numerator = u32::from(base_cdf[i]) * len as u32;
+            let denominator = base_cdf.len() as u32;
+            out.push((numerator / denominator).clamp(1, 32766) as u16);
+        }
+    }
+    out
+}
+
+fn runtime_partition_variants(legal_variants: &[PartitionType]) -> Vec<PartitionType> {
+    use PartitionType::*;
+
+    if legal_variants.contains(&Split) {
+        return vec![None, Split];
+    }
+    if legal_variants.contains(&Horz) && !legal_variants.contains(&Vert) {
+        return vec![None, Horz];
+    }
+    if legal_variants.contains(&Vert) && !legal_variants.contains(&Horz) {
+        return vec![None, Vert];
+    }
+    vec![None, legal_variants[1]]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -157,9 +205,24 @@ mod tests {
     #[test]
     fn symbol_wrappers_use_cdfs() {
         let mut reader = BacReader::new(&[0x00, 0x00, 0x00, 0x00]);
-        assert_eq!(reader.read_partition_none_or_split(), PartitionType::None);
+        assert_eq!(
+            reader.read_partition(
+                BlockSize {
+                    width: 64,
+                    height: 64,
+                },
+                0,
+            ),
+            PartitionType::None
+        );
         assert!(!reader.read_skip());
         assert_eq!(reader.read_intra_mode(), 0);
+    }
+
+    #[test]
+    fn read_partition_min_block_forces_none_variant() {
+        let mut reader = BacReader::new(&[0x00, 0x00, 0x00, 0x00]);
+        assert_eq!(reader.read_partition(BlockSize::MIN, 2), PartitionType::None);
     }
 
     #[test]
@@ -168,5 +231,26 @@ mod tests {
         let mut coeffs = [1i16; 16];
         reader.read_coeffs_4x4(&mut coeffs).expect("all-zero coeffs");
         assert_eq!(coeffs, [0i16; 16]);
+    }
+
+    #[test]
+    fn partition_cdf_helper_preserves_terminal_value() {
+        let cdf = partition_cdf_for_variants(&PARTITION_CDF_CTX0, 8);
+        assert_eq!(cdf.len(), 8);
+        assert_eq!(cdf[7], 32767);
+    }
+
+    #[test]
+    fn runtime_partition_variants_preserve_binary_split_path_when_available() {
+        let variants = vec![
+            PartitionType::None,
+            PartitionType::Horz,
+            PartitionType::Vert,
+            PartitionType::Split,
+        ];
+        assert_eq!(
+            runtime_partition_variants(&variants),
+            vec![PartitionType::None, PartitionType::Split]
+        );
     }
 }

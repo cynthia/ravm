@@ -2,13 +2,15 @@
 //! Top-level decode loop; drives frame/tile/partition walks.
 
 use crate::bitstream::{FrameType, SequenceHeader, TileGroup, UncompressedFrameHeader};
+use crate::decoder::block_info::{BlockInfo, BlockInfoGrid};
 use crate::decoder::entropy::{BacReader, EntropyError};
 use crate::decoder::executor::{Sequential, TileExecutor};
 use crate::decoder::frame_buffer::{FrameBuffer, PlaneBuffer};
 use crate::decoder::intra::predict_dc_4x4;
 use crate::decoder::kernels;
-use crate::decoder::partition::BlockSize;
+use crate::decoder::partition::{partition_children, BlockSize};
 use crate::decoder::quant::{Plane, QuantContext};
+use crate::decoder::symbols::PartitionType;
 use crate::decoder::transform::{inverse_transform, TxSize, TxType};
 use crate::format::Subsampling;
 
@@ -87,13 +89,24 @@ fn decode_tile(
 ) -> Result<(), CoreDecodeError> {
     let kernels = kernels::detect();
     let mut reader = BacReader::new(tile_data);
-    decode_partition(&mut reader, kernels, fb, 0, 0, BlockSize::SB_M0, quant)
+    let mut block_info = BlockInfoGrid::new(fb.luma().width, fb.luma().height);
+    decode_partition(
+        &mut reader,
+        kernels,
+        fb,
+        &mut block_info,
+        0,
+        0,
+        BlockSize::SB_M0,
+        quant,
+    )
 }
 
 fn decode_partition(
     reader: &mut BacReader<'_>,
     kernels: &dyn kernels::Kernels,
     fb: &mut FrameBuffer<u8>,
+    block_info: &mut BlockInfoGrid,
     bx: usize,
     by: usize,
     bsize: BlockSize,
@@ -104,31 +117,33 @@ fn decode_partition(
     }
 
     if bsize.is_min() {
-        return decode_4x4_block(reader, kernels, fb, bx, by, quant);
+        return decode_4x4_block(reader, kernels, fb, block_info, bx, by, quant);
     }
 
-    match reader.read_partition_none_or_split() {
-        crate::decoder::symbols::PartitionType::None => decode_none_block(fb, bx, by, bsize),
-        crate::decoder::symbols::PartitionType::Split => {
-            let child = bsize.split();
-            decode_partition(reader, kernels, fb, bx, by, child, quant)?;
-            decode_partition(reader, kernels, fb, bx + child.width, by, child, quant)?;
-            decode_partition(reader, kernels, fb, bx, by + child.height, child, quant)?;
-            decode_partition(
-                reader,
-                kernels,
-                fb,
-                bx + child.width,
-                by + child.height,
-                child,
-                quant,
-            )
-        }
+    let ctx = block_info.partition_ctx(bx, by, bsize);
+    let partition = reader.read_partition(bsize, ctx);
+    if partition == PartitionType::None {
+        return decode_none_block(fb, block_info, bx, by, bsize);
     }
+
+    for (child_x, child_y, child_size) in partition_children(bx, by, bsize, partition) {
+        decode_partition(
+            reader,
+            kernels,
+            fb,
+            block_info,
+            child_x,
+            child_y,
+            child_size,
+            quant,
+        )?;
+    }
+    Ok(())
 }
 
 fn decode_none_block(
     fb: &mut FrameBuffer<u8>,
+    block_info: &mut BlockInfoGrid,
     bx: usize,
     by: usize,
     bsize: BlockSize,
@@ -147,6 +162,17 @@ fn decode_none_block(
         row[bx..bx + fill_width].fill(128);
     }
 
+    block_info.fill_region(
+        bx,
+        by,
+        bsize,
+        BlockInfo {
+            present: true,
+            intra_mode: 0,
+            skip: false,
+            tx_size: 0,
+        },
+    );
     Ok(())
 }
 
@@ -154,6 +180,7 @@ fn decode_4x4_block(
     reader: &mut BacReader<'_>,
     kernels: &dyn kernels::Kernels,
     fb: &mut FrameBuffer<u8>,
+    block_info: &mut BlockInfoGrid,
     bx: usize,
     by: usize,
     quant: QuantContext,
@@ -200,6 +227,17 @@ fn decode_4x4_block(
         }
     }
 
+    block_info.fill_region(
+        bx,
+        by,
+        BlockSize::MIN,
+        BlockInfo {
+            present: true,
+            intra_mode: 0,
+            skip: false,
+            tx_size: 0,
+        },
+    );
     Ok(())
 }
 

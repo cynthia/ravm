@@ -6,6 +6,7 @@ pub(crate) mod executor;
 pub(crate) mod frame_buffer;
 pub(crate) mod intra;
 pub(crate) mod kernels;
+pub(crate) mod block_info;
 pub(crate) mod partition;
 pub(crate) mod quant;
 pub(crate) mod symbols;

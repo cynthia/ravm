@@ -174,6 +174,13 @@ impl<'a> BacReader<'a> {
         symbol as u8
     }
 
+    #[allow(dead_code)]
+    pub fn read_delta_q_symbol(&mut self, tile_ctx: &mut TileContext) -> u8 {
+        let symbol = self.read_symbol(tile_ctx.delta_q.as_slice());
+        tile_ctx.update_delta_q(symbol);
+        symbol as u8
+    }
+
     pub fn read_intra_mode(&mut self, tile_ctx: &mut TileContext, ctx: usize) -> u8 {
         const LUMA_INTRA_MODE_INDEX_COUNT: u8 = 8;
         const FIRST_MODE_COUNT: u8 = 13;
@@ -329,6 +336,7 @@ mod tests {
         let skip_before = tile_ctx.skip.as_slice().to_vec();
         let segment_pred_before = tile_ctx.segment_pred[0].as_slice().to_vec();
         let segment_id_before = tile_ctx.spatial_pred_seg_tree[0].as_slice().to_vec();
+        let delta_q_before = tile_ctx.delta_q.as_slice().to_vec();
         let y_mode_set_before = tile_ctx.y_mode_set.as_slice().to_vec();
         let y_mode_idx_before = tile_ctx.y_mode_idx[0].as_slice().to_vec();
         let y_mode_idx_offset_before = tile_ctx.y_mode_idx_offset[0].as_slice().to_vec();
@@ -338,6 +346,7 @@ mod tests {
         assert!(!reader.read_skip_with_cdf(&mut tile_ctx));
         assert!(!reader.read_segment_pred(&mut tile_ctx, 0));
         assert_eq!(reader.read_segment_id(&mut tile_ctx, 0), 0);
+        assert_eq!(reader.read_delta_q_symbol(&mut tile_ctx), 0);
         assert_eq!(reader.read_intra_mode(&mut tile_ctx, 0), 0);
         let mut coeffs = [1i16; 16];
         reader
@@ -351,6 +360,7 @@ mod tests {
             tile_ctx.spatial_pred_seg_tree[0].as_slice(),
             segment_id_before.as_slice()
         );
+        assert_eq!(tile_ctx.delta_q.as_slice(), delta_q_before.as_slice());
         assert_eq!(tile_ctx.y_mode_set.as_slice(), y_mode_set_before.as_slice());
         assert_eq!(tile_ctx.y_mode_idx[0].as_slice(), y_mode_idx_before.as_slice());
         assert_eq!(
@@ -374,6 +384,13 @@ mod tests {
         let mut tile_ctx = TileContext::new_default();
         assert!(!reader.read_segment_pred(&mut tile_ctx, 0));
         assert_eq!(reader.read_segment_id(&mut tile_ctx, 0), 0);
+    }
+
+    #[test]
+    fn read_delta_q_symbol_uses_real_default_table() {
+        let mut reader = BacReader::new(&[0x00, 0x00, 0x00, 0x00]);
+        let mut tile_ctx = TileContext::new_default();
+        assert_eq!(reader.read_delta_q_symbol(&mut tile_ctx), 0);
     }
 
     #[test]

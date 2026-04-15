@@ -56,6 +56,8 @@ pub(crate) const SPATIAL_PRED_SEG_TREE_CDF: [[u16; 8]; 3] = [
     [14274, 18230, 22557, 24935, 29980, 30851, 32344, 32767],
     [27527, 28487, 28723, 28890, 32397, 32647, 32679, 32767],
 ];
+pub(crate) const DELTA_Q_CDF: [u16; 8] =
+    [16594, 23325, 26424, 28225, 29358, 30099, 30613, 32767];
 
 /// Luma intra-mode selector CDFs from `av2/common/entropy_inits_modes.h`.
 pub(crate) const Y_MODE_SET_CDF: [u16; 4] = [28863, 31022, 31724, 32767];
@@ -137,6 +139,7 @@ pub(crate) struct TileContext {
     pub skip: CdfState<2>,
     pub segment_pred: [CdfState<2>; 3],
     pub spatial_pred_seg_tree: [CdfState<8>; 3],
+    pub delta_q: CdfState<8>,
     pub y_mode_set: CdfState<4>,
     pub y_mode_idx: [CdfState<8>; 3],
     pub y_mode_idx_offset: [CdfState<6>; 3],
@@ -155,6 +158,7 @@ pub(crate) struct DefaultTileCdfs {
     skip: [u16; 2],
     segment_pred: [[u16; 2]; 3],
     spatial_pred_seg_tree: [[u16; 8]; 3],
+    delta_q: [u16; 8],
     y_mode_set: [u16; 4],
     y_mode_idx: [[u16; 8]; 3],
     y_mode_idx_offset: [[u16; 6]; 3],
@@ -174,6 +178,7 @@ impl DefaultTileCdfs {
             skip: SKIP_CDF,
             segment_pred: SEGMENT_PRED_CDF,
             spatial_pred_seg_tree: SPATIAL_PRED_SEG_TREE_CDF,
+            delta_q: DELTA_Q_CDF,
             y_mode_set: Y_MODE_SET_CDF,
             y_mode_idx: Y_MODE_IDX_CDF,
             y_mode_idx_offset: Y_MODE_IDX_OFFSET_CDF,
@@ -243,6 +248,7 @@ impl TileContext {
                 CdfState::new(defaults.spatial_pred_seg_tree[1]),
                 CdfState::new(defaults.spatial_pred_seg_tree[2]),
             ],
+            delta_q: CdfState::new(defaults.delta_q),
             y_mode_set: CdfState::new(defaults.y_mode_set),
             y_mode_idx: [
                 CdfState::new(defaults.y_mode_idx[0]),
@@ -307,6 +313,13 @@ impl TileContext {
     pub fn update_segment_id(&mut self, ctx: usize, symbol: usize) {
         if self.updates_enabled {
             self.spatial_pred_seg_tree[ctx.min(2)].update(symbol);
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn update_delta_q(&mut self, symbol: usize) {
+        if self.updates_enabled {
+            self.delta_q.update(symbol);
         }
     }
 
@@ -425,6 +438,7 @@ fn active_default_cdf_bytes() -> Vec<u8> {
     out.extend_from_slice(&cdf_u16_bytes(&SPATIAL_PRED_SEG_TREE_CDF[0]));
     out.extend_from_slice(&cdf_u16_bytes(&SPATIAL_PRED_SEG_TREE_CDF[1]));
     out.extend_from_slice(&cdf_u16_bytes(&SPATIAL_PRED_SEG_TREE_CDF[2]));
+    out.extend_from_slice(&cdf_u16_bytes(&DELTA_Q_CDF));
     out.extend_from_slice(&cdf_u16_bytes(&Y_MODE_SET_CDF));
     out.extend_from_slice(&cdf_u16_bytes(&Y_MODE_IDX_CDF[0]));
     out.extend_from_slice(&cdf_u16_bytes(&Y_MODE_IDX_CDF[1]));
@@ -485,6 +499,7 @@ mod tests {
             tile.spatial_pred_seg_tree[0].as_slice(),
             &SPATIAL_PRED_SEG_TREE_CDF[0]
         );
+        assert_eq!(tile.delta_q.as_slice(), &DELTA_Q_CDF);
         assert_eq!(tile.y_mode_set.as_slice(), &Y_MODE_SET_CDF);
         assert_eq!(tile.y_mode_idx[0].as_slice(), &Y_MODE_IDX_CDF[0]);
         assert_eq!(tile.uv_mode[0].as_slice(), &UV_MODE_CDF[0]);
@@ -516,6 +531,7 @@ mod tests {
         tile.skip.update(1);
         tile.segment_pred[0].update(1);
         tile.spatial_pred_seg_tree[0].update(3);
+        tile.delta_q.update(4);
         tile.y_mode_set.update(1);
         tile.y_mode_idx[0].update(4);
         tile.y_mode_idx_offset[0].update(2);
@@ -539,6 +555,7 @@ mod tests {
             tile.spatial_pred_seg_tree[0].as_slice(),
             &SPATIAL_PRED_SEG_TREE_CDF[0]
         );
+        assert_eq!(tile.delta_q.as_slice(), &DELTA_Q_CDF);
         assert_eq!(tile.y_mode_set.as_slice(), &Y_MODE_SET_CDF);
         assert_eq!(tile.y_mode_idx[0].as_slice(), &Y_MODE_IDX_CDF[0]);
         assert_eq!(tile.y_mode_idx_offset[0].as_slice(), &Y_MODE_IDX_OFFSET_CDF[0]);
@@ -549,7 +566,7 @@ mod tests {
     #[test]
     fn active_default_cdfs_hash_stably() {
         let digest = md5::compute(active_default_cdf_bytes());
-        assert_eq!(format!("{digest:x}"), "1cdc2d546d9fa655f23a2a5ed2666d51");
+        assert_eq!(format!("{digest:x}"), "382c561e438495e990e6bafb2d5049b1");
     }
 
     #[test]

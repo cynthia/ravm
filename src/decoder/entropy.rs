@@ -223,6 +223,13 @@ impl<'a> BacReader<'a> {
         symbol == 1
     }
 
+    #[allow(dead_code)]
+    pub fn read_lossless_inter_tx_type_symbol(&mut self, tile_ctx: &mut TileContext) -> bool {
+        let symbol = self.read_symbol(tile_ctx.lossless_inter_tx_type.as_slice());
+        tile_ctx.update_lossless_inter_tx_type(symbol);
+        symbol == 1
+    }
+
     pub fn read_intra_mode(&mut self, tile_ctx: &mut TileContext, ctx: usize) -> u8 {
         const LUMA_INTRA_MODE_INDEX_COUNT: u8 = 8;
         const FIRST_MODE_COUNT: u8 = 13;
@@ -384,6 +391,7 @@ mod tests {
         let cfl_sign_before = tile_ctx.cfl_sign.as_slice().to_vec();
         let cfl_alpha_before = tile_ctx.cfl_alpha[0].as_slice().to_vec();
         let lossless_tx_size_before = tile_ctx.lossless_tx_size[0][0].as_slice().to_vec();
+        let lossless_inter_tx_type_before = tile_ctx.lossless_inter_tx_type.as_slice().to_vec();
         let y_mode_set_before = tile_ctx.y_mode_set.as_slice().to_vec();
         let y_mode_idx_before = tile_ctx.y_mode_idx[0].as_slice().to_vec();
         let y_mode_idx_offset_before = tile_ctx.y_mode_idx_offset[0].as_slice().to_vec();
@@ -399,6 +407,7 @@ mod tests {
         assert_eq!(reader.read_cfl_sign(&mut tile_ctx), 0);
         assert_eq!(reader.read_cfl_alpha(&mut tile_ctx, 0), 0);
         assert!(!reader.read_lossless_tx_size_symbol(&mut tile_ctx, 0, false));
+        assert!(!reader.read_lossless_inter_tx_type_symbol(&mut tile_ctx));
         assert_eq!(reader.read_intra_mode(&mut tile_ctx, 0), 0);
         let mut coeffs = [1i16; 16];
         reader
@@ -420,6 +429,10 @@ mod tests {
         assert_eq!(
             tile_ctx.lossless_tx_size[0][0].as_slice(),
             lossless_tx_size_before.as_slice()
+        );
+        assert_eq!(
+            tile_ctx.lossless_inter_tx_type.as_slice(),
+            lossless_inter_tx_type_before.as_slice()
         );
         assert_eq!(tile_ctx.y_mode_set.as_slice(), y_mode_set_before.as_slice());
         assert_eq!(tile_ctx.y_mode_idx[0].as_slice(), y_mode_idx_before.as_slice());
@@ -468,6 +481,13 @@ mod tests {
         let mut reader = BacReader::new(&[0x00, 0x00, 0x00, 0x00]);
         let mut tile_ctx = TileContext::new_default();
         assert!(!reader.read_lossless_tx_size_symbol(&mut tile_ctx, 0, false));
+    }
+
+    #[test]
+    fn read_lossless_inter_tx_type_symbol_uses_real_default_table() {
+        let mut reader = BacReader::new(&[0x00, 0x00, 0x00, 0x00]);
+        let mut tile_ctx = TileContext::new_default();
+        assert!(!reader.read_lossless_inter_tx_type_symbol(&mut tile_ctx));
     }
 
     #[test]

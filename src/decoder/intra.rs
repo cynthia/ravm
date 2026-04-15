@@ -35,6 +35,42 @@ pub(crate) fn predict_dc_4x4<P: Pixel + Into<u32> + TryFrom<u32>>(
     }
 }
 
+pub(crate) fn predict_dc_block<P: Pixel + Into<u32> + TryFrom<u32>>(
+    above: Option<&[P]>,
+    left: Option<&[P]>,
+    dst: &mut [P],
+    width: usize,
+    height: usize,
+    stride: usize,
+) {
+    let dc = match (above, left) {
+        (Some(above), Some(left)) => {
+            let sum_above: u32 = above.iter().copied().map(Into::into).sum();
+            let sum_left: u32 = left.iter().copied().map(Into::into).sum();
+            let count = (above.len() + left.len()) as u32;
+            (sum_above + sum_left + (count / 2)) / count
+        }
+        (Some(above), None) => {
+            let sum_above: u32 = above.iter().copied().map(Into::into).sum();
+            let count = above.len() as u32;
+            (sum_above + (count / 2)) / count
+        }
+        (None, Some(left)) => {
+            let sum_left: u32 = left.iter().copied().map(Into::into).sum();
+            let count = left.len() as u32;
+            (sum_left + (count / 2)) / count
+        }
+        (None, None) => 1u32 << (P::BIT_DEPTH - 1),
+    };
+
+    let dc = P::try_from(dc).ok().unwrap_or_default();
+    for y in 0..height {
+        for x in 0..width {
+            dst[y * stride + x] = dc;
+        }
+    }
+}
+
 /// Vertical intra prediction for a 4x4 block.
 #[allow(dead_code)]
 pub(crate) fn predict_v_4x4<P: Pixel + Into<u32> + TryFrom<u32>>(
@@ -382,6 +418,15 @@ mod tests {
         let mut dst = [0u8; 16];
         predict_dc_4x4::<u8>(Some(&above), Some(&left), &mut dst, 4);
         assert_eq!(dst, [150u8; 16]);
+    }
+
+    #[test]
+    fn dc_block_scales_to_non_4x4_regions() {
+        let above = [10u8, 20, 30, 40, 50, 60, 70, 80];
+        let left = [100u8, 110, 120, 130];
+        let mut dst = [0u8; 32];
+        predict_dc_block::<u8>(Some(&above), Some(&left), &mut dst, 8, 4, 8);
+        assert_eq!(dst, [68u8; 32]);
     }
 
     #[test]

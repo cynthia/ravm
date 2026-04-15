@@ -8,7 +8,8 @@ use crate::decoder::executor::{Sequential, TileExecutor};
 use crate::decoder::frame_buffer::{FrameBuffer, PlaneBuffer};
 use crate::decoder::intra::{
     predict_d113_4x4, predict_d135_4x4, predict_d157_4x4, predict_d203_4x4, predict_d45_4x4,
-    predict_d67_4x4, predict_dc_4x4, predict_h_4x4, predict_paeth_4x4, predict_smooth_4x4,
+    predict_d67_4x4, predict_dc_4x4, predict_dc_block, predict_h_4x4, predict_paeth_4x4,
+    predict_smooth_4x4,
     predict_smooth_h_4x4, predict_smooth_v_4x4, predict_v_4x4,
 };
 use crate::decoder::kernels;
@@ -147,7 +148,18 @@ fn decode_partition(
     let ctx = block_info.partition_ctx(bx, by, bsize);
     let partition = reader.read_partition(tile_ctx, bsize, ctx);
     if partition == PartitionType::None {
-        return decode_none_block(fb, block_info, bx, by, bsize);
+        return decode_none_block(
+            reader,
+            tile_ctx,
+            kernels,
+            fb,
+            block_info,
+            bx,
+            by,
+            bsize,
+            quant,
+            tx_mode,
+        );
     }
 
     for (child_x, child_y, child_size) in partition_children(bx, by, bsize, partition) {
@@ -168,24 +180,64 @@ fn decode_partition(
 }
 
 fn decode_none_block(
+    reader: &mut BacReader<'_>,
+    tile_ctx: &mut TileContext,
+    _kernels: &dyn kernels::Kernels,
     fb: &mut FrameBuffer<u8>,
     block_info: &mut BlockInfoGrid,
     bx: usize,
     by: usize,
     bsize: BlockSize,
+    _quant: QuantContext,
+    tx_mode: u8,
 ) -> Result<(), CoreDecodeError> {
     if bsize.is_min() {
         return Err(CoreDecodeError::UnexpectedMode);
     }
 
-    let luma_width = fb.luma().width;
-    let luma_height = fb.luma().height;
-    let fill_width = bsize.width.min(luma_width.saturating_sub(bx));
-    let fill_height = bsize.height.min(luma_height.saturating_sub(by));
+    let visible_width = bsize.width.min(fb.luma().width.saturating_sub(bx));
+    let visible_height = bsize.height.min(fb.luma().height.saturating_sub(by));
+    if visible_width <= 4 && visible_height <= 4 {
+        return decode_4x4_block(
+            reader, tile_ctx, _kernels, fb, block_info, bx, by, _quant, tx_mode,
+        );
+    }
 
-    for y in 0..fill_height {
+    let y_mode_ctx = block_info.y_mode_ctx(bx, by);
+    let y_mode_list = block_info.y_intra_mode_list(bx, by, bsize);
+    let intra_mode = reader.read_intra_mode(tile_ctx, y_mode_ctx, &y_mode_list);
+    if tx_mode != 0 {
+        return Err(CoreDecodeError::Unsupported(
+            "tx_mode select is not integrated into the Rust decode path yet",
+        ));
+    }
+    let base_intra_mode = base_intra_mode_from_actual_mode(intra_mode.actual_mode)
+        .ok_or(CoreDecodeError::UnexpectedMode)?;
+
+    let above = (by >= 1).then(|| gather_above_row(fb.luma(), bx, by, visible_width));
+    let left = (bx >= 1).then(|| gather_left_col(fb.luma(), bx, by, visible_height));
+    let mut pred = vec![0u8; visible_width * visible_height];
+    if above.is_none() && left.is_none() {
+        pred.fill(128);
+    } else if matches!(base_intra_mode, crate::decoder::transform::BaseIntraMode::Dc) {
+        predict_dc_block(
+            above.as_deref(),
+            left.as_deref(),
+            &mut pred,
+            visible_width,
+            visible_height,
+            visible_width,
+        );
+    } else {
+        return Err(CoreDecodeError::Unsupported(
+            "non-4x4 none blocks currently only support DC prediction with neighbors",
+        ));
+    }
+
+    for y in 0..visible_height {
         let row = fb.luma_mut().row_mut(by + y);
-        row[bx..bx + fill_width].fill(128);
+        row[bx..bx + visible_width]
+            .copy_from_slice(&pred[y * visible_width..(y + 1) * visible_width]);
     }
 
     block_info.fill_region(
@@ -194,7 +246,7 @@ fn decode_none_block(
         bsize,
         BlockInfo {
             present: true,
-            intra_mode: 0,
+            intra_mode: intra_mode.joint_mode,
             skip: false,
             tx_size: 0,
         },
@@ -343,6 +395,10 @@ fn gather_above_4(plane: &PlaneBuffer<u8>, bx: usize, by: usize) -> [u8; 4] {
     [row[bx], row[bx + 1], row[bx + 2], row[bx + 3]]
 }
 
+fn gather_above_row(plane: &PlaneBuffer<u8>, bx: usize, by: usize, width: usize) -> Vec<u8> {
+    plane.row(by - 1)[bx..bx + width].to_vec()
+}
+
 fn gather_above_9(plane: &PlaneBuffer<u8>, bx: usize, by: usize) -> [u8; 9] {
     let row = plane.row(by - 1);
     let last_x = plane.width.saturating_sub(1);
@@ -366,6 +422,10 @@ fn gather_left_4(plane: &PlaneBuffer<u8>, bx: usize, by: usize) -> [u8; 4] {
         plane.row(by + 2)[bx - 1],
         plane.row(by + 3)[bx - 1],
     ]
+}
+
+fn gather_left_col(plane: &PlaneBuffer<u8>, bx: usize, by: usize, height: usize) -> Vec<u8> {
+    (0..height).map(|y| plane.row(by + y)[bx - 1]).collect()
 }
 
 fn gather_left_9(plane: &PlaneBuffer<u8>, bx: usize, by: usize) -> [u8; 9] {
@@ -635,5 +695,50 @@ mod tests {
         assert_eq!(frame.luma().width, 64);
         assert_eq!(frame.luma().height, 48);
         assert_eq!(frame.luma().row(0)[0], 128);
+    }
+
+    #[test]
+    fn larger_visible_none_blocks_fail_explicitly_until_real_block_decode_lands() {
+        let err = (0u8..=255).find_map(|first_byte| {
+            let mut fb = FrameBuffer::<u8>::new(16, 16, Subsampling::Yuv420);
+            let mut block_info = BlockInfoGrid::new(16, 16);
+            let probe = [first_byte, 0x00, 0x00, 0x00];
+            let mut reader = BacReader::new(&probe);
+            let mut tile_ctx = TileContext::new_default();
+            decode_none_block(
+                &mut reader,
+                &mut tile_ctx,
+                kernels::detect(),
+                &mut fb,
+                &mut block_info,
+                8,
+                0,
+                BlockSize {
+                    width: 8,
+                    height: 8,
+                },
+                QuantContext {
+                    base_q_idx: 0,
+                    delta_q_y_dc: 0,
+                    delta_q_u_dc: 0,
+                    delta_q_u_ac: 0,
+                    delta_q_v_dc: 0,
+                    delta_q_v_ac: 0,
+                    using_qmatrix: false,
+                    qm_y: 0,
+                    qm_u: 0,
+                    qm_v: 0,
+                },
+                0,
+            )
+            .err()
+        });
+
+        assert_eq!(
+            err,
+            Some(CoreDecodeError::Unsupported(
+                "non-4x4 none blocks currently only support DC prediction with neighbors",
+            ))
+        );
     }
 }

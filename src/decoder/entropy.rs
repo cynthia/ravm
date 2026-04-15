@@ -450,13 +450,25 @@ impl<'a> BacReader<'a> {
                 Plane::Y => 0,
                 Plane::U | Plane::V => 1,
             };
-            let _eob_pt = self.read_eob_pt_16_symbol(tile_ctx, 0, plane_ctx);
-            let _coeff_base_eob = self.read_coeff_base_eob_tx4x4_symbol(tile_ctx, 0, 0);
-            let _dc_sign = self.read_dc_sign_luma_symbol(tile_ctx, 0, 0);
-            let _coeff_base = self.read_coeff_base_tx4x4_ctx0_symbol(tile_ctx, 0, 0);
-            let _coeff_base_ctx1 = self.read_coeff_base_tx4x4_ctx1_symbol(tile_ctx, 0, 0);
-            let _coeff_br = self.read_coeff_br_luma_ctx0_symbol(tile_ctx, 0);
-            Err(EntropyError::UnimplementedInM0)
+            let eob_pt = self.read_eob_pt_16_symbol(tile_ctx, 0, plane_ctx);
+            let coeff_base_eob = self.read_coeff_base_eob_tx4x4_symbol(tile_ctx, 0, 0);
+            let dc_sign = self.read_dc_sign_luma_symbol(tile_ctx, 0, 0);
+            let coeff_base = self.read_coeff_base_tx4x4_ctx0_symbol(tile_ctx, 0, 0);
+            let coeff_base_ctx1 = self.read_coeff_base_tx4x4_ctx1_symbol(tile_ctx, 0, 0);
+            let coeff_br = self.read_coeff_br_luma_ctx0_symbol(tile_ctx, 0);
+
+            if eob_pt <= 1 {
+                let mut level = 1i16 + i16::from(coeff_base_eob) + i16::from(coeff_base);
+                level += i16::from(coeff_base_ctx1);
+                if level >= 4 {
+                    level += i16::from(coeff_br);
+                }
+                *out = [0; 16];
+                out[0] = if dc_sign { -level } else { level };
+                Ok(())
+            } else {
+                Err(EntropyError::UnimplementedInM0)
+            }
         }
     }
 
@@ -923,6 +935,36 @@ mod tests {
             .read_coeffs(&mut tile_ctx, ctx, &mut coeffs)
             .expect("all-zero coeffs through tx-size scaffold");
         assert_eq!(coeffs, [0i16; 16]);
+    }
+
+    #[test]
+    fn read_coeffs_4x4_can_materialize_dc_only_nonzero_case() {
+        let coeffs = (0u8..=255).find_map(|first_byte| {
+            let probe = [first_byte, 0x00, 0x00, 0x00];
+            let mut reader = BacReader::new(&probe);
+            let mut tile_ctx = TileContext::new_default();
+            let mut coeffs = [0i16; 16];
+            reader
+                .read_coeffs(
+                    &mut tile_ctx,
+                    CoeffReadContext {
+                        tx_size: TxSize::Tx4x4,
+                        tx_type: TxType::DctDct,
+                        plane: Plane::Y,
+                        intra: true,
+                        x4: 0,
+                        y4: 0,
+                    },
+                    &mut coeffs,
+                )
+                .ok()
+                .filter(|_| coeffs[0] != 0 && coeffs[1..].iter().all(|&c| c == 0))
+                .map(|_| coeffs)
+        });
+        assert!(
+            matches!(coeffs, Some(found) if found[0] != 0),
+            "no one-byte probe reached the provisional dc-only nonzero path"
+        );
     }
 
     #[test]

@@ -209,6 +209,20 @@ impl<'a> BacReader<'a> {
         symbol as u8
     }
 
+    #[allow(dead_code)]
+    pub fn read_lossless_tx_size_symbol(
+        &mut self,
+        tile_ctx: &mut TileContext,
+        bsize_group: usize,
+        is_inter: bool,
+    ) -> bool {
+        let inter = usize::from(is_inter);
+        let symbol =
+            self.read_symbol(tile_ctx.lossless_tx_size[bsize_group.min(3)][inter].as_slice());
+        tile_ctx.update_lossless_tx_size(bsize_group, inter, symbol);
+        symbol == 1
+    }
+
     pub fn read_intra_mode(&mut self, tile_ctx: &mut TileContext, ctx: usize) -> u8 {
         const LUMA_INTRA_MODE_INDEX_COUNT: u8 = 8;
         const FIRST_MODE_COUNT: u8 = 13;
@@ -369,6 +383,7 @@ mod tests {
         let cfl_index_before = tile_ctx.cfl_index.as_slice().to_vec();
         let cfl_sign_before = tile_ctx.cfl_sign.as_slice().to_vec();
         let cfl_alpha_before = tile_ctx.cfl_alpha[0].as_slice().to_vec();
+        let lossless_tx_size_before = tile_ctx.lossless_tx_size[0][0].as_slice().to_vec();
         let y_mode_set_before = tile_ctx.y_mode_set.as_slice().to_vec();
         let y_mode_idx_before = tile_ctx.y_mode_idx[0].as_slice().to_vec();
         let y_mode_idx_offset_before = tile_ctx.y_mode_idx_offset[0].as_slice().to_vec();
@@ -383,6 +398,7 @@ mod tests {
         assert_eq!(reader.read_cfl_index(&mut tile_ctx), 0);
         assert_eq!(reader.read_cfl_sign(&mut tile_ctx), 0);
         assert_eq!(reader.read_cfl_alpha(&mut tile_ctx, 0), 0);
+        assert!(!reader.read_lossless_tx_size_symbol(&mut tile_ctx, 0, false));
         assert_eq!(reader.read_intra_mode(&mut tile_ctx, 0), 0);
         let mut coeffs = [1i16; 16];
         reader
@@ -401,6 +417,10 @@ mod tests {
         assert_eq!(tile_ctx.cfl_index.as_slice(), cfl_index_before.as_slice());
         assert_eq!(tile_ctx.cfl_sign.as_slice(), cfl_sign_before.as_slice());
         assert_eq!(tile_ctx.cfl_alpha[0].as_slice(), cfl_alpha_before.as_slice());
+        assert_eq!(
+            tile_ctx.lossless_tx_size[0][0].as_slice(),
+            lossless_tx_size_before.as_slice()
+        );
         assert_eq!(tile_ctx.y_mode_set.as_slice(), y_mode_set_before.as_slice());
         assert_eq!(tile_ctx.y_mode_idx[0].as_slice(), y_mode_idx_before.as_slice());
         assert_eq!(
@@ -441,6 +461,13 @@ mod tests {
         assert_eq!(reader.read_cfl_index(&mut tile_ctx), 0);
         assert_eq!(reader.read_cfl_sign(&mut tile_ctx), 0);
         assert_eq!(reader.read_cfl_alpha(&mut tile_ctx, 0), 0);
+    }
+
+    #[test]
+    fn read_lossless_tx_size_symbol_uses_real_default_table() {
+        let mut reader = BacReader::new(&[0x00, 0x00, 0x00, 0x00]);
+        let mut tile_ctx = TileContext::new_default();
+        assert!(!reader.read_lossless_tx_size_symbol(&mut tile_ctx, 0, false));
     }
 
     #[test]

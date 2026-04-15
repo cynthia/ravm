@@ -96,6 +96,17 @@ pub(crate) fn predict_d203_4x4<P: Pixel + Into<u32> + TryFrom<u32>>(
     predict_z3_4x4(left, 227, dst, stride);
 }
 
+/// Directional 157-degree intra prediction for a 4x4 block.
+pub(crate) fn predict_d157_4x4<P: Pixel + Into<u32> + TryFrom<u32>>(
+    above: Option<&[P; 4]>,
+    left: Option<&[P; 4]>,
+    above_left: Option<P>,
+    dst: &mut [P],
+    stride: usize,
+) {
+    predict_z2_4x4(above, left, above_left, 170, 56, dst, stride);
+}
+
 fn predict_z1_4x4<P: Pixel + Into<u32> + TryFrom<u32>>(
     above: Option<&[P; 9]>,
     dx: i32,
@@ -156,6 +167,46 @@ fn predict_z3_4x4<P: Pixel + Into<u32> + TryFrom<u32>>(
             };
             dst[row * stride + x] = sample;
             base += 1;
+        }
+    }
+}
+
+fn predict_z2_4x4<P: Pixel + Into<u32> + TryFrom<u32>>(
+    above: Option<&[P; 4]>,
+    left: Option<&[P; 4]>,
+    above_left: Option<P>,
+    dx: i32,
+    dy: i32,
+    dst: &mut [P],
+    stride: usize,
+) {
+    let fill = [mid_gray(); 4];
+    let above = above.copied().unwrap_or(fill);
+    let left = left.copied().unwrap_or(fill);
+    let above_left = above_left.unwrap_or_else(mid_gray);
+    let above_ext = [above_left, above[0], above[1], above[2], above[3], above[3]];
+    let left_ext = [above_left, left[0], left[1], left[2], left[3], left[3]];
+
+    for row in 0..4 {
+        for col in 0..4 {
+            let y = row as i32 + 1;
+            let x = ((col as i32) << 6) - y * dx;
+            let base_x = x >> 6;
+            let val = if base_x >= -1 {
+                let shift = ((x & 0x3f) >> 1) as u32;
+                let a: u32 = above_ext[(base_x + 1) as usize].into();
+                let b: u32 = above_ext[(base_x + 2) as usize].into();
+                divide_round(a * (32 - shift) + b * shift, 5)
+            } else {
+                let x = col as i32 + 1;
+                let y = ((row as i32) << 6) - x * dy;
+                let base_y = y >> 6;
+                let shift = ((y & 0x3f) >> 1) as u32;
+                let a: u32 = left_ext[(base_y + 1).max(0) as usize].into();
+                let b: u32 = left_ext[(base_y + 2).max(0) as usize].into();
+                divide_round(a * (32 - shift) + b * shift, 5)
+            };
+            dst[row * stride + col] = P::try_from(val).ok().unwrap_or_default();
         }
     }
 }
@@ -385,5 +436,14 @@ mod tests {
         let mut dst = [0u8; 16];
         predict_d203_4x4::<u8>(Some(&left), &mut dst, 4);
         assert_eq!(dst, [5, 8, 8, 8, 6, 8, 8, 8, 7, 8, 8, 8, 8, 8, 8, 8]);
+    }
+
+    #[test]
+    fn d157_blends_top_and_left_references() {
+        let above = [10u8, 20, 30, 40];
+        let left = [50u8, 60, 70, 80];
+        let mut dst = [0u8; 16];
+        predict_d157_4x4::<u8>(Some(&above), Some(&left), Some(15), &mut dst, 4);
+        assert_eq!(dst, [19, 15, 13, 13, 51, 24, 15, 15, 61, 53, 28, 15, 71, 63, 54, 33]);
     }
 }

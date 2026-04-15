@@ -36,6 +36,7 @@ pub(crate) fn predict_dc_4x4<P: Pixel + Into<u32> + TryFrom<u32>>(
 }
 
 /// Vertical intra prediction for a 4x4 block.
+#[allow(dead_code)]
 pub(crate) fn predict_v_4x4<P: Pixel + Into<u32> + TryFrom<u32>>(
     above: Option<&[P; 4]>,
     dst: &mut [P],
@@ -52,6 +53,7 @@ pub(crate) fn predict_v_4x4<P: Pixel + Into<u32> + TryFrom<u32>>(
 }
 
 /// Horizontal intra prediction for a 4x4 block.
+#[allow(dead_code)]
 pub(crate) fn predict_h_4x4<P: Pixel + Into<u32> + TryFrom<u32>>(
     left: Option<&[P; 4]>,
     dst: &mut [P],
@@ -63,6 +65,137 @@ pub(crate) fn predict_h_4x4<P: Pixel + Into<u32> + TryFrom<u32>>(
     for y in 0..4 {
         for x in 0..4 {
             dst[y * stride + x] = fill[y];
+        }
+    }
+}
+
+fn mid_gray<P: Pixel + Into<u32> + TryFrom<u32>>() -> P {
+    P::try_from(1u32 << (P::BIT_DEPTH - 1)).ok().unwrap_or_default()
+}
+
+fn divide_round(value: u32, bits: u32) -> u32 {
+    (value + (1 << (bits - 1))) >> bits
+}
+
+fn abs_diff(a: i32, b: i32) -> i32 {
+    if a > b { a - b } else { b - a }
+}
+
+fn paeth_predictor_single(left: u32, top: u32, top_left: u32) -> u32 {
+    let left = left as i32;
+    let top = top as i32;
+    let top_left = top_left as i32;
+    let base = top + left - top_left;
+    let p_left = abs_diff(base, left);
+    let p_top = abs_diff(base, top);
+    let p_top_left = abs_diff(base, top_left);
+    if p_left <= p_top && p_left <= p_top_left {
+        left as u32
+    } else if p_top <= p_top_left {
+        top as u32
+    } else {
+        top_left as u32
+    }
+}
+
+/// Smooth intra prediction for a 4x4 block.
+pub(crate) fn predict_smooth_4x4<P: Pixel + Into<u32> + TryFrom<u32>>(
+    above: Option<&[P; 4]>,
+    left: Option<&[P; 4]>,
+    dst: &mut [P],
+    stride: usize,
+) {
+    let fill = [mid_gray(); 4];
+    let above = above.copied().unwrap_or(fill);
+    let left = left.copied().unwrap_or(fill);
+    let below_pred: u32 = left[3].into();
+    let right_pred: u32 = above[3].into();
+    const WEIGHTS: [u32; 4] = [255, 149, 85, 64];
+    const SCALE: u32 = 1 << 8;
+    const LOG2_SCALE: u32 = 9;
+
+    for y in 0..4 {
+        for x in 0..4 {
+            let this_pred = WEIGHTS[y] * u32::from(Into::<u32>::into(above[x]) as u16)
+                + (SCALE - WEIGHTS[y]) * below_pred
+                + WEIGHTS[x] * u32::from(Into::<u32>::into(left[y]) as u16)
+                + (SCALE - WEIGHTS[x]) * right_pred;
+            dst[y * stride + x] = P::try_from(divide_round(this_pred, LOG2_SCALE))
+                .ok()
+                .unwrap_or_default();
+        }
+    }
+}
+
+/// Vertical smooth intra prediction for a 4x4 block.
+pub(crate) fn predict_smooth_v_4x4<P: Pixel + Into<u32> + TryFrom<u32>>(
+    above: Option<&[P; 4]>,
+    left: Option<&[P; 4]>,
+    dst: &mut [P],
+    stride: usize,
+) {
+    let fill = [mid_gray(); 4];
+    let above = above.copied().unwrap_or(fill);
+    let left = left.copied().unwrap_or(fill);
+    let below_pred: u32 = left[3].into();
+    const WEIGHTS: [u32; 4] = [255, 149, 85, 64];
+    const SCALE: u32 = 1 << 8;
+
+    for y in 0..4 {
+        for x in 0..4 {
+            let top: u32 = above[x].into();
+            let this_pred = WEIGHTS[y] * top + (SCALE - WEIGHTS[y]) * below_pred;
+            dst[y * stride + x] = P::try_from(divide_round(this_pred, 8))
+                .ok()
+                .unwrap_or_default();
+        }
+    }
+}
+
+/// Horizontal smooth intra prediction for a 4x4 block.
+pub(crate) fn predict_smooth_h_4x4<P: Pixel + Into<u32> + TryFrom<u32>>(
+    above: Option<&[P; 4]>,
+    left: Option<&[P; 4]>,
+    dst: &mut [P],
+    stride: usize,
+) {
+    let fill = [mid_gray(); 4];
+    let above = above.copied().unwrap_or(fill);
+    let left = left.copied().unwrap_or(fill);
+    let right_pred: u32 = above[3].into();
+    const WEIGHTS: [u32; 4] = [255, 149, 85, 64];
+    const SCALE: u32 = 1 << 8;
+
+    for y in 0..4 {
+        let left_sample: u32 = left[y].into();
+        for x in 0..4 {
+            let this_pred = WEIGHTS[x] * left_sample + (SCALE - WEIGHTS[x]) * right_pred;
+            dst[y * stride + x] = P::try_from(divide_round(this_pred, 8))
+                .ok()
+                .unwrap_or_default();
+        }
+    }
+}
+
+/// Paeth intra prediction for a 4x4 block.
+pub(crate) fn predict_paeth_4x4<P: Pixel + Into<u32> + TryFrom<u32>>(
+    above: Option<&[P; 4]>,
+    left: Option<&[P; 4]>,
+    above_left: Option<P>,
+    dst: &mut [P],
+    stride: usize,
+) {
+    let fill = [mid_gray(); 4];
+    let above = above.copied().unwrap_or(fill);
+    let left = left.copied().unwrap_or(fill);
+    let above_left: u32 = above_left.unwrap_or_else(mid_gray).into();
+
+    for y in 0..4 {
+        let left_sample: u32 = left[y].into();
+        for x in 0..4 {
+            let top_sample: u32 = above[x].into();
+            let pred = paeth_predictor_single(left_sample, top_sample, above_left);
+            dst[y * stride + x] = P::try_from(pred).ok().unwrap_or_default();
         }
     }
 }
@@ -101,5 +234,41 @@ mod tests {
         let mut dst = [0u8; 16];
         predict_h_4x4::<u8>(Some(&left), &mut dst, 4);
         assert_eq!(dst, [5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 8, 8, 8, 8]);
+    }
+
+    #[test]
+    fn smooth_uses_both_edges() {
+        let above = [10u8, 20, 30, 40];
+        let left = [50u8, 60, 70, 80];
+        let mut dst = [0u8; 16];
+        predict_smooth_4x4::<u8>(Some(&above), Some(&left), &mut dst, 4);
+        assert_eq!(dst, [30, 33, 37, 41, 50, 48, 49, 51, 63, 59, 57, 57, 71, 64, 60, 60]);
+    }
+
+    #[test]
+    fn smooth_v_blends_top_toward_bottom_left() {
+        let above = [10u8, 20, 30, 40];
+        let left = [50u8, 60, 70, 80];
+        let mut dst = [0u8; 16];
+        predict_smooth_v_4x4::<u8>(Some(&above), Some(&left), &mut dst, 4);
+        assert_eq!(dst, [10, 20, 30, 40, 39, 45, 51, 57, 57, 60, 63, 67, 63, 65, 68, 70]);
+    }
+
+    #[test]
+    fn smooth_h_blends_left_toward_top_right() {
+        let above = [10u8, 20, 30, 40];
+        let left = [50u8, 60, 70, 80];
+        let mut dst = [0u8; 16];
+        predict_smooth_h_4x4::<u8>(Some(&above), Some(&left), &mut dst, 4);
+        assert_eq!(dst, [50, 46, 43, 43, 60, 52, 47, 45, 70, 57, 50, 48, 80, 63, 53, 50]);
+    }
+
+    #[test]
+    fn paeth_selects_nearest_reference() {
+        let above = [10u8, 20, 30, 40];
+        let left = [50u8, 60, 70, 80];
+        let mut dst = [0u8; 16];
+        predict_paeth_4x4::<u8>(Some(&above), Some(&left), Some(15), &mut dst, 4);
+        assert_eq!(dst, [50, 50, 50, 50, 60, 60, 60, 60, 70, 70, 70, 70, 80, 80, 80, 80]);
     }
 }

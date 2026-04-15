@@ -6,12 +6,18 @@ use crate::decoder::block_info::{BlockInfo, BlockInfoGrid};
 use crate::decoder::entropy::{BacReader, EntropyError};
 use crate::decoder::executor::{Sequential, TileExecutor};
 use crate::decoder::frame_buffer::{FrameBuffer, PlaneBuffer};
-use crate::decoder::intra::{predict_dc_4x4, predict_h_4x4, predict_v_4x4};
+use crate::decoder::intra::{
+    predict_dc_4x4, predict_paeth_4x4, predict_smooth_4x4, predict_smooth_h_4x4,
+    predict_smooth_v_4x4,
+};
 use crate::decoder::kernels;
 use crate::decoder::partition::{partition_children, BlockSize};
 use crate::decoder::quant::{Plane, QuantContext};
 use crate::decoder::symbols::{PartitionType, TileContext};
-use crate::decoder::transform::{intra_default_tx_type, inverse_transform, TxSize, TxType};
+use crate::decoder::transform::{
+    base_intra_mode_from_mode_idx, default_tx_type_for_base_intra_mode, inverse_transform, TxSize,
+    TxType,
+};
 use crate::format::Subsampling;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -207,14 +213,19 @@ fn decode_4x4_block(
     tx_mode: u8,
 ) -> Result<(), CoreDecodeError> {
     let y_mode_ctx = block_info.y_mode_ctx(bx, by);
-    let intra_mode = reader.read_intra_mode(tile_ctx, y_mode_ctx);
+    let intra_mode_idx = reader.read_intra_mode(tile_ctx, y_mode_ctx);
     if tx_mode != 0 {
         return Err(CoreDecodeError::Unsupported(
             "tx_mode select is not integrated into the 4x4 Rust decode path yet",
         ));
     }
-    let tx_type = intra_default_tx_type(intra_mode);
-    if !matches!(tx_type, TxType::DctDct | TxType::Idtx | TxType::AdstDct | TxType::DctAdst) {
+    let intra_mode =
+        base_intra_mode_from_mode_idx(intra_mode_idx).ok_or(CoreDecodeError::UnexpectedMode)?;
+    let tx_type = default_tx_type_for_base_intra_mode(intra_mode);
+    if !matches!(
+        tx_type,
+        TxType::DctDct | TxType::Idtx | TxType::AdstDct | TxType::DctAdst | TxType::AdstAdst
+    ) {
         return Err(CoreDecodeError::UnexpectedMode);
     }
 
@@ -228,13 +239,29 @@ fn decode_4x4_block(
     } else {
         None
     };
+    let above_left = if bx >= 4 && by >= 4 {
+        Some(fb.luma().row(by - 1)[bx - 1])
+    } else {
+        None
+    };
 
     let mut pred = [0u8; 16];
     match intra_mode {
-        0 => predict_dc_4x4(above.as_ref(), left.as_ref(), &mut pred, 4),
-        1 => predict_v_4x4(above.as_ref(), &mut pred, 4),
-        2 => predict_h_4x4(left.as_ref(), &mut pred, 4),
-        _ => return Err(CoreDecodeError::UnexpectedMode),
+        crate::decoder::transform::BaseIntraMode::Dc => {
+            predict_dc_4x4(above.as_ref(), left.as_ref(), &mut pred, 4)
+        }
+        crate::decoder::transform::BaseIntraMode::Smooth => {
+            predict_smooth_4x4(above.as_ref(), left.as_ref(), &mut pred, 4)
+        }
+        crate::decoder::transform::BaseIntraMode::SmoothV => {
+            predict_smooth_v_4x4(above.as_ref(), left.as_ref(), &mut pred, 4)
+        }
+        crate::decoder::transform::BaseIntraMode::SmoothH => {
+            predict_smooth_h_4x4(above.as_ref(), left.as_ref(), &mut pred, 4)
+        }
+        crate::decoder::transform::BaseIntraMode::Paeth => {
+            predict_paeth_4x4(above.as_ref(), left.as_ref(), above_left, &mut pred, 4)
+        }
     }
 
     let mut coeffs_in = [0i16; 16];
@@ -267,7 +294,7 @@ fn decode_4x4_block(
         BlockSize::MIN,
         BlockInfo {
             present: true,
-            intra_mode,
+            intra_mode: intra_mode_idx,
             skip: false,
             tx_size: 0,
         },

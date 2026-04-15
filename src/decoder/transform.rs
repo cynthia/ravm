@@ -42,6 +42,36 @@ pub(crate) enum IntraTxFamily {
     },
 }
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub(crate) enum BaseIntraMode {
+    Dc,
+    Smooth,
+    SmoothV,
+    SmoothH,
+    Paeth,
+}
+
+pub(crate) fn base_intra_mode_from_mode_idx(mode_idx: u8) -> Option<BaseIntraMode> {
+    match mode_idx {
+        0 => Some(BaseIntraMode::Dc),
+        1 => Some(BaseIntraMode::Smooth),
+        2 => Some(BaseIntraMode::SmoothV),
+        3 => Some(BaseIntraMode::SmoothH),
+        4 => Some(BaseIntraMode::Paeth),
+        _ => None,
+    }
+}
+
+pub(crate) fn default_tx_type_for_base_intra_mode(mode: BaseIntraMode) -> TxType {
+    match mode {
+        BaseIntraMode::Dc => TxType::DctDct,
+        BaseIntraMode::Smooth => TxType::AdstAdst,
+        BaseIntraMode::SmoothV => TxType::AdstDct,
+        BaseIntraMode::SmoothH => TxType::DctAdst,
+        BaseIntraMode::Paeth => TxType::AdstAdst,
+    }
+}
+
 #[allow(dead_code)]
 pub(crate) fn intra_default_tx_type(intra_mode: u8) -> TxType {
     match intra_mode {
@@ -120,6 +150,7 @@ pub(crate) fn inverse_transform(
         (TxSize::Tx4x4, TxType::DctDct) => kernels.inv_dct4x4(coeffs, dst, stride),
         (TxSize::Tx4x4, TxType::AdstDct) => kernels.inv_adstdct4x4(coeffs, dst, stride),
         (TxSize::Tx4x4, TxType::DctAdst) => kernels.inv_dctadst4x4(coeffs, dst, stride),
+        (TxSize::Tx4x4, TxType::AdstAdst) => kernels.inv_adstadst4x4(coeffs, dst, stride),
         (TxSize::Tx4x4, TxType::Idtx) => kernels.inv_idtx4x4(coeffs, dst, stride),
         _ => unimplemented!("inverse transform not implemented for {tx_type:?}"),
     }
@@ -145,6 +176,37 @@ mod tests {
         assert_eq!(intra_default_tx_type(1), TxType::AdstDct);
         assert_eq!(intra_default_tx_type(2), TxType::DctAdst);
         assert_eq!(intra_default_tx_type(4), TxType::AdstAdst);
+    }
+
+    #[test]
+    fn base_intra_mode_mapping_matches_reordered_non_directional_prefix() {
+        assert_eq!(base_intra_mode_from_mode_idx(0), Some(BaseIntraMode::Dc));
+        assert_eq!(base_intra_mode_from_mode_idx(1), Some(BaseIntraMode::Smooth));
+        assert_eq!(base_intra_mode_from_mode_idx(2), Some(BaseIntraMode::SmoothV));
+        assert_eq!(base_intra_mode_from_mode_idx(3), Some(BaseIntraMode::SmoothH));
+        assert_eq!(base_intra_mode_from_mode_idx(4), Some(BaseIntraMode::Paeth));
+        assert_eq!(base_intra_mode_from_mode_idx(5), None);
+    }
+
+    #[test]
+    fn default_tx_type_for_base_intra_mode_matches_upstream_table() {
+        assert_eq!(default_tx_type_for_base_intra_mode(BaseIntraMode::Dc), TxType::DctDct);
+        assert_eq!(
+            default_tx_type_for_base_intra_mode(BaseIntraMode::Smooth),
+            TxType::AdstAdst
+        );
+        assert_eq!(
+            default_tx_type_for_base_intra_mode(BaseIntraMode::SmoothV),
+            TxType::AdstDct
+        );
+        assert_eq!(
+            default_tx_type_for_base_intra_mode(BaseIntraMode::SmoothH),
+            TxType::DctAdst
+        );
+        assert_eq!(
+            default_tx_type_for_base_intra_mode(BaseIntraMode::Paeth),
+            TxType::AdstAdst
+        );
     }
 
     #[test]
@@ -202,6 +264,16 @@ mod tests {
         coeffs[0] = 32;
         let mut dst = [0i16; 16];
         inverse_transform(k, TxSize::Tx4x4, TxType::DctAdst, &coeffs, &mut dst, 4);
+        assert!(dst.iter().any(|&v| v != 0));
+    }
+
+    #[test]
+    fn dispatches_to_adstadst4x4() {
+        let k = detect();
+        let mut coeffs = [0i32; 16];
+        coeffs[0] = 32;
+        let mut dst = [0i16; 16];
+        inverse_transform(k, TxSize::Tx4x4, TxType::AdstAdst, &coeffs, &mut dst, 4);
         assert!(dst.iter().any(|&v| v != 0));
     }
 }

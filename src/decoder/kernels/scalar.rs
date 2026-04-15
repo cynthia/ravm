@@ -125,4 +125,8 @@ impl Kernels for Scalar {
     fn inv_dctadst4x4(&self, coeffs: &[i32; 16], dst: &mut [i16], dst_stride: usize) {
         inv_separable_4x4(coeffs, dst, dst_stride, &ADST_4X4, &DCT2_4X4);
     }
+
+    fn inv_adstadst4x4(&self, coeffs: &[i32; 16], dst: &mut [i16], dst_stride: usize) {
+        inv_separable_4x4(coeffs, dst, dst_stride, &ADST_4X4, &ADST_4X4);
+    }
 }

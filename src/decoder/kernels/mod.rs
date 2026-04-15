@@ -19,6 +19,9 @@ pub(crate) trait Kernels: Sync + 'static {
 
     /// Inverse 4x4 DCT_ADST. DCT in vertical, ADST in horizontal.
     fn inv_dctadst4x4(&self, coeffs: &[i32; 16], dst: &mut [i16], dst_stride: usize);
+
+    /// Inverse 4x4 ADST_ADST.
+    fn inv_adstadst4x4(&self, coeffs: &[i32; 16], dst: &mut [i16], dst_stride: usize);
 }
 
 /// Return the best available kernel implementation for the host CPU.
@@ -77,6 +80,15 @@ mod tests {
         let coeffs = [0i32; 16];
         let mut dst = [7i16; 16];
         k.inv_dctadst4x4(&coeffs, &mut dst, 4);
+        assert_eq!(dst, [0i16; 16]);
+    }
+
+    #[test]
+    fn inv_adstadst4x4_preserves_all_zero_block() {
+        let k = detect();
+        let coeffs = [0i32; 16];
+        let mut dst = [7i16; 16];
+        k.inv_adstadst4x4(&coeffs, &mut dst, 4);
         assert_eq!(dst, [0i16; 16]);
     }
 }

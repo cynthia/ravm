@@ -159,6 +159,68 @@ pub(crate) fn predict_smooth_h_block<P: Pixel + Into<u32> + TryFrom<u32>>(
     }
 }
 
+pub(crate) fn predict_smooth_block<P: Pixel + Into<u32> + TryFrom<u32>>(
+    above: Option<&[P]>,
+    left: Option<&[P]>,
+    dst: &mut [P],
+    width: usize,
+    height: usize,
+    stride: usize,
+) {
+    let above_fill = vec![mid_gray(); width];
+    let left_fill = vec![mid_gray(); height];
+    let above = above.unwrap_or(&above_fill);
+    let left = left.unwrap_or(&left_fill);
+    let below_pred: u32 = left[height - 1].into();
+    let right_pred: u32 = above[width - 1].into();
+    let x_scale = width.max(1) as u32;
+    let y_scale = height.max(1) as u32;
+    let scale = x_scale * y_scale * 2;
+
+    for y in 0..height {
+        let top_weight = (height - y) as u32;
+        let bottom_weight = y_scale - top_weight;
+        for x in 0..width {
+            let left_weight = (width - x) as u32;
+            let right_weight = x_scale - left_weight;
+            let top: u32 = above[x].into();
+            let left_sample: u32 = left[y].into();
+            let pred = top_weight * x_scale * top
+                + bottom_weight * x_scale * below_pred
+                + left_weight * y_scale * left_sample
+                + right_weight * y_scale * right_pred;
+            dst[y * stride + x] = P::try_from((pred + (scale / 2)) / scale)
+                .ok()
+                .unwrap_or_default();
+        }
+    }
+}
+
+pub(crate) fn predict_paeth_block<P: Pixel + Into<u32> + TryFrom<u32>>(
+    above: Option<&[P]>,
+    left: Option<&[P]>,
+    above_left: Option<P>,
+    dst: &mut [P],
+    width: usize,
+    height: usize,
+    stride: usize,
+) {
+    let above_fill = vec![mid_gray(); width];
+    let left_fill = vec![mid_gray(); height];
+    let above = above.unwrap_or(&above_fill);
+    let left = left.unwrap_or(&left_fill);
+    let above_left: u32 = above_left.unwrap_or_else(mid_gray).into();
+
+    for y in 0..height {
+        let left_sample: u32 = left[y].into();
+        for x in 0..width {
+            let top_sample: u32 = above[x].into();
+            let pred = paeth_predictor_single(left_sample, top_sample, above_left);
+            dst[y * stride + x] = P::try_from(pred).ok().unwrap_or_default();
+        }
+    }
+}
+
 /// Vertical intra prediction for a 4x4 block.
 #[allow(dead_code)]
 pub(crate) fn predict_v_4x4<P: Pixel + Into<u32> + TryFrom<u32>>(
@@ -549,6 +611,24 @@ mod tests {
         let mut dst = [0u8; 12];
         predict_smooth_h_block::<u8>(Some(&above), Some(&left), &mut dst, 4, 3, 4);
         assert_eq!(dst, [50, 48, 45, 43, 60, 55, 50, 45, 70, 63, 55, 48]);
+    }
+
+    #[test]
+    fn smooth_block_blends_both_edges_for_non_4x4_region() {
+        let above = [10u8, 20, 30, 40];
+        let left = [50u8, 60, 70];
+        let mut dst = [0u8; 12];
+        predict_smooth_block::<u8>(Some(&above), Some(&left), &mut dst, 4, 3, 4);
+        assert_eq!(dst, [30, 34, 38, 41, 45, 46, 47, 48, 60, 58, 56, 54]);
+    }
+
+    #[test]
+    fn paeth_block_selects_nearest_reference_for_non_4x4_region() {
+        let above = [10u8, 20, 30, 40];
+        let left = [50u8, 60, 70];
+        let mut dst = [0u8; 12];
+        predict_paeth_block::<u8>(Some(&above), Some(&left), Some(15), &mut dst, 4, 3, 4);
+        assert_eq!(dst, [50, 50, 50, 50, 60, 60, 60, 60, 70, 70, 70, 70]);
     }
 
     #[test]

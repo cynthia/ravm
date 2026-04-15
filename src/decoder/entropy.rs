@@ -2,10 +2,11 @@
 //! Boolean arithmetic coder and symbol reading.
 
 use crate::decoder::partition::{partition_variants, BlockSize};
+use crate::decoder::quant::Plane;
 use crate::decoder::symbols::{
     runtime_partition_variants, PartitionType, TileContext,
 };
-use crate::decoder::transform::{intra_ext_tx_type_from_symbol, IntraTxFamily, TxType};
+use crate::decoder::transform::{intra_ext_tx_type_from_symbol, IntraTxFamily, TxSize, TxType};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum EntropyError {
@@ -16,6 +17,16 @@ pub(crate) enum EntropyError {
 pub(crate) struct IntraMode {
     pub joint_mode: u8,
     pub actual_mode: u8,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct CoeffReadContext {
+    pub tx_size: TxSize,
+    pub tx_type: TxType,
+    pub plane: Plane,
+    pub intra: bool,
+    pub x4: usize,
+    pub y4: usize,
 }
 
 const FIRST_MODE_COUNT: u8 = 13;
@@ -348,19 +359,30 @@ impl<'a> BacReader<'a> {
         }
     }
 
-    pub fn read_coeffs_4x4(
+    pub fn read_coeffs(
+        &mut self,
+        tile_ctx: &mut TileContext,
+        ctx: CoeffReadContext,
+        out: &mut [i16; 16],
+    ) -> Result<(), EntropyError> {
+        match ctx.tx_size {
+            TxSize::Tx4x4 => self.read_coeffs_4x4(tile_ctx, out),
+        }
+    }
+
+    fn read_coeffs_4x4(
         &mut self,
         tile_ctx: &mut TileContext,
         out: &mut [i16; 16],
     ) -> Result<(), EntropyError> {
         let all_zero_symbol = self.read_symbol(tile_ctx.all_zero.as_slice());
         tile_ctx.update_all_zero(all_zero_symbol);
-        let all_zero = all_zero_symbol == 0;
-        if all_zero {
+        if all_zero_symbol == 0 {
             *out = [0; 16];
-            return Ok(());
+            Ok(())
+        } else {
+            Err(EntropyError::UnimplementedInM0)
         }
-        Err(EntropyError::UnimplementedInM0)
     }
 
     fn read_symbol_binary(&mut self, p: u32) -> bool {
@@ -512,7 +534,18 @@ mod tests {
         );
         let mut coeffs = [1i16; 16];
         reader
-            .read_coeffs_4x4(&mut tile_ctx, &mut coeffs)
+            .read_coeffs(
+                &mut tile_ctx,
+                CoeffReadContext {
+                    tx_size: TxSize::Tx4x4,
+                    tx_type: TxType::DctDct,
+                    plane: Plane::Y,
+                    intra: true,
+                    x4: 0,
+                    y4: 0,
+                },
+                &mut coeffs,
+            )
             .expect("all-zero coeffs");
         assert_eq!(reader.read_uv_mode_idx(&mut tile_ctx, false), 0);
 
@@ -713,8 +746,38 @@ mod tests {
         let mut tile_ctx = TileContext::new_default();
         let mut coeffs = [1i16; 16];
         reader
-            .read_coeffs_4x4(&mut tile_ctx, &mut coeffs)
+            .read_coeffs(
+                &mut tile_ctx,
+                CoeffReadContext {
+                    tx_size: TxSize::Tx4x4,
+                    tx_type: TxType::DctDct,
+                    plane: Plane::Y,
+                    intra: true,
+                    x4: 0,
+                    y4: 0,
+                },
+                &mut coeffs,
+            )
             .expect("all-zero coeffs");
+        assert_eq!(coeffs, [0i16; 16]);
+    }
+
+    #[test]
+    fn read_coeffs_routes_through_tx_size_scaffold() {
+        let mut reader = BacReader::new(&[0x00, 0x00, 0x00, 0x00]);
+        let mut tile_ctx = TileContext::new_default();
+        let mut coeffs = [1i16; 16];
+        let ctx = CoeffReadContext {
+            tx_size: TxSize::Tx4x4,
+            tx_type: TxType::AdstDct,
+            plane: Plane::Y,
+            intra: true,
+            x4: 3,
+            y4: 5,
+        };
+        reader
+            .read_coeffs(&mut tile_ctx, ctx, &mut coeffs)
+            .expect("all-zero coeffs through tx-size scaffold");
         assert_eq!(coeffs, [0i16; 16]);
     }
 

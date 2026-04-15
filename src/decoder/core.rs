@@ -3,14 +3,15 @@
 
 use crate::bitstream::{FrameType, SequenceHeader, TileGroup, UncompressedFrameHeader};
 use crate::decoder::block_info::{BlockInfo, BlockInfoGrid};
-use crate::decoder::entropy::{BacReader, EntropyError};
+use crate::decoder::entropy::{BacReader, CoeffReadContext, EntropyError};
 use crate::decoder::executor::{Sequential, TileExecutor};
 use crate::decoder::frame_buffer::{FrameBuffer, PlaneBuffer};
 use crate::decoder::intra::{
     predict_d113_4x4, predict_d135_4x4, predict_d157_4x4, predict_d203_4x4, predict_d45_4x4,
     predict_d67_4x4, predict_dc_4x4, predict_dc_block, predict_h_4x4, predict_h_block,
-    predict_paeth_4x4, predict_smooth_4x4, predict_smooth_h_4x4, predict_smooth_h_block,
-    predict_smooth_v_4x4, predict_smooth_v_block, predict_v_4x4,
+    predict_paeth_4x4, predict_paeth_block, predict_smooth_4x4, predict_smooth_block,
+    predict_smooth_h_4x4, predict_smooth_h_block, predict_smooth_v_4x4, predict_smooth_v_block,
+    predict_v_4x4,
     predict_v_block,
 };
 use crate::decoder::kernels;
@@ -217,6 +218,7 @@ fn decode_none_block(
 
     let above = (by >= 1).then(|| gather_above_row(fb.luma(), bx, by, visible_width));
     let left = (bx >= 1).then(|| gather_left_col(fb.luma(), bx, by, visible_height));
+    let above_left = (bx >= 1 && by >= 1).then(|| fb.luma().row(by - 1)[bx - 1]);
     let mut pred = vec![0u8; visible_width * visible_height];
     if above.is_none() && left.is_none() {
         pred.fill(128);
@@ -260,9 +262,26 @@ fn decode_none_block(
                 visible_height,
                 visible_width,
             ),
+            crate::decoder::transform::BaseIntraMode::Smooth => predict_smooth_block(
+                above.as_deref(),
+                left.as_deref(),
+                &mut pred,
+                visible_width,
+                visible_height,
+                visible_width,
+            ),
+            crate::decoder::transform::BaseIntraMode::Paeth => predict_paeth_block(
+                above.as_deref(),
+                left.as_deref(),
+                above_left,
+                &mut pred,
+                visible_width,
+                visible_height,
+                visible_width,
+            ),
             _ => {
                 return Err(CoreDecodeError::Unsupported(
-                    "non-4x4 none blocks currently only support DC/V/H/SMOOTH_V/SMOOTH_H prediction with neighbors",
+                    "non-4x4 none blocks currently only support DC/V/H/SMOOTH/SMOOTH_V/SMOOTH_H/PAETH prediction with neighbors",
                 ))
             }
         }
@@ -388,7 +407,18 @@ fn decode_4x4_block(
 
     let mut coeffs_in = [0i16; 16];
     reader
-        .read_coeffs_4x4(tile_ctx, &mut coeffs_in)
+        .read_coeffs(
+            tile_ctx,
+            CoeffReadContext {
+                tx_size: TxSize::Tx4x4,
+                tx_type,
+                plane: Plane::Y,
+                intra: true,
+                x4: bx / 4,
+                y4: by / 4,
+            },
+            &mut coeffs_in,
+        )
         .map_err(map_entropy_error)?;
     let mut coeffs_out = [0i32; 16];
     quant.dequant_4x4(Plane::Y, &coeffs_in, &mut coeffs_out);
@@ -771,7 +801,7 @@ mod tests {
         assert_eq!(
             err,
             Some(CoreDecodeError::Unsupported(
-                "non-4x4 none blocks currently only support DC/V/H/SMOOTH_V/SMOOTH_H prediction with neighbors",
+                "non-4x4 none blocks currently only support DC/V/H/SMOOTH/SMOOTH_V/SMOOTH_H/PAETH prediction with neighbors",
             ))
         );
     }

@@ -805,4 +805,58 @@ mod tests {
             ))
         );
     }
+
+    #[test]
+    fn dc_only_nonzero_coeff_path_survives_dequant_and_inverse_transform() {
+        let coeffs_in = (0u8..=255).find_map(|first_byte| {
+            let probe = [first_byte, 0x00, 0x00, 0x00];
+            let mut reader = BacReader::new(&probe);
+            let mut tile_ctx = TileContext::new_default();
+            let mut coeffs = [0i16; 16];
+            reader
+                .read_coeffs(
+                    &mut tile_ctx,
+                    CoeffReadContext {
+                        tx_size: TxSize::Tx4x4,
+                        tx_type: TxType::DctDct,
+                        plane: Plane::Y,
+                        intra: true,
+                        x4: 0,
+                        y4: 0,
+                    },
+                    &mut coeffs,
+                )
+                .ok()
+                .filter(|_| coeffs[0] != 0 && coeffs[1..].iter().all(|&c| c == 0))
+                .map(|_| coeffs)
+        });
+
+        let coeffs_in = coeffs_in.expect("probe reaching dc-only nonzero coeff path");
+        let mut coeffs_out = [0i32; 16];
+        QuantContext {
+            base_q_idx: 16,
+            delta_q_y_dc: 0,
+            delta_q_u_dc: 0,
+            delta_q_u_ac: 0,
+            delta_q_v_dc: 0,
+            delta_q_v_ac: 0,
+            using_qmatrix: false,
+            qm_y: 0,
+            qm_u: 0,
+            qm_v: 0,
+        }
+        .dequant_4x4(Plane::Y, &coeffs_in, &mut coeffs_out);
+
+        let mut residual = [0i16; 16];
+        inverse_transform(
+            kernels::detect(),
+            TxSize::Tx4x4,
+            TxType::DctDct,
+            &coeffs_out,
+            &mut residual,
+            4,
+        );
+
+        assert!(residual.iter().any(|&v| v != 0));
+    }
 }

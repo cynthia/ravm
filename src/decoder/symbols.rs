@@ -29,6 +29,10 @@ pub(crate) const PARTITION_DO_EXT_CDF: [[u16; 2]; 3] = [
     [16384, 32767],
     [16384, 32767],
 ];
+pub(crate) const PARTITION_DO_UNEVEN_4WAY_CDF: [[[u16; 2]; 3]; 2] = [
+    [[16384, 32767], [16384, 32767], [16384, 32767]],
+    [[16384, 32767], [16384, 32767], [16384, 32767]],
+];
 pub(crate) const PARTITION_CDF_CTX0: [u16; 10] = [
     4096, 8192, 12288, 16384, 19660, 22936, 25600, 28160, 30464, 32767,
 ];
@@ -118,6 +122,7 @@ pub(crate) struct TileContext {
     pub partition_do_square_split: [CdfState<2>; 3],
     pub partition_rect_type: [CdfState<2>; 3],
     pub partition_do_ext: [CdfState<2>; 3],
+    pub partition_do_uneven_4way: [[CdfState<2>; 3]; 2],
     pub partition_ctx: [CdfState<10>; 3],
     pub skip: CdfState<2>,
     pub y_mode_set: CdfState<4>,
@@ -133,6 +138,7 @@ pub(crate) struct DefaultTileCdfs {
     partition_do_square_split: [[u16; 2]; 3],
     partition_rect_type: [[u16; 2]; 3],
     partition_do_ext: [[u16; 2]; 3],
+    partition_do_uneven_4way: [[[u16; 2]; 3]; 2],
     partition_ctx: [[u16; 10]; 3],
     skip: [u16; 2],
     y_mode_set: [u16; 4],
@@ -149,6 +155,7 @@ impl DefaultTileCdfs {
             partition_do_square_split: PARTITION_DO_SQUARE_SPLIT_CDF,
             partition_rect_type: PARTITION_RECT_TYPE_CDF,
             partition_do_ext: PARTITION_DO_EXT_CDF,
+            partition_do_uneven_4way: PARTITION_DO_UNEVEN_4WAY_CDF,
             partition_ctx: [PARTITION_CDF_CTX0, PARTITION_CDF_CTX1, PARTITION_CDF_CTX2],
             skip: SKIP_CDF,
             y_mode_set: Y_MODE_SET_CDF,
@@ -191,6 +198,18 @@ impl TileContext {
                 CdfState::new(defaults.partition_do_ext[0]),
                 CdfState::new(defaults.partition_do_ext[1]),
                 CdfState::new(defaults.partition_do_ext[2]),
+            ],
+            partition_do_uneven_4way: [
+                [
+                    CdfState::new(defaults.partition_do_uneven_4way[0][0]),
+                    CdfState::new(defaults.partition_do_uneven_4way[0][1]),
+                    CdfState::new(defaults.partition_do_uneven_4way[0][2]),
+                ],
+                [
+                    CdfState::new(defaults.partition_do_uneven_4way[1][0]),
+                    CdfState::new(defaults.partition_do_uneven_4way[1][1]),
+                    CdfState::new(defaults.partition_do_uneven_4way[1][2]),
+                ],
             ],
             partition_ctx: [
                 CdfState::new(defaults.partition_ctx[0]),
@@ -241,6 +260,10 @@ impl TileContext {
         self.updates_enabled
     }
 
+    pub fn partition_do_uneven_4way_cdf(&self, rect_type: usize, ctx: usize) -> &[u16] {
+        self.partition_do_uneven_4way[rect_type.min(1)][ctx.min(2)].as_slice()
+    }
+
     pub fn update_skip(&mut self, symbol: usize) {
         if self.updates_enabled {
             self.skip.update(symbol);
@@ -286,6 +309,17 @@ impl TileContext {
     pub fn update_partition_do_ext(&mut self, ctx: usize, symbol: usize) {
         if self.updates_enabled {
             self.partition_do_ext[ctx.min(2)].update(symbol);
+        }
+    }
+
+    pub fn update_partition_do_uneven_4way(
+        &mut self,
+        rect_type: usize,
+        ctx: usize,
+        symbol: usize,
+    ) {
+        if self.updates_enabled {
+            self.partition_do_uneven_4way[rect_type.min(1)][ctx.min(2)].update(symbol);
         }
     }
 
@@ -335,6 +369,12 @@ fn active_default_cdf_bytes() -> Vec<u8> {
     out.extend_from_slice(&cdf_u16_bytes(&PARTITION_DO_EXT_CDF[0]));
     out.extend_from_slice(&cdf_u16_bytes(&PARTITION_DO_EXT_CDF[1]));
     out.extend_from_slice(&cdf_u16_bytes(&PARTITION_DO_EXT_CDF[2]));
+    out.extend_from_slice(&cdf_u16_bytes(&PARTITION_DO_UNEVEN_4WAY_CDF[0][0]));
+    out.extend_from_slice(&cdf_u16_bytes(&PARTITION_DO_UNEVEN_4WAY_CDF[0][1]));
+    out.extend_from_slice(&cdf_u16_bytes(&PARTITION_DO_UNEVEN_4WAY_CDF[0][2]));
+    out.extend_from_slice(&cdf_u16_bytes(&PARTITION_DO_UNEVEN_4WAY_CDF[1][0]));
+    out.extend_from_slice(&cdf_u16_bytes(&PARTITION_DO_UNEVEN_4WAY_CDF[1][1]));
+    out.extend_from_slice(&cdf_u16_bytes(&PARTITION_DO_UNEVEN_4WAY_CDF[1][2]));
     out.extend_from_slice(&cdf_u16_bytes(&PARTITION_CDF_CTX0));
     out.extend_from_slice(&cdf_u16_bytes(&PARTITION_CDF_CTX1));
     out.extend_from_slice(&cdf_u16_bytes(&PARTITION_CDF_CTX2));
@@ -390,6 +430,10 @@ mod tests {
         );
         assert_eq!(tile.partition_rect_type[0].as_slice(), &PARTITION_RECT_TYPE_CDF[0]);
         assert_eq!(tile.partition_do_ext[0].as_slice(), &PARTITION_DO_EXT_CDF[0]);
+        assert_eq!(
+            tile.partition_do_uneven_4way[0][0].as_slice(),
+            &PARTITION_DO_UNEVEN_4WAY_CDF[0][0]
+        );
         assert_eq!(tile.y_mode_set.as_slice(), &Y_MODE_SET_CDF);
         assert_eq!(tile.y_mode_idx[0].as_slice(), &Y_MODE_IDX_CDF[0]);
         assert_eq!(tile.uv_mode[0].as_slice(), &UV_MODE_CDF[0]);
@@ -417,6 +461,7 @@ mod tests {
         tile.partition_do_square_split[0].update(1);
         tile.partition_rect_type[0].update(1);
         tile.partition_do_ext[0].update(1);
+        tile.partition_do_uneven_4way[0][0].update(1);
         tile.skip.update(1);
         tile.y_mode_set.update(1);
         tile.y_mode_idx[0].update(4);
@@ -431,6 +476,10 @@ mod tests {
         );
         assert_eq!(tile.partition_rect_type[0].as_slice(), &PARTITION_RECT_TYPE_CDF[0]);
         assert_eq!(tile.partition_do_ext[0].as_slice(), &PARTITION_DO_EXT_CDF[0]);
+        assert_eq!(
+            tile.partition_do_uneven_4way[0][0].as_slice(),
+            &PARTITION_DO_UNEVEN_4WAY_CDF[0][0]
+        );
         assert_eq!(tile.skip.as_slice(), &SKIP_CDF);
         assert_eq!(tile.y_mode_set.as_slice(), &Y_MODE_SET_CDF);
         assert_eq!(tile.y_mode_idx[0].as_slice(), &Y_MODE_IDX_CDF[0]);
@@ -442,7 +491,7 @@ mod tests {
     #[test]
     fn active_default_cdfs_hash_stably() {
         let digest = md5::compute(active_default_cdf_bytes());
-        assert_eq!(format!("{digest:x}"), "4a6ca338630b9902bec7d9f7392b0f21");
+        assert_eq!(format!("{digest:x}"), "76ccb073e81bbae20a74a4a5f9c624c4");
     }
 
     #[test]

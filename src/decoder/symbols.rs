@@ -72,13 +72,13 @@ pub(crate) enum PartitionType {
     None,
     Horz,
     Vert,
+    Horz3,
+    Vert3,
+    Horz4A,
+    Horz4B,
+    Vert4A,
+    Vert4B,
     Split,
-    HorzA,
-    HorzB,
-    VertA,
-    VertB,
-    Horz4,
-    Vert4,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

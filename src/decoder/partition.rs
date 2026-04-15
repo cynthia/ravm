@@ -30,19 +30,6 @@ impl BlockSize {
         }
     }
 
-    pub fn quarter_h(self) -> Self {
-        Self {
-            width: self.width,
-            height: self.height / 4,
-        }
-    }
-
-    pub fn quarter_w(self) -> Self {
-        Self {
-            width: self.width / 4,
-            height: self.height,
-        }
-    }
 }
 
 pub(crate) fn partition_variants(bsize: BlockSize) -> Vec<PartitionType> {
@@ -53,9 +40,9 @@ pub(crate) fn partition_variants(bsize: BlockSize) -> Vec<PartitionType> {
     }
 
     let candidates: &[PartitionType] = if bsize.width == bsize.height {
-        &[None, Horz, Vert, Split, HorzA, HorzB, VertA, VertB, Horz4, Vert4]
+        &[None, Horz, Vert, Horz3, Vert3, Horz4A, Horz4B, Vert4A, Vert4B, Split]
     } else {
-        &[None, Horz, Vert, Split, HorzA, HorzB, VertA, VertB]
+        &[None, Horz, Vert, Horz3, Vert3, Split]
     };
 
     candidates
@@ -98,65 +85,119 @@ pub(crate) fn partition_children(
             };
             vec![(x, y, child), (x + child.width, y, child)]
         }
-        HorzA => {
-            let split = bsize.split();
-            let bottom = BlockSize {
-                width: bsize.width,
-                height: split.height,
-            };
-            vec![
-                (x, y, split),
-                (x + split.width, y, split),
-                (x, y + split.height, bottom),
-            ]
-        }
-        HorzB => {
-            let split = bsize.split();
+        Horz3 => {
             let top = BlockSize {
                 width: bsize.width,
-                height: split.height,
+                height: bsize.height / 4,
+            };
+            let middle = BlockSize {
+                width: bsize.width,
+                height: bsize.height / 2,
             };
             vec![
                 (x, y, top),
-                (x, y + split.height, split),
-                (x + split.width, y + split.height, split),
+                (x, y + top.height, middle),
+                (x, y + top.height + middle.height, top),
             ]
         }
-        VertA => {
-            let split = bsize.split();
-            let right = BlockSize {
-                width: split.width,
+        Vert3 => {
+            let left = BlockSize {
+                width: bsize.width / 4,
                 height: bsize.height,
             };
-            vec![
-                (x, y, split),
-                (x, y + split.height, split),
-                (x + split.width, y, right),
-            ]
-        }
-        VertB => {
-            let split = bsize.split();
-            let left = BlockSize {
-                width: split.width,
+            let middle = BlockSize {
+                width: bsize.width / 2,
                 height: bsize.height,
             };
             vec![
                 (x, y, left),
-                (x + split.width, y, split),
-                (x + split.width, y + split.height, split),
+                (x + left.width, y, middle),
+                (x + left.width + middle.width, y, left),
             ]
         }
-        Horz4 => {
-            let child = bsize.quarter_h();
-            (0..4)
-                .map(|i| (x, y + i * child.height, child))
-                .collect()
+        Horz4A => {
+            let unit = bsize.height / 8;
+            let size0 = BlockSize {
+                width: bsize.width,
+                height: unit,
+            };
+            let size1 = BlockSize {
+                width: bsize.width,
+                height: unit * 2,
+            };
+            let size2 = BlockSize {
+                width: bsize.width,
+                height: unit * 4,
+            };
+            vec![
+                (x, y, size0),
+                (x, y + size0.height, size1),
+                (x, y + size0.height + size1.height, size2),
+                (x, y + size0.height + size1.height + size2.height, size0),
+            ]
         }
-        Vert4 => {
-            let child = bsize.quarter_w();
-            (0..4)
-                .map(|i| (x + i * child.width, y, child))
-                .collect()
+        Horz4B => {
+            let unit = bsize.height / 8;
+            let size0 = BlockSize {
+                width: bsize.width,
+                height: unit,
+            };
+            let size1 = BlockSize {
+                width: bsize.width,
+                height: unit * 4,
+            };
+            let size2 = BlockSize {
+                width: bsize.width,
+                height: unit * 2,
+            };
+            vec![
+                (x, y, size0),
+                (x, y + size0.height, size1),
+                (x, y + size0.height + size1.height, size2),
+                (x, y + size0.height + size1.height + size2.height, size0),
+            ]
+        }
+        Vert4A => {
+            let unit = bsize.width / 8;
+            let size0 = BlockSize {
+                width: unit,
+                height: bsize.height,
+            };
+            let size1 = BlockSize {
+                width: unit * 2,
+                height: bsize.height,
+            };
+            let size2 = BlockSize {
+                width: unit * 4,
+                height: bsize.height,
+            };
+            vec![
+                (x, y, size0),
+                (x + size0.width, y, size1),
+                (x + size0.width + size1.width, y, size2),
+                (x + size0.width + size1.width + size2.width, y, size0),
+            ]
+        }
+        Vert4B => {
+            let unit = bsize.width / 8;
+            let size0 = BlockSize {
+                width: unit,
+                height: bsize.height,
+            };
+            let size1 = BlockSize {
+                width: unit * 4,
+                height: bsize.height,
+            };
+            let size2 = BlockSize {
+                width: unit * 2,
+                height: bsize.height,
+            };
+            vec![
+                (x, y, size0),
+                (x + size0.width, y, size1),
+                (x + size0.width + size1.width, y, size2),
+                (x + size0.width + size1.width + size2.width, y, size0),
+            ]
         }
     }
 }
@@ -264,53 +305,55 @@ mod tests {
                 ],
             ),
             (
-                PartitionType::HorzA,
-                vec![
-                    (0, 0, BlockSize { width: 8, height: 8 }),
-                    (8, 0, BlockSize { width: 8, height: 8 }),
-                    (0, 8, BlockSize { width: 16, height: 8 }),
-                ],
-            ),
-            (
-                PartitionType::HorzB,
-                vec![
-                    (0, 0, BlockSize { width: 16, height: 8 }),
-                    (0, 8, BlockSize { width: 8, height: 8 }),
-                    (8, 8, BlockSize { width: 8, height: 8 }),
-                ],
-            ),
-            (
-                PartitionType::VertA,
-                vec![
-                    (0, 0, BlockSize { width: 8, height: 8 }),
-                    (0, 8, BlockSize { width: 8, height: 8 }),
-                    (8, 0, BlockSize { width: 8, height: 16 }),
-                ],
-            ),
-            (
-                PartitionType::VertB,
-                vec![
-                    (0, 0, BlockSize { width: 8, height: 16 }),
-                    (8, 0, BlockSize { width: 8, height: 8 }),
-                    (8, 8, BlockSize { width: 8, height: 8 }),
-                ],
-            ),
-            (
-                PartitionType::Horz4,
+                PartitionType::Horz3,
                 vec![
                     (0, 0, BlockSize { width: 16, height: 4 }),
-                    (0, 4, BlockSize { width: 16, height: 4 }),
-                    (0, 8, BlockSize { width: 16, height: 4 }),
+                    (0, 4, BlockSize { width: 16, height: 8 }),
                     (0, 12, BlockSize { width: 16, height: 4 }),
                 ],
             ),
             (
-                PartitionType::Vert4,
+                PartitionType::Vert3,
                 vec![
                     (0, 0, BlockSize { width: 4, height: 16 }),
-                    (4, 0, BlockSize { width: 4, height: 16 }),
-                    (8, 0, BlockSize { width: 4, height: 16 }),
+                    (4, 0, BlockSize { width: 8, height: 16 }),
                     (12, 0, BlockSize { width: 4, height: 16 }),
+                ],
+            ),
+            (
+                PartitionType::Horz4A,
+                vec![
+                    (0, 0, BlockSize { width: 16, height: 2 }),
+                    (0, 2, BlockSize { width: 16, height: 4 }),
+                    (0, 6, BlockSize { width: 16, height: 8 }),
+                    (0, 14, BlockSize { width: 16, height: 2 }),
+                ],
+            ),
+            (
+                PartitionType::Horz4B,
+                vec![
+                    (0, 0, BlockSize { width: 16, height: 2 }),
+                    (0, 2, BlockSize { width: 16, height: 8 }),
+                    (0, 10, BlockSize { width: 16, height: 4 }),
+                    (0, 14, BlockSize { width: 16, height: 2 }),
+                ],
+            ),
+            (
+                PartitionType::Vert4A,
+                vec![
+                    (0, 0, BlockSize { width: 2, height: 16 }),
+                    (2, 0, BlockSize { width: 4, height: 16 }),
+                    (6, 0, BlockSize { width: 8, height: 16 }),
+                    (14, 0, BlockSize { width: 2, height: 16 }),
+                ],
+            ),
+            (
+                PartitionType::Vert4B,
+                vec![
+                    (0, 0, BlockSize { width: 2, height: 16 }),
+                    (2, 0, BlockSize { width: 8, height: 16 }),
+                    (10, 0, BlockSize { width: 4, height: 16 }),
+                    (14, 0, BlockSize { width: 2, height: 16 }),
                 ],
             ),
         ];

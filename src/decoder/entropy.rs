@@ -117,18 +117,20 @@ impl<'a> BacReader<'a> {
                     self.read_symbol(tile_ctx.partition_do_uneven_4way_cdf(rect_symbol, ctx));
                 tile_ctx.update_partition_do_uneven_4way(rect_symbol, ctx, uneven_symbol);
                 if uneven_symbol == 1 {
-                    let _uneven_type = self.read_bool_unbiased();
+                    let uneven_type = self.read_bool_unbiased();
                     return match rect_partition {
-                        Horz if variants.contains(&Horz4) => Horz4,
-                        Vert if variants.contains(&Vert4) => Vert4,
-                        Horz if variants.contains(&HorzA) => HorzA,
-                        Vert if variants.contains(&VertA) => VertA,
+                        Horz if !uneven_type && variants.contains(&Horz4A) => Horz4A,
+                        Horz if uneven_type && variants.contains(&Horz4B) => Horz4B,
+                        Vert if !uneven_type && variants.contains(&Vert4A) => Vert4A,
+                        Vert if uneven_type && variants.contains(&Vert4B) => Vert4B,
+                        Horz if variants.contains(&Horz3) => Horz3,
+                        Vert if variants.contains(&Vert3) => Vert3,
                         _ => rect_partition,
                     };
                 }
                 return match rect_partition {
-                    Horz if variants.contains(&HorzA) => HorzA,
-                    Vert if variants.contains(&VertA) => VertA,
+                    Horz if variants.contains(&Horz3) => Horz3,
+                    Vert if variants.contains(&Vert3) => Vert3,
                     _ => rect_partition,
                 };
             }
@@ -385,17 +387,31 @@ mod tests {
                 let partition = reader.read_partition(
                     &mut tile_ctx,
                     BlockSize {
-                        width: 16,
-                        height: 16,
+                        width: 32,
+                        height: 32,
                     },
                     0,
                 );
-                matches!(partition, PartitionType::Horz4 | PartitionType::Vert4)
-                    .then_some(partition)
+                matches!(
+                    partition,
+                    PartitionType::Horz4A
+                        | PartitionType::Horz4B
+                        | PartitionType::Vert4A
+                        | PartitionType::Vert4B
+                )
+                .then_some(partition)
             })
         });
         assert!(
-            matches!(partition, Some(PartitionType::Horz4 | PartitionType::Vert4)),
+            matches!(
+                partition,
+                Some(
+                    PartitionType::Horz4A
+                        | PartitionType::Horz4B
+                        | PartitionType::Vert4A
+                        | PartitionType::Vert4B
+                )
+            ),
             "no two-byte probe reached the ext uneven-4way path"
         );
     }

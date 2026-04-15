@@ -80,7 +80,15 @@ fn coeff_br_luma_ctx_for_eob_4x4(eob: usize, coeff_base_eob: u8) -> usize {
 }
 
 fn coeff_base_symbols_needed_for_eob_4x4(eob: usize) -> usize {
-    eob.min(14)
+    match eob {
+        0 => 0,
+        1 | 2 => eob,
+        _ => (eob - 1).min(14),
+    }
+}
+
+fn coeff_br_needed_for_eob_level(coeff_base_eob: u8) -> bool {
+    coeff_base_eob >= 3
 }
 
 fn materialize_coeffs_4x4(
@@ -105,6 +113,50 @@ fn materialize_coeffs_4x4(
     out: &mut [i16; 16],
 ) -> Result<(), EntropyError> {
     *out = [0; 16];
+    if eob < DEFAULT_SCAN_4X4.len() {
+        let coeff_bases = [
+            coeff_base,
+            coeff_base_ctx1,
+            coeff_base_ctx2,
+            coeff_base_ctx3,
+            coeff_base_ctx4,
+            coeff_base_ctx5,
+            coeff_base_ctx6,
+            coeff_base_ctx7,
+            coeff_base_ctx8,
+            coeff_base_ctx9,
+            coeff_base_ctx10,
+            coeff_base_ctx11,
+            coeff_base_ctx12,
+            coeff_base_ctx13,
+        ];
+
+        if eob == 0 {
+            let level = decode_eob_level(coeff_base_eob, coeff_br);
+            out[0] = if dc_sign { -level } else { level };
+            return Ok(());
+        }
+
+        let ac_level = decode_eob_level(coeff_base_eob, coeff_br);
+        out[DEFAULT_SCAN_4X4[eob]] = ac_level;
+
+        let prior_ac_count = eob.saturating_sub(1).min(coeff_bases.len());
+        for (base_idx, &coeff_base_symbol) in coeff_bases.iter().take(prior_ac_count).enumerate() {
+            if let Some(level) = decode_base_level(coeff_base_symbol) {
+                out[DEFAULT_SCAN_4X4[eob - 1 - base_idx]] = level;
+            }
+        }
+
+        if eob <= 2 {
+            let dc_base_idx = eob - 1;
+            if let Some(dc_level) = decode_base_level(coeff_bases[dc_base_idx]) {
+                out[0] = if dc_sign { -dc_level } else { dc_level };
+            }
+        }
+
+        return Ok(());
+    }
+
     match eob {
         0 => {
             let level = decode_eob_level(coeff_base_eob, coeff_br);
@@ -1158,15 +1210,19 @@ impl<'a> BacReader<'a> {
             {
                 *coeff_base = self.read_coeff_base_tx4x4_ctx_symbol(tile_ctx, ctx_idx, 0, 0);
             }
-            let coeff_br = match coeff_br_luma_ctx_for_eob_4x4(eob, coeff_base_eob) {
-                0 => self.read_coeff_br_luma_ctx0_symbol(tile_ctx, 0),
-                1 => self.read_coeff_br_luma_ctx1_symbol(tile_ctx, 0),
-                2 => self.read_coeff_br_luma_ctx2_symbol(tile_ctx, 0),
-                3 => self.read_coeff_br_luma_ctx3_symbol(tile_ctx, 0),
-                4 => self.read_coeff_br_luma_ctx4_symbol(tile_ctx, 0),
-                5 => self.read_coeff_br_luma_ctx5_symbol(tile_ctx, 0),
-                6 => self.read_coeff_br_luma_ctx6_symbol(tile_ctx, 0),
-                _ => unreachable!("4x4 staged coeff_br context selector only returns 0..=6"),
+            let coeff_br = if coeff_br_needed_for_eob_level(coeff_base_eob) {
+                match coeff_br_luma_ctx_for_eob_4x4(eob, coeff_base_eob) {
+                    0 => self.read_coeff_br_luma_ctx0_symbol(tile_ctx, 0),
+                    1 => self.read_coeff_br_luma_ctx1_symbol(tile_ctx, 0),
+                    2 => self.read_coeff_br_luma_ctx2_symbol(tile_ctx, 0),
+                    3 => self.read_coeff_br_luma_ctx3_symbol(tile_ctx, 0),
+                    4 => self.read_coeff_br_luma_ctx4_symbol(tile_ctx, 0),
+                    5 => self.read_coeff_br_luma_ctx5_symbol(tile_ctx, 0),
+                    6 => self.read_coeff_br_luma_ctx6_symbol(tile_ctx, 0),
+                    _ => unreachable!("4x4 staged coeff_br context selector only returns 0..=6"),
+                }
+            } else {
+                0
             };
             materialize_coeffs_4x4(
                 eob,
@@ -1704,9 +1760,19 @@ mod tests {
         assert_eq!(coeff_base_symbols_needed_for_eob_4x4(0), 0);
         assert_eq!(coeff_base_symbols_needed_for_eob_4x4(1), 1);
         assert_eq!(coeff_base_symbols_needed_for_eob_4x4(2), 2);
-        assert_eq!(coeff_base_symbols_needed_for_eob_4x4(13), 13);
-        assert_eq!(coeff_base_symbols_needed_for_eob_4x4(14), 14);
+        assert_eq!(coeff_base_symbols_needed_for_eob_4x4(3), 2);
+        assert_eq!(coeff_base_symbols_needed_for_eob_4x4(13), 12);
+        assert_eq!(coeff_base_symbols_needed_for_eob_4x4(14), 13);
         assert_eq!(coeff_base_symbols_needed_for_eob_4x4(15), 14);
+    }
+
+    #[test]
+    fn coeff_br_requirement_tracks_eob_level_threshold() {
+        assert!(!coeff_br_needed_for_eob_level(0));
+        assert!(!coeff_br_needed_for_eob_level(1));
+        assert!(!coeff_br_needed_for_eob_level(2));
+        assert!(coeff_br_needed_for_eob_level(3));
+        assert!(coeff_br_needed_for_eob_level(4));
     }
 
     #[test]

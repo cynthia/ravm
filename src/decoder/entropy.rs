@@ -66,9 +66,9 @@ fn coeff_br_luma_ctx_for_eob_4x4(eob: usize, coeff_base_eob: u8) -> usize {
         6
     } else if eob == 15 && coeff_base_eob >= 2 {
         5
-    } else if eob >= 15 {
-        4
     } else if eob >= 14 {
+        4
+    } else if eob >= 13 {
         3
     } else if eob >= 12 {
         2
@@ -1682,8 +1682,8 @@ mod tests {
         assert_eq!(coeff_br_luma_ctx_for_eob_4x4(8, 0), 1);
         assert_eq!(coeff_br_luma_ctx_for_eob_4x4(11, 0), 1);
         assert_eq!(coeff_br_luma_ctx_for_eob_4x4(12, 0), 2);
-        assert_eq!(coeff_br_luma_ctx_for_eob_4x4(13, 0), 2);
-        assert_eq!(coeff_br_luma_ctx_for_eob_4x4(14, 0), 3);
+        assert_eq!(coeff_br_luma_ctx_for_eob_4x4(13, 0), 3);
+        assert_eq!(coeff_br_luma_ctx_for_eob_4x4(14, 0), 4);
         assert_eq!(coeff_br_luma_ctx_for_eob_4x4(15, 0), 4);
         assert_eq!(coeff_br_luma_ctx_for_eob_4x4(15, 2), 5);
         assert_eq!(coeff_br_luma_ctx_for_eob_4x4(15, 3), 6);

@@ -7,8 +7,8 @@ use crate::decoder::entropy::{BacReader, EntropyError};
 use crate::decoder::executor::{Sequential, TileExecutor};
 use crate::decoder::frame_buffer::{FrameBuffer, PlaneBuffer};
 use crate::decoder::intra::{
-    predict_dc_4x4, predict_paeth_4x4, predict_smooth_4x4, predict_smooth_h_4x4,
-    predict_smooth_v_4x4,
+    predict_dc_4x4, predict_h_4x4, predict_paeth_4x4, predict_smooth_4x4,
+    predict_smooth_h_4x4, predict_smooth_v_4x4, predict_v_4x4,
 };
 use crate::decoder::kernels;
 use crate::decoder::partition::{partition_children, BlockSize};
@@ -250,6 +250,12 @@ fn decode_4x4_block(
     match base_intra_mode {
         crate::decoder::transform::BaseIntraMode::Dc => {
             predict_dc_4x4(above.as_ref(), left.as_ref(), &mut pred, 4)
+        }
+        crate::decoder::transform::BaseIntraMode::V => {
+            predict_v_4x4(above.as_ref(), &mut pred, 4)
+        }
+        crate::decoder::transform::BaseIntraMode::H => {
+            predict_h_4x4(left.as_ref(), &mut pred, 4)
         }
         crate::decoder::transform::BaseIntraMode::Smooth => {
             predict_smooth_4x4(above.as_ref(), left.as_ref(), &mut pred, 4)

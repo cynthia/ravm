@@ -7,8 +7,8 @@ use crate::decoder::entropy::{BacReader, EntropyError};
 use crate::decoder::executor::{Sequential, TileExecutor};
 use crate::decoder::frame_buffer::{FrameBuffer, PlaneBuffer};
 use crate::decoder::intra::{
-    predict_d113_4x4, predict_d157_4x4, predict_d203_4x4, predict_d45_4x4, predict_d67_4x4,
-    predict_dc_4x4, predict_h_4x4, predict_paeth_4x4, predict_smooth_4x4,
+    predict_d113_4x4, predict_d135_4x4, predict_d157_4x4, predict_d203_4x4, predict_d45_4x4,
+    predict_d67_4x4, predict_dc_4x4, predict_h_4x4, predict_paeth_4x4, predict_smooth_4x4,
     predict_smooth_h_4x4, predict_smooth_v_4x4, predict_v_4x4,
 };
 use crate::decoder::kernels;
@@ -274,6 +274,9 @@ fn decode_4x4_block(
         crate::decoder::transform::BaseIntraMode::D67 => {
             predict_d67_4x4(above_wide.as_ref(), &mut pred, 4)
         }
+        crate::decoder::transform::BaseIntraMode::D135 => {
+            predict_d135_4x4(above.as_ref(), left.as_ref(), above_left, &mut pred, 4)
+        }
         crate::decoder::transform::BaseIntraMode::D113 => {
             predict_d113_4x4(above.as_ref(), left.as_ref(), above_left, &mut pred, 4)
         }
@@ -295,7 +298,6 @@ fn decode_4x4_block(
         crate::decoder::transform::BaseIntraMode::Paeth => {
             predict_paeth_4x4(above.as_ref(), left.as_ref(), above_left, &mut pred, 4)
         }
-        _ => return Err(CoreDecodeError::UnexpectedMode),
     }
 
     let mut coeffs_in = [0i16; 16];

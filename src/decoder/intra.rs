@@ -118,6 +118,17 @@ pub(crate) fn predict_d113_4x4<P: Pixel + Into<u32> + TryFrom<u32>>(
     predict_z2_4x4(above, left, above_left, 24, 178, dst, stride);
 }
 
+/// Directional 135-degree intra prediction for a 4x4 block.
+pub(crate) fn predict_d135_4x4<P: Pixel + Into<u32> + TryFrom<u32>>(
+    above: Option<&[P; 4]>,
+    left: Option<&[P; 4]>,
+    above_left: Option<P>,
+    dst: &mut [P],
+    stride: usize,
+) {
+    predict_z2_4x4(above, left, above_left, 64, 64, dst, stride);
+}
+
 fn predict_z1_4x4<P: Pixel + Into<u32> + TryFrom<u32>>(
     above: Option<&[P; 9]>,
     dx: i32,
@@ -465,5 +476,14 @@ mod tests {
         let mut dst = [0u8; 16];
         predict_d113_4x4::<u8>(Some(&above), Some(&left), Some(15), &mut dst, 4);
         assert_eq!(dst, [12, 16, 26, 36, 14, 13, 23, 33, 23, 11, 19, 29, 52, 13, 15, 25]);
+    }
+
+    #[test]
+    fn d135_blends_top_and_left_symmetrically() {
+        let above = [10u8, 20, 30, 40];
+        let left = [50u8, 60, 70, 80];
+        let mut dst = [0u8; 16];
+        predict_d135_4x4::<u8>(Some(&above), Some(&left), Some(15), &mut dst, 4);
+        assert_eq!(dst, [15, 10, 20, 30, 50, 15, 10, 20, 60, 50, 15, 10, 70, 60, 50, 15]);
     }
 }

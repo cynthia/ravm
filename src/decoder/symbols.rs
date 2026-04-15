@@ -271,6 +271,24 @@ impl TileContext {
         }
     }
 
+    pub fn update_partition_rect_type(&mut self, ctx: usize, symbol: usize) {
+        if self.updates_enabled {
+            self.partition_rect_type[ctx.min(2)].update(symbol);
+        }
+    }
+
+    pub fn update_partition_do_square_split(&mut self, ctx: usize, symbol: usize) {
+        if self.updates_enabled {
+            self.partition_do_square_split[ctx.min(2)].update(symbol);
+        }
+    }
+
+    pub fn update_partition_do_ext(&mut self, ctx: usize, symbol: usize) {
+        if self.updates_enabled {
+            self.partition_do_ext[ctx.min(2)].update(symbol);
+        }
+    }
+
     pub fn update_all_zero(&mut self, symbol: usize) {
         if self.updates_enabled {
             self.all_zero.update(symbol);

@@ -83,24 +83,54 @@ impl<'a> BacReader<'a> {
         bsize: BlockSize,
         ctx: usize,
     ) -> PartitionType {
+        use PartitionType::*;
+
         let variants = partition_variants(bsize);
         if variants.len() == 1 {
             return variants[0];
         }
+
+        let do_split = self.read_symbol(tile_ctx.partition_do_split_cdf(ctx));
+        tile_ctx.update_partition(bsize, ctx, if do_split == 0 { None } else { Split });
+        if do_split == 0 {
+            return None;
+        }
+
+        if variants.contains(&Split) {
+            let do_square_split = self.read_symbol(tile_ctx.partition_do_square_split_cdf(ctx));
+            tile_ctx.update_partition_do_square_split(ctx, do_square_split);
+            if do_square_split == 1 {
+                return Split;
+            }
+        }
+
+        let has_horz = variants.contains(&Horz);
+        let has_vert = variants.contains(&Vert);
+        if has_horz && has_vert {
+            let rect_symbol = self.read_symbol(tile_ctx.partition_rect_type[ctx.min(2)].as_slice());
+            tile_ctx.update_partition_rect_type(ctx, rect_symbol);
+            let rect_partition = if rect_symbol == 0 { Horz } else { Vert };
+            let ext_symbol = self.read_symbol(tile_ctx.partition_do_ext[ctx.min(2)].as_slice());
+            tile_ctx.update_partition_do_ext(ctx, ext_symbol);
+            if ext_symbol == 1 {
+                return match rect_partition {
+                    Horz if variants.contains(&HorzA) => HorzA,
+                    Vert if variants.contains(&VertA) => VertA,
+                    _ => rect_partition,
+                };
+            }
+            return rect_partition;
+        }
+
         let runtime_variants = runtime_partition_variants(&variants);
         if runtime_variants.len() == 2 {
-            let symbol = self.read_symbol(tile_ctx.partition_do_split_cdf(ctx));
-            let partition = runtime_variants[symbol];
-            tile_ctx.update_partition(bsize, ctx, partition);
-            return partition;
+            return runtime_variants[1];
         }
 
         let base_cdf = tile_ctx.partition_cdf(ctx);
         let cdf = partition_cdf_for_variants(base_cdf, runtime_variants.len());
         let symbol = self.read_symbol(&cdf);
-        let partition = runtime_variants[symbol];
-        tile_ctx.update_partition(bsize, ctx, partition);
-        partition
+        runtime_variants[symbol]
     }
 
     #[allow(dead_code)]
@@ -307,6 +337,28 @@ mod tests {
         assert_eq!(
             reader.read_partition(&mut tile_ctx, BlockSize::MIN, 2),
             PartitionType::None
+        );
+    }
+
+    #[test]
+    fn read_partition_non_split_rect_path_consumes_rect_type() {
+        let partition = (0u8..=255).find_map(|first_byte| {
+            let buf = [first_byte, 0x00, 0x00, 0x00];
+            let mut reader = BacReader::new(&buf);
+            let mut tile_ctx = TileContext::new_default();
+            let partition = reader.read_partition(
+                &mut tile_ctx,
+                BlockSize {
+                    width: 16,
+                    height: 8,
+                },
+                0,
+            );
+            matches!(partition, PartitionType::Horz | PartitionType::Vert).then_some(partition)
+        });
+        assert!(
+            matches!(partition, Some(PartitionType::Horz | PartitionType::Vert)),
+            "no one-byte probe reached the rect non-ext path"
         );
     }
 

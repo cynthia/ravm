@@ -11,7 +11,7 @@ use crate::decoder::kernels;
 use crate::decoder::partition::{partition_children, BlockSize};
 use crate::decoder::quant::{Plane, QuantContext};
 use crate::decoder::symbols::{PartitionType, TileContext};
-use crate::decoder::transform::{inverse_transform, TxSize, TxType};
+use crate::decoder::transform::{intra_default_tx_type, inverse_transform, TxSize, TxType};
 use crate::format::Subsampling;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -79,6 +79,7 @@ pub(crate) fn decode_frame(
             &mut frame,
             quant,
             frame_header.disable_cdf_update,
+            frame_header.tx_mode,
         ) {
             result = Err(err);
         }
@@ -92,6 +93,7 @@ fn decode_tile(
     fb: &mut FrameBuffer<u8>,
     quant: QuantContext,
     disable_cdf_update: bool,
+    tx_mode: u8,
 ) -> Result<(), CoreDecodeError> {
     let kernels = kernels::detect();
     let mut reader = BacReader::new(tile_data);
@@ -111,6 +113,7 @@ fn decode_tile(
         0,
         BlockSize::SB_M0,
         quant,
+        tx_mode,
     )
 }
 
@@ -124,13 +127,14 @@ fn decode_partition(
     by: usize,
     bsize: BlockSize,
     quant: QuantContext,
+    tx_mode: u8,
 ) -> Result<(), CoreDecodeError> {
     if bx >= fb.luma().width || by >= fb.luma().height {
         return Ok(());
     }
 
     if bsize.is_min() {
-        return decode_4x4_block(reader, tile_ctx, kernels, fb, block_info, bx, by, quant);
+        return decode_4x4_block(reader, tile_ctx, kernels, fb, block_info, bx, by, quant, tx_mode);
     }
 
     let ctx = block_info.partition_ctx(bx, by, bsize);
@@ -150,6 +154,7 @@ fn decode_partition(
             child_y,
             child_size,
             quant,
+            tx_mode,
         )?;
     }
     Ok(())
@@ -199,10 +204,20 @@ fn decode_4x4_block(
     bx: usize,
     by: usize,
     quant: QuantContext,
+    tx_mode: u8,
 ) -> Result<(), CoreDecodeError> {
     let y_mode_ctx = block_info.y_mode_ctx(bx, by);
     let intra_mode = reader.read_intra_mode(tile_ctx, y_mode_ctx);
     if intra_mode != 0 {
+        return Err(CoreDecodeError::UnexpectedMode);
+    }
+    if tx_mode != 0 {
+        return Err(CoreDecodeError::Unsupported(
+            "tx_mode select is not integrated into the 4x4 Rust decode path yet",
+        ));
+    }
+    let tx_type = intra_default_tx_type(intra_mode);
+    if tx_type != TxType::DctDct {
         return Err(CoreDecodeError::UnexpectedMode);
     }
 
@@ -227,7 +242,7 @@ fn decode_4x4_block(
     let mut coeffs_out = [0i32; 16];
     quant.dequant_4x4(Plane::Y, &coeffs_in, &mut coeffs_out);
     let mut residual = [0i16; 16];
-    inverse_transform(kernels, TxSize::Tx4x4, TxType::DctDct, &coeffs_out, &mut residual, 4);
+    inverse_transform(kernels, TxSize::Tx4x4, tx_type, &coeffs_out, &mut residual, 4);
 
     for y in 0..4 {
         if by + y >= fb.luma().height {

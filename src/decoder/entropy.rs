@@ -112,17 +112,13 @@ impl<'a> BacReader<'a> {
     #[allow(dead_code)]
     pub fn read_skip_with_cdf(&mut self, tile_ctx: &mut TileContext) -> bool {
         let symbol = self.read_symbol(tile_ctx.skip.as_slice());
-        if tile_ctx.updates_enabled() {
-            tile_ctx.skip.update(symbol);
-        }
+        tile_ctx.update_skip(symbol);
         symbol == 1
     }
 
     pub fn read_intra_mode(&mut self, tile_ctx: &mut TileContext) -> u8 {
         let symbol = self.read_symbol(tile_ctx.intra_mode.as_slice());
-        if tile_ctx.updates_enabled() {
-            tile_ctx.intra_mode.update(symbol);
-        }
+        tile_ctx.update_intra_mode(symbol);
         symbol as u8
     }
 
@@ -132,9 +128,7 @@ impl<'a> BacReader<'a> {
         out: &mut [i16; 16],
     ) -> Result<(), EntropyError> {
         let all_zero_symbol = self.read_symbol(tile_ctx.all_zero.as_slice());
-        if tile_ctx.updates_enabled() {
-            tile_ctx.all_zero.update(all_zero_symbol);
-        }
+        tile_ctx.update_all_zero(all_zero_symbol);
         let all_zero = all_zero_symbol == 0;
         if all_zero {
             *out = [0; 16];
@@ -230,6 +224,26 @@ mod tests {
         );
         assert!(!reader.read_skip_with_cdf(&mut tile_ctx));
         assert_eq!(reader.read_intra_mode(&mut tile_ctx), 0);
+    }
+
+    #[test]
+    fn disable_cdf_update_keeps_symbol_tables_unchanged() {
+        let mut reader = BacReader::new(&[0x00, 0x00, 0x00, 0x00]);
+        let mut tile_ctx = TileContext::new(false);
+        let skip_before = tile_ctx.skip.as_slice().to_vec();
+        let intra_before = tile_ctx.intra_mode.as_slice().to_vec();
+        let all_zero_before = tile_ctx.all_zero.as_slice().to_vec();
+
+        assert!(!reader.read_skip_with_cdf(&mut tile_ctx));
+        assert_eq!(reader.read_intra_mode(&mut tile_ctx), 0);
+        let mut coeffs = [1i16; 16];
+        reader
+            .read_coeffs_4x4(&mut tile_ctx, &mut coeffs)
+            .expect("all-zero coeffs");
+
+        assert_eq!(tile_ctx.skip.as_slice(), skip_before.as_slice());
+        assert_eq!(tile_ctx.intra_mode.as_slice(), intra_before.as_slice());
+        assert_eq!(tile_ctx.all_zero.as_slice(), all_zero_before.as_slice());
     }
 
     #[test]

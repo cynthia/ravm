@@ -89,32 +89,82 @@ pub(crate) struct TileContext {
     pub all_zero: CdfState<2>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct DefaultTileCdfs {
+    partition_binary: [u16; 2],
+    partition_ctx: [[u16; 10]; 3],
+    skip: [u16; 2],
+    intra_mode: [u16; 13],
+    all_zero: [u16; 2],
+}
+
+impl DefaultTileCdfs {
+    pub const fn new() -> Self {
+        Self {
+            partition_binary: PARTITION_BINARY_CDF,
+            partition_ctx: [PARTITION_CDF_CTX0, PARTITION_CDF_CTX1, PARTITION_CDF_CTX2],
+            skip: SKIP_CDF,
+            intra_mode: INTRA_MODE_CDF,
+            all_zero: ALL_ZERO_CDF,
+        }
+    }
+}
+
 impl TileContext {
     pub fn new_default() -> Self {
         Self::new(true)
     }
 
     pub fn new(updates_enabled: bool) -> Self {
+        Self::from_defaults(DefaultTileCdfs::new(), updates_enabled)
+    }
+
+    pub fn from_defaults(defaults: DefaultTileCdfs, updates_enabled: bool) -> Self {
         Self {
             updates_enabled,
-            partition_binary: CdfState::new(PARTITION_BINARY_CDF),
+            partition_binary: CdfState::new(defaults.partition_binary),
             partition_ctx: [
-                CdfState::new(PARTITION_CDF_CTX0),
-                CdfState::new(PARTITION_CDF_CTX1),
-                CdfState::new(PARTITION_CDF_CTX2),
+                CdfState::new(defaults.partition_ctx[0]),
+                CdfState::new(defaults.partition_ctx[1]),
+                CdfState::new(defaults.partition_ctx[2]),
             ],
-            skip: CdfState::new(SKIP_CDF),
-            intra_mode: CdfState::new(INTRA_MODE_CDF),
-            all_zero: CdfState::new(ALL_ZERO_CDF),
+            skip: CdfState::new(defaults.skip),
+            intra_mode: CdfState::new(defaults.intra_mode),
+            all_zero: CdfState::new(defaults.all_zero),
         }
+    }
+
+    #[cfg(test)]
+    pub fn reset_to_default(&mut self) {
+        let updates_enabled = self.updates_enabled;
+        *self = Self::from_defaults(DefaultTileCdfs::new(), updates_enabled);
     }
 
     pub fn partition_cdf(&self, ctx: usize) -> &[u16] {
         self.partition_ctx[ctx.min(2)].as_slice()
     }
 
+    #[cfg(test)]
     pub fn updates_enabled(&self) -> bool {
         self.updates_enabled
+    }
+
+    pub fn update_skip(&mut self, symbol: usize) {
+        if self.updates_enabled {
+            self.skip.update(symbol);
+        }
+    }
+
+    pub fn update_intra_mode(&mut self, symbol: usize) {
+        if self.updates_enabled {
+            self.intra_mode.update(symbol);
+        }
+    }
+
+    pub fn update_all_zero(&mut self, symbol: usize) {
+        if self.updates_enabled {
+            self.all_zero.update(symbol);
+        }
     }
 
     pub fn update_partition(&mut self, bsize: BlockSize, ctx: usize, symbol: PartitionType) {
@@ -203,6 +253,20 @@ mod tests {
             PartitionType::Split,
         );
         assert_eq!(tile.partition_binary.as_slice(), before.as_slice());
+    }
+
+    #[test]
+    fn tile_context_reset_restores_default_tables() {
+        let mut tile = TileContext::new_default();
+        tile.partition_binary.update(1);
+        tile.skip.update(1);
+        tile.intra_mode.update(4);
+        tile.all_zero.update(1);
+        tile.reset_to_default();
+        assert_eq!(tile.partition_binary.as_slice(), &PARTITION_BINARY_CDF);
+        assert_eq!(tile.skip.as_slice(), &SKIP_CDF);
+        assert_eq!(tile.intra_mode.as_slice(), &INTRA_MODE_CDF);
+        assert_eq!(tile.all_zero.as_slice(), &ALL_ZERO_CDF);
     }
 
     #[test]

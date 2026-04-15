@@ -181,6 +181,34 @@ impl<'a> BacReader<'a> {
         symbol as u8
     }
 
+    #[allow(dead_code)]
+    pub fn read_cfl(&mut self, tile_ctx: &mut TileContext, ctx: usize) -> bool {
+        let symbol = self.read_symbol(tile_ctx.cfl[ctx.min(2)].as_slice());
+        tile_ctx.update_cfl(ctx, symbol);
+        symbol == 1
+    }
+
+    #[allow(dead_code)]
+    pub fn read_cfl_index(&mut self, tile_ctx: &mut TileContext) -> u8 {
+        let symbol = self.read_symbol(tile_ctx.cfl_index.as_slice());
+        tile_ctx.update_cfl_index(symbol);
+        symbol as u8
+    }
+
+    #[allow(dead_code)]
+    pub fn read_cfl_sign(&mut self, tile_ctx: &mut TileContext) -> u8 {
+        let symbol = self.read_symbol(tile_ctx.cfl_sign.as_slice());
+        tile_ctx.update_cfl_sign(symbol);
+        symbol as u8
+    }
+
+    #[allow(dead_code)]
+    pub fn read_cfl_alpha(&mut self, tile_ctx: &mut TileContext, ctx: usize) -> u8 {
+        let symbol = self.read_symbol(tile_ctx.cfl_alpha[ctx.min(5)].as_slice());
+        tile_ctx.update_cfl_alpha(ctx, symbol);
+        symbol as u8
+    }
+
     pub fn read_intra_mode(&mut self, tile_ctx: &mut TileContext, ctx: usize) -> u8 {
         const LUMA_INTRA_MODE_INDEX_COUNT: u8 = 8;
         const FIRST_MODE_COUNT: u8 = 13;
@@ -337,6 +365,10 @@ mod tests {
         let segment_pred_before = tile_ctx.segment_pred[0].as_slice().to_vec();
         let segment_id_before = tile_ctx.spatial_pred_seg_tree[0].as_slice().to_vec();
         let delta_q_before = tile_ctx.delta_q.as_slice().to_vec();
+        let cfl_before = tile_ctx.cfl[0].as_slice().to_vec();
+        let cfl_index_before = tile_ctx.cfl_index.as_slice().to_vec();
+        let cfl_sign_before = tile_ctx.cfl_sign.as_slice().to_vec();
+        let cfl_alpha_before = tile_ctx.cfl_alpha[0].as_slice().to_vec();
         let y_mode_set_before = tile_ctx.y_mode_set.as_slice().to_vec();
         let y_mode_idx_before = tile_ctx.y_mode_idx[0].as_slice().to_vec();
         let y_mode_idx_offset_before = tile_ctx.y_mode_idx_offset[0].as_slice().to_vec();
@@ -347,6 +379,10 @@ mod tests {
         assert!(!reader.read_segment_pred(&mut tile_ctx, 0));
         assert_eq!(reader.read_segment_id(&mut tile_ctx, 0), 0);
         assert_eq!(reader.read_delta_q_symbol(&mut tile_ctx), 0);
+        assert!(!reader.read_cfl(&mut tile_ctx, 0));
+        assert_eq!(reader.read_cfl_index(&mut tile_ctx), 0);
+        assert_eq!(reader.read_cfl_sign(&mut tile_ctx), 0);
+        assert_eq!(reader.read_cfl_alpha(&mut tile_ctx, 0), 0);
         assert_eq!(reader.read_intra_mode(&mut tile_ctx, 0), 0);
         let mut coeffs = [1i16; 16];
         reader
@@ -361,6 +397,10 @@ mod tests {
             segment_id_before.as_slice()
         );
         assert_eq!(tile_ctx.delta_q.as_slice(), delta_q_before.as_slice());
+        assert_eq!(tile_ctx.cfl[0].as_slice(), cfl_before.as_slice());
+        assert_eq!(tile_ctx.cfl_index.as_slice(), cfl_index_before.as_slice());
+        assert_eq!(tile_ctx.cfl_sign.as_slice(), cfl_sign_before.as_slice());
+        assert_eq!(tile_ctx.cfl_alpha[0].as_slice(), cfl_alpha_before.as_slice());
         assert_eq!(tile_ctx.y_mode_set.as_slice(), y_mode_set_before.as_slice());
         assert_eq!(tile_ctx.y_mode_idx[0].as_slice(), y_mode_idx_before.as_slice());
         assert_eq!(
@@ -391,6 +431,16 @@ mod tests {
         let mut reader = BacReader::new(&[0x00, 0x00, 0x00, 0x00]);
         let mut tile_ctx = TileContext::new_default();
         assert_eq!(reader.read_delta_q_symbol(&mut tile_ctx), 0);
+    }
+
+    #[test]
+    fn read_cfl_symbols_use_real_default_tables() {
+        let mut reader = BacReader::new(&[0x00, 0x00, 0x00, 0x00]);
+        let mut tile_ctx = TileContext::new_default();
+        assert!(!reader.read_cfl(&mut tile_ctx, 0));
+        assert_eq!(reader.read_cfl_index(&mut tile_ctx), 0);
+        assert_eq!(reader.read_cfl_sign(&mut tile_ctx), 0);
+        assert_eq!(reader.read_cfl_alpha(&mut tile_ctx, 0), 0);
     }
 
     #[test]

@@ -58,6 +58,22 @@ pub(crate) const SPATIAL_PRED_SEG_TREE_CDF: [[u16; 8]; 3] = [
 ];
 pub(crate) const DELTA_Q_CDF: [u16; 8] =
     [16594, 23325, 26424, 28225, 29358, 30099, 30613, 32767];
+pub(crate) const CFL_CDF: [[u16; 2]; 3] = [
+    [20441, 32767],
+    [11610, 32767],
+    [4643, 32767],
+];
+pub(crate) const CFL_INDEX_CDF: [u16; 2] = [12507, 32767];
+pub(crate) const CFL_SIGN_CDF: [u16; 8] =
+    [2421, 4332, 11256, 12766, 21386, 28725, 32087, 32767];
+pub(crate) const CFL_ALPHA_CDF: [[u16; 8]; 6] = [
+    [21679, 25305, 30646, 31512, 32537, 32646, 32696, 32767],
+    [8262, 16302, 24082, 29422, 31398, 32286, 32525, 32767],
+    [17235, 26166, 30378, 31305, 32373, 32549, 32668, 32767],
+    [17618, 25732, 27865, 30338, 31125, 31522, 32238, 32767],
+    [17542, 23066, 27907, 28728, 30702, 31165, 31435, 32767],
+    [17675, 24802, 30468, 30783, 31841, 32264, 32422, 32767],
+];
 
 /// Luma intra-mode selector CDFs from `av2/common/entropy_inits_modes.h`.
 pub(crate) const Y_MODE_SET_CDF: [u16; 4] = [28863, 31022, 31724, 32767];
@@ -140,6 +156,10 @@ pub(crate) struct TileContext {
     pub segment_pred: [CdfState<2>; 3],
     pub spatial_pred_seg_tree: [CdfState<8>; 3],
     pub delta_q: CdfState<8>,
+    pub cfl: [CdfState<2>; 3],
+    pub cfl_index: CdfState<2>,
+    pub cfl_sign: CdfState<8>,
+    pub cfl_alpha: [CdfState<8>; 6],
     pub y_mode_set: CdfState<4>,
     pub y_mode_idx: [CdfState<8>; 3],
     pub y_mode_idx_offset: [CdfState<6>; 3],
@@ -159,6 +179,10 @@ pub(crate) struct DefaultTileCdfs {
     segment_pred: [[u16; 2]; 3],
     spatial_pred_seg_tree: [[u16; 8]; 3],
     delta_q: [u16; 8],
+    cfl: [[u16; 2]; 3],
+    cfl_index: [u16; 2],
+    cfl_sign: [u16; 8],
+    cfl_alpha: [[u16; 8]; 6],
     y_mode_set: [u16; 4],
     y_mode_idx: [[u16; 8]; 3],
     y_mode_idx_offset: [[u16; 6]; 3],
@@ -179,6 +203,10 @@ impl DefaultTileCdfs {
             segment_pred: SEGMENT_PRED_CDF,
             spatial_pred_seg_tree: SPATIAL_PRED_SEG_TREE_CDF,
             delta_q: DELTA_Q_CDF,
+            cfl: CFL_CDF,
+            cfl_index: CFL_INDEX_CDF,
+            cfl_sign: CFL_SIGN_CDF,
+            cfl_alpha: CFL_ALPHA_CDF,
             y_mode_set: Y_MODE_SET_CDF,
             y_mode_idx: Y_MODE_IDX_CDF,
             y_mode_idx_offset: Y_MODE_IDX_OFFSET_CDF,
@@ -249,6 +277,21 @@ impl TileContext {
                 CdfState::new(defaults.spatial_pred_seg_tree[2]),
             ],
             delta_q: CdfState::new(defaults.delta_q),
+            cfl: [
+                CdfState::new(defaults.cfl[0]),
+                CdfState::new(defaults.cfl[1]),
+                CdfState::new(defaults.cfl[2]),
+            ],
+            cfl_index: CdfState::new(defaults.cfl_index),
+            cfl_sign: CdfState::new(defaults.cfl_sign),
+            cfl_alpha: [
+                CdfState::new(defaults.cfl_alpha[0]),
+                CdfState::new(defaults.cfl_alpha[1]),
+                CdfState::new(defaults.cfl_alpha[2]),
+                CdfState::new(defaults.cfl_alpha[3]),
+                CdfState::new(defaults.cfl_alpha[4]),
+                CdfState::new(defaults.cfl_alpha[5]),
+            ],
             y_mode_set: CdfState::new(defaults.y_mode_set),
             y_mode_idx: [
                 CdfState::new(defaults.y_mode_idx[0]),
@@ -320,6 +363,34 @@ impl TileContext {
     pub fn update_delta_q(&mut self, symbol: usize) {
         if self.updates_enabled {
             self.delta_q.update(symbol);
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn update_cfl(&mut self, ctx: usize, symbol: usize) {
+        if self.updates_enabled {
+            self.cfl[ctx.min(2)].update(symbol);
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn update_cfl_index(&mut self, symbol: usize) {
+        if self.updates_enabled {
+            self.cfl_index.update(symbol);
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn update_cfl_sign(&mut self, symbol: usize) {
+        if self.updates_enabled {
+            self.cfl_sign.update(symbol);
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn update_cfl_alpha(&mut self, ctx: usize, symbol: usize) {
+        if self.updates_enabled {
+            self.cfl_alpha[ctx.min(5)].update(symbol);
         }
     }
 
@@ -439,6 +510,17 @@ fn active_default_cdf_bytes() -> Vec<u8> {
     out.extend_from_slice(&cdf_u16_bytes(&SPATIAL_PRED_SEG_TREE_CDF[1]));
     out.extend_from_slice(&cdf_u16_bytes(&SPATIAL_PRED_SEG_TREE_CDF[2]));
     out.extend_from_slice(&cdf_u16_bytes(&DELTA_Q_CDF));
+    out.extend_from_slice(&cdf_u16_bytes(&CFL_CDF[0]));
+    out.extend_from_slice(&cdf_u16_bytes(&CFL_CDF[1]));
+    out.extend_from_slice(&cdf_u16_bytes(&CFL_CDF[2]));
+    out.extend_from_slice(&cdf_u16_bytes(&CFL_INDEX_CDF));
+    out.extend_from_slice(&cdf_u16_bytes(&CFL_SIGN_CDF));
+    out.extend_from_slice(&cdf_u16_bytes(&CFL_ALPHA_CDF[0]));
+    out.extend_from_slice(&cdf_u16_bytes(&CFL_ALPHA_CDF[1]));
+    out.extend_from_slice(&cdf_u16_bytes(&CFL_ALPHA_CDF[2]));
+    out.extend_from_slice(&cdf_u16_bytes(&CFL_ALPHA_CDF[3]));
+    out.extend_from_slice(&cdf_u16_bytes(&CFL_ALPHA_CDF[4]));
+    out.extend_from_slice(&cdf_u16_bytes(&CFL_ALPHA_CDF[5]));
     out.extend_from_slice(&cdf_u16_bytes(&Y_MODE_SET_CDF));
     out.extend_from_slice(&cdf_u16_bytes(&Y_MODE_IDX_CDF[0]));
     out.extend_from_slice(&cdf_u16_bytes(&Y_MODE_IDX_CDF[1]));
@@ -500,6 +582,10 @@ mod tests {
             &SPATIAL_PRED_SEG_TREE_CDF[0]
         );
         assert_eq!(tile.delta_q.as_slice(), &DELTA_Q_CDF);
+        assert_eq!(tile.cfl[0].as_slice(), &CFL_CDF[0]);
+        assert_eq!(tile.cfl_index.as_slice(), &CFL_INDEX_CDF);
+        assert_eq!(tile.cfl_sign.as_slice(), &CFL_SIGN_CDF);
+        assert_eq!(tile.cfl_alpha[0].as_slice(), &CFL_ALPHA_CDF[0]);
         assert_eq!(tile.y_mode_set.as_slice(), &Y_MODE_SET_CDF);
         assert_eq!(tile.y_mode_idx[0].as_slice(), &Y_MODE_IDX_CDF[0]);
         assert_eq!(tile.uv_mode[0].as_slice(), &UV_MODE_CDF[0]);
@@ -532,6 +618,10 @@ mod tests {
         tile.segment_pred[0].update(1);
         tile.spatial_pred_seg_tree[0].update(3);
         tile.delta_q.update(4);
+        tile.cfl[0].update(1);
+        tile.cfl_index.update(1);
+        tile.cfl_sign.update(2);
+        tile.cfl_alpha[0].update(3);
         tile.y_mode_set.update(1);
         tile.y_mode_idx[0].update(4);
         tile.y_mode_idx_offset[0].update(2);
@@ -556,6 +646,10 @@ mod tests {
             &SPATIAL_PRED_SEG_TREE_CDF[0]
         );
         assert_eq!(tile.delta_q.as_slice(), &DELTA_Q_CDF);
+        assert_eq!(tile.cfl[0].as_slice(), &CFL_CDF[0]);
+        assert_eq!(tile.cfl_index.as_slice(), &CFL_INDEX_CDF);
+        assert_eq!(tile.cfl_sign.as_slice(), &CFL_SIGN_CDF);
+        assert_eq!(tile.cfl_alpha[0].as_slice(), &CFL_ALPHA_CDF[0]);
         assert_eq!(tile.y_mode_set.as_slice(), &Y_MODE_SET_CDF);
         assert_eq!(tile.y_mode_idx[0].as_slice(), &Y_MODE_IDX_CDF[0]);
         assert_eq!(tile.y_mode_idx_offset[0].as_slice(), &Y_MODE_IDX_OFFSET_CDF[0]);
@@ -566,7 +660,7 @@ mod tests {
     #[test]
     fn active_default_cdfs_hash_stably() {
         let digest = md5::compute(active_default_cdf_bytes());
-        assert_eq!(format!("{digest:x}"), "382c561e438495e990e6bafb2d5049b1");
+        assert_eq!(format!("{digest:x}"), "cb7f1b8634c33fe5bebef23062b5a089");
     }
 
     #[test]

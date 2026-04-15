@@ -370,6 +370,18 @@ impl<'a> BacReader<'a> {
         symbol as u8
     }
 
+    pub fn read_coeff_base_eob_tx4x4_symbol(
+        &mut self,
+        tile_ctx: &mut TileContext,
+        q_ctx: usize,
+        sig_ctx: usize,
+    ) -> u8 {
+        let symbol =
+            self.read_symbol(tile_ctx.coeff_base_eob_tx4x4[q_ctx.min(3)][sig_ctx.min(3)].as_slice());
+        tile_ctx.update_coeff_base_eob_tx4x4(q_ctx, sig_ctx, symbol);
+        symbol as u8
+    }
+
     pub fn read_coeffs(
         &mut self,
         tile_ctx: &mut TileContext,
@@ -398,6 +410,7 @@ impl<'a> BacReader<'a> {
                 Plane::U | Plane::V => 1,
             };
             let _eob_pt = self.read_eob_pt_16_symbol(tile_ctx, 0, plane_ctx);
+            let _coeff_base_eob = self.read_coeff_base_eob_tx4x4_symbol(tile_ctx, 0, 0);
             Err(EntropyError::UnimplementedInM0)
         }
     }
@@ -528,6 +541,7 @@ mod tests {
         let y_mode_idx_offset_before = tile_ctx.y_mode_idx_offset[0].as_slice().to_vec();
         let uv_mode_before = tile_ctx.uv_mode[0].as_slice().to_vec();
         let eob_multi16_before = tile_ctx.eob_multi16[0][0].as_slice().to_vec();
+        let coeff_base_eob_before = tile_ctx.coeff_base_eob_tx4x4[0][0].as_slice().to_vec();
         let all_zero_before = tile_ctx.all_zero.as_slice().to_vec();
 
         assert!(!reader.read_skip_with_cdf(&mut tile_ctx));
@@ -551,6 +565,7 @@ mod tests {
             }
         );
         assert_eq!(reader.read_eob_pt_16_symbol(&mut tile_ctx, 0, 0), 0);
+        assert_eq!(reader.read_coeff_base_eob_tx4x4_symbol(&mut tile_ctx, 0, 0), 0);
         let mut coeffs = [1i16; 16];
         reader
             .read_coeffs(
@@ -607,6 +622,10 @@ mod tests {
         );
         assert_eq!(tile_ctx.uv_mode[0].as_slice(), uv_mode_before.as_slice());
         assert_eq!(tile_ctx.eob_multi16[0][0].as_slice(), eob_multi16_before.as_slice());
+        assert_eq!(
+            tile_ctx.coeff_base_eob_tx4x4[0][0].as_slice(),
+            coeff_base_eob_before.as_slice()
+        );
         assert_eq!(tile_ctx.all_zero.as_slice(), all_zero_before.as_slice());
     }
 
@@ -622,6 +641,13 @@ mod tests {
         let mut reader = BacReader::new(&[0x00, 0x00, 0x00, 0x00]);
         let mut tile_ctx = TileContext::new_default();
         assert_eq!(reader.read_eob_pt_16_symbol(&mut tile_ctx, 0, 0), 0);
+    }
+
+    #[test]
+    fn read_coeff_base_eob_tx4x4_symbol_uses_real_default_table() {
+        let mut reader = BacReader::new(&[0x00, 0x00, 0x00, 0x00]);
+        let mut tile_ctx = TileContext::new_default();
+        assert_eq!(reader.read_coeff_base_eob_tx4x4_symbol(&mut tile_ctx, 0, 0), 0);
     }
 
     #[test]

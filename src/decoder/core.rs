@@ -6,7 +6,7 @@ use crate::decoder::block_info::{BlockInfo, BlockInfoGrid};
 use crate::decoder::entropy::{BacReader, EntropyError};
 use crate::decoder::executor::{Sequential, TileExecutor};
 use crate::decoder::frame_buffer::{FrameBuffer, PlaneBuffer};
-use crate::decoder::intra::predict_dc_4x4;
+use crate::decoder::intra::{predict_dc_4x4, predict_h_4x4, predict_v_4x4};
 use crate::decoder::kernels;
 use crate::decoder::partition::{partition_children, BlockSize};
 use crate::decoder::quant::{Plane, QuantContext};
@@ -208,9 +208,6 @@ fn decode_4x4_block(
 ) -> Result<(), CoreDecodeError> {
     let y_mode_ctx = block_info.y_mode_ctx(bx, by);
     let intra_mode = reader.read_intra_mode(tile_ctx, y_mode_ctx);
-    if intra_mode != 0 {
-        return Err(CoreDecodeError::UnexpectedMode);
-    }
     if tx_mode != 0 {
         return Err(CoreDecodeError::Unsupported(
             "tx_mode select is not integrated into the 4x4 Rust decode path yet",
@@ -233,7 +230,12 @@ fn decode_4x4_block(
     };
 
     let mut pred = [0u8; 16];
-    predict_dc_4x4(above.as_ref(), left.as_ref(), &mut pred, 4);
+    match intra_mode {
+        0 => predict_dc_4x4(above.as_ref(), left.as_ref(), &mut pred, 4),
+        1 => predict_v_4x4(above.as_ref(), &mut pred, 4),
+        2 => predict_h_4x4(left.as_ref(), &mut pred, 4),
+        _ => return Err(CoreDecodeError::UnexpectedMode),
+    }
 
     let mut coeffs_in = [0i16; 16];
     reader

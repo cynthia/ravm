@@ -213,7 +213,8 @@ fn decode_4x4_block(
     tx_mode: u8,
 ) -> Result<(), CoreDecodeError> {
     let y_mode_ctx = block_info.y_mode_ctx(bx, by);
-    let intra_mode = reader.read_intra_mode(tile_ctx, y_mode_ctx);
+    let y_mode_list = block_info.y_intra_mode_list(bx, by, BlockSize::MIN);
+    let intra_mode = reader.read_intra_mode(tile_ctx, y_mode_ctx, &y_mode_list);
     if tx_mode != 0 {
         return Err(CoreDecodeError::Unsupported(
             "tx_mode select is not integrated into the 4x4 Rust decode path yet",

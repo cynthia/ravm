@@ -71,6 +71,38 @@ pub(crate) fn predict_dc_block<P: Pixel + Into<u32> + TryFrom<u32>>(
     }
 }
 
+pub(crate) fn predict_v_block<P: Pixel + Into<u32> + TryFrom<u32>>(
+    above: Option<&[P]>,
+    dst: &mut [P],
+    width: usize,
+    height: usize,
+    stride: usize,
+) {
+    let fill = vec![mid_gray(); width];
+    let above = above.unwrap_or(&fill);
+    for y in 0..height {
+        for x in 0..width {
+            dst[y * stride + x] = above[x];
+        }
+    }
+}
+
+pub(crate) fn predict_h_block<P: Pixel + Into<u32> + TryFrom<u32>>(
+    left: Option<&[P]>,
+    dst: &mut [P],
+    width: usize,
+    height: usize,
+    stride: usize,
+) {
+    let fill = vec![mid_gray(); height];
+    let left = left.unwrap_or(&fill);
+    for y in 0..height {
+        for x in 0..width {
+            dst[y * stride + x] = left[y];
+        }
+    }
+}
+
 /// Vertical intra prediction for a 4x4 block.
 #[allow(dead_code)]
 pub(crate) fn predict_v_4x4<P: Pixel + Into<u32> + TryFrom<u32>>(
@@ -427,6 +459,22 @@ mod tests {
         let mut dst = [0u8; 32];
         predict_dc_block::<u8>(Some(&above), Some(&left), &mut dst, 8, 4, 8);
         assert_eq!(dst, [68u8; 32]);
+    }
+
+    #[test]
+    fn v_block_repeats_above_row_across_height() {
+        let above = [10u8, 20, 30, 40, 50, 60];
+        let mut dst = [0u8; 18];
+        predict_v_block::<u8>(Some(&above), &mut dst, 6, 3, 6);
+        assert_eq!(dst, [10, 20, 30, 40, 50, 60, 10, 20, 30, 40, 50, 60, 10, 20, 30, 40, 50, 60]);
+    }
+
+    #[test]
+    fn h_block_repeats_left_column_across_width() {
+        let left = [10u8, 20, 30];
+        let mut dst = [0u8; 18];
+        predict_h_block::<u8>(Some(&left), &mut dst, 6, 3, 6);
+        assert_eq!(dst, [10, 10, 10, 10, 10, 10, 20, 20, 20, 20, 20, 20, 30, 30, 30, 30, 30, 30]);
     }
 
     #[test]

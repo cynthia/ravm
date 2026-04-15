@@ -8,9 +8,10 @@ use crate::decoder::executor::{Sequential, TileExecutor};
 use crate::decoder::frame_buffer::{FrameBuffer, PlaneBuffer};
 use crate::decoder::intra::{
     predict_d113_4x4, predict_d135_4x4, predict_d157_4x4, predict_d203_4x4, predict_d45_4x4,
-    predict_d67_4x4, predict_dc_4x4, predict_dc_block, predict_h_4x4, predict_paeth_4x4,
-    predict_smooth_4x4,
+    predict_d67_4x4, predict_dc_4x4, predict_dc_block, predict_h_4x4, predict_h_block,
+    predict_paeth_4x4, predict_smooth_4x4,
     predict_smooth_h_4x4, predict_smooth_v_4x4, predict_v_4x4,
+    predict_v_block,
 };
 use crate::decoder::kernels;
 use crate::decoder::partition::{partition_children, BlockSize};
@@ -219,19 +220,36 @@ fn decode_none_block(
     let mut pred = vec![0u8; visible_width * visible_height];
     if above.is_none() && left.is_none() {
         pred.fill(128);
-    } else if matches!(base_intra_mode, crate::decoder::transform::BaseIntraMode::Dc) {
-        predict_dc_block(
-            above.as_deref(),
-            left.as_deref(),
-            &mut pred,
-            visible_width,
-            visible_height,
-            visible_width,
-        );
     } else {
-        return Err(CoreDecodeError::Unsupported(
-            "non-4x4 none blocks currently only support DC prediction with neighbors",
-        ));
+        match base_intra_mode {
+            crate::decoder::transform::BaseIntraMode::Dc => predict_dc_block(
+                above.as_deref(),
+                left.as_deref(),
+                &mut pred,
+                visible_width,
+                visible_height,
+                visible_width,
+            ),
+            crate::decoder::transform::BaseIntraMode::V => predict_v_block(
+                above.as_deref(),
+                &mut pred,
+                visible_width,
+                visible_height,
+                visible_width,
+            ),
+            crate::decoder::transform::BaseIntraMode::H => predict_h_block(
+                left.as_deref(),
+                &mut pred,
+                visible_width,
+                visible_height,
+                visible_width,
+            ),
+            _ => {
+                return Err(CoreDecodeError::Unsupported(
+                    "non-4x4 none blocks currently only support DC/V/H prediction with neighbors",
+                ))
+            }
+        }
     }
 
     for y in 0..visible_height {
@@ -737,7 +755,7 @@ mod tests {
         assert_eq!(
             err,
             Some(CoreDecodeError::Unsupported(
-                "non-4x4 none blocks currently only support DC prediction with neighbors",
+                "non-4x4 none blocks currently only support DC/V/H prediction with neighbors",
             ))
         );
     }

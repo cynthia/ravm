@@ -34,6 +34,7 @@ const SECOND_MODE_COUNT: u8 = 16;
 const NON_DIRECTIONAL_MODES_COUNT: u8 = 5;
 const TOTAL_ANGLE_DELTA_COUNT: u8 = 7;
 const REORDERED_Y_MODE: [u8; 13] = [0, 9, 10, 11, 12, 3, 8, 1, 5, 4, 6, 2, 7];
+const DEFAULT_SCAN_4X4: [usize; 16] = [0, 4, 1, 8, 5, 2, 12, 9, 6, 3, 13, 10, 7, 14, 11, 15];
 
 fn actual_y_mode_from_joint_mode(joint_mode: u8) -> u8 {
     let base_mode = if joint_mode < NON_DIRECTIONAL_MODES_COUNT {
@@ -42,6 +43,10 @@ fn actual_y_mode_from_joint_mode(joint_mode: u8) -> u8 {
         ((joint_mode - NON_DIRECTIONAL_MODES_COUNT) / TOTAL_ANGLE_DELTA_COUNT) + NON_DIRECTIONAL_MODES_COUNT
     };
     REORDERED_Y_MODE[base_mode as usize]
+}
+
+fn derive_eob_4x4(eob_pt: u8) -> Option<usize> {
+    (eob_pt <= 1).then_some(eob_pt as usize)
 }
 
 pub(crate) struct BacReader<'a> {
@@ -451,23 +456,37 @@ impl<'a> BacReader<'a> {
                 Plane::U | Plane::V => 1,
             };
             let eob_pt = self.read_eob_pt_16_symbol(tile_ctx, 0, plane_ctx);
+            let eob = derive_eob_4x4(eob_pt).ok_or(EntropyError::UnimplementedInM0)?;
             let coeff_base_eob = self.read_coeff_base_eob_tx4x4_symbol(tile_ctx, 0, 0);
             let dc_sign = self.read_dc_sign_luma_symbol(tile_ctx, 0, 0);
             let coeff_base = self.read_coeff_base_tx4x4_ctx0_symbol(tile_ctx, 0, 0);
             let coeff_base_ctx1 = self.read_coeff_base_tx4x4_ctx1_symbol(tile_ctx, 0, 0);
             let coeff_br = self.read_coeff_br_luma_ctx0_symbol(tile_ctx, 0);
 
-            if eob_pt <= 1 {
-                let mut level = 1i16 + i16::from(coeff_base_eob) + i16::from(coeff_base);
-                level += i16::from(coeff_base_ctx1);
-                if level >= 4 {
-                    level += i16::from(coeff_br);
+            *out = [0; 16];
+            match eob {
+                0 => {
+                    let mut level = 1i16 + i16::from(coeff_base_eob);
+                    if level >= 4 {
+                        level += i16::from(coeff_br);
+                    }
+                    out[0] = if dc_sign { -level } else { level };
+                    Ok(())
                 }
-                *out = [0; 16];
-                out[0] = if dc_sign { -level } else { level };
-                Ok(())
-            } else {
-                Err(EntropyError::UnimplementedInM0)
+                1 => {
+                    let mut ac_level = 1i16 + i16::from(coeff_base_eob);
+                    if ac_level >= 4 {
+                        ac_level += i16::from(coeff_br);
+                    }
+                    if coeff_base != 0 {
+                        let mut dc_level = 1i16 + i16::from(coeff_base.saturating_sub(1));
+                        dc_level += i16::from(coeff_base_ctx1);
+                        out[0] = if dc_sign { -dc_level } else { dc_level };
+                    }
+                    out[DEFAULT_SCAN_4X4[1]] = ac_level;
+                    Ok(())
+                }
+                _ => Err(EntropyError::UnimplementedInM0),
             }
         }
     }
@@ -964,6 +983,44 @@ mod tests {
         assert!(
             matches!(coeffs, Some(found) if found[0] != 0),
             "no one-byte probe reached the provisional dc-only nonzero path"
+        );
+    }
+
+    #[test]
+    fn read_coeffs_4x4_can_place_first_ac_from_real_scan_order() {
+        let coeffs = (0u8..=255).find_map(|first_byte| {
+            (0u8..=255).find_map(|second_byte| {
+                let probe = [first_byte, second_byte, 0x00, 0x00];
+                let mut reader = BacReader::new(&probe);
+                let mut tile_ctx = TileContext::new_default();
+                let mut coeffs = [0i16; 16];
+                reader
+                    .read_coeffs(
+                        &mut tile_ctx,
+                        CoeffReadContext {
+                            tx_size: TxSize::Tx4x4,
+                            tx_type: TxType::DctDct,
+                            plane: Plane::Y,
+                            intra: true,
+                            x4: 0,
+                            y4: 0,
+                        },
+                        &mut coeffs,
+                    )
+                    .ok()
+                    .filter(|_| {
+                        coeffs[DEFAULT_SCAN_4X4[1]] != 0
+                            && coeffs.iter().enumerate().all(|(i, &coeff)| {
+                                i == 0 || i == DEFAULT_SCAN_4X4[1] || coeff == 0
+                            })
+                    })
+                    .map(|_| coeffs)
+            })
+        });
+
+        assert!(
+            matches!(coeffs, Some(found) if found[DEFAULT_SCAN_4X4[1]] != 0),
+            "no two-byte probe reached the first-ac nonzero path"
         );
     }
 

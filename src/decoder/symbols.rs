@@ -228,11 +228,23 @@ pub(crate) const COEFF_BASE_TX4X4_CTX12_CDF: [[[u16; 4]; 2]; 4] = [
     [[8192, 16384, 24576, 32767], [8192, 16384, 24576, 32767]],
     [[8192, 16384, 24576, 32767], [8192, 16384, 24576, 32767]],
 ];
+pub(crate) const COEFF_BASE_TX4X4_CTX13_CDF: [[[u16; 4]; 2]; 4] = [
+    [[16041, 28992, 31635, 32767], [8192, 16384, 24576, 32767]],
+    [[8192, 16384, 24576, 32767], [8192, 16384, 24576, 32767]],
+    [[8192, 16384, 24576, 32767], [8192, 16384, 24576, 32767]],
+    [[8192, 16384, 24576, 32767], [8192, 16384, 24576, 32767]],
+];
 pub(crate) const COEFF_BR_LUMA_CTX0_CDF: [[u16; 4]; 4] = [
     [22305, 28743, 30345, 32767],
     [24190, 30560, 31576, 32767],
     [29897, 32392, 32630, 32767],
     [31501, 32621, 32738, 32767],
+];
+pub(crate) const COEFF_BR_LUMA_CTX1_CDF: [[u16; 4]; 4] = [
+    [22663, 29948, 31320, 32767],
+    [24366, 30921, 31758, 32767],
+    [27484, 32113, 32486, 32767],
+    [29651, 32500, 32698, 32767],
 ];
 
 /// All-zero coefficient block marker for the walking skeleton.
@@ -328,7 +340,9 @@ pub(crate) struct TileContext {
     pub coeff_base_tx4x4_ctx10: [[CdfState<4>; 2]; 4],
     pub coeff_base_tx4x4_ctx11: [[CdfState<4>; 2]; 4],
     pub coeff_base_tx4x4_ctx12: [[CdfState<4>; 2]; 4],
+    pub coeff_base_tx4x4_ctx13: [[CdfState<4>; 2]; 4],
     pub coeff_br_luma_ctx0: [CdfState<4>; 4],
+    pub coeff_br_luma_ctx1: [CdfState<4>; 4],
     pub all_zero: CdfState<2>,
 }
 
@@ -373,7 +387,9 @@ pub(crate) struct DefaultTileCdfs {
     coeff_base_tx4x4_ctx10: [[[u16; 4]; 2]; 4],
     coeff_base_tx4x4_ctx11: [[[u16; 4]; 2]; 4],
     coeff_base_tx4x4_ctx12: [[[u16; 4]; 2]; 4],
+    coeff_base_tx4x4_ctx13: [[[u16; 4]; 2]; 4],
     coeff_br_luma_ctx0: [[u16; 4]; 4],
+    coeff_br_luma_ctx1: [[u16; 4]; 4],
     all_zero: [u16; 2],
 }
 
@@ -419,7 +435,9 @@ impl DefaultTileCdfs {
             coeff_base_tx4x4_ctx10: COEFF_BASE_TX4X4_CTX10_CDF,
             coeff_base_tx4x4_ctx11: COEFF_BASE_TX4X4_CTX11_CDF,
             coeff_base_tx4x4_ctx12: COEFF_BASE_TX4X4_CTX12_CDF,
+            coeff_base_tx4x4_ctx13: COEFF_BASE_TX4X4_CTX13_CDF,
             coeff_br_luma_ctx0: COEFF_BR_LUMA_CTX0_CDF,
+            coeff_br_luma_ctx1: COEFF_BR_LUMA_CTX1_CDF,
             all_zero: ALL_ZERO_CDF,
         }
     }
@@ -857,11 +875,35 @@ impl TileContext {
                     CdfState::new(defaults.coeff_base_tx4x4_ctx12[3][1]),
                 ],
             ],
+            coeff_base_tx4x4_ctx13: [
+                [
+                    CdfState::new(defaults.coeff_base_tx4x4_ctx13[0][0]),
+                    CdfState::new(defaults.coeff_base_tx4x4_ctx13[0][1]),
+                ],
+                [
+                    CdfState::new(defaults.coeff_base_tx4x4_ctx13[1][0]),
+                    CdfState::new(defaults.coeff_base_tx4x4_ctx13[1][1]),
+                ],
+                [
+                    CdfState::new(defaults.coeff_base_tx4x4_ctx13[2][0]),
+                    CdfState::new(defaults.coeff_base_tx4x4_ctx13[2][1]),
+                ],
+                [
+                    CdfState::new(defaults.coeff_base_tx4x4_ctx13[3][0]),
+                    CdfState::new(defaults.coeff_base_tx4x4_ctx13[3][1]),
+                ],
+            ],
             coeff_br_luma_ctx0: [
                 CdfState::new(defaults.coeff_br_luma_ctx0[0]),
                 CdfState::new(defaults.coeff_br_luma_ctx0[1]),
                 CdfState::new(defaults.coeff_br_luma_ctx0[2]),
                 CdfState::new(defaults.coeff_br_luma_ctx0[3]),
+            ],
+            coeff_br_luma_ctx1: [
+                CdfState::new(defaults.coeff_br_luma_ctx1[0]),
+                CdfState::new(defaults.coeff_br_luma_ctx1[1]),
+                CdfState::new(defaults.coeff_br_luma_ctx1[2]),
+                CdfState::new(defaults.coeff_br_luma_ctx1[3]),
             ],
             all_zero: CdfState::new(defaults.all_zero),
         }
@@ -1110,9 +1152,21 @@ impl TileContext {
         }
     }
 
+    pub fn update_coeff_base_tx4x4_ctx13(&mut self, q_ctx: usize, tcq_ctx: usize, symbol: usize) {
+        if self.updates_enabled {
+            self.coeff_base_tx4x4_ctx13[q_ctx.min(3)][tcq_ctx.min(1)].update(symbol);
+        }
+    }
+
     pub fn update_coeff_br_luma_ctx0(&mut self, q_ctx: usize, symbol: usize) {
         if self.updates_enabled {
             self.coeff_br_luma_ctx0[q_ctx.min(3)].update(symbol);
+        }
+    }
+
+    pub fn update_coeff_br_luma_ctx1(&mut self, q_ctx: usize, symbol: usize) {
+        if self.updates_enabled {
+            self.coeff_br_luma_ctx1[q_ctx.min(3)].update(symbol);
         }
     }
 
@@ -1393,10 +1447,22 @@ fn active_default_cdf_bytes() -> Vec<u8> {
     out.extend_from_slice(&cdf_u16_bytes(&COEFF_BASE_TX4X4_CTX12_CDF[2][1]));
     out.extend_from_slice(&cdf_u16_bytes(&COEFF_BASE_TX4X4_CTX12_CDF[3][0]));
     out.extend_from_slice(&cdf_u16_bytes(&COEFF_BASE_TX4X4_CTX12_CDF[3][1]));
+    out.extend_from_slice(&cdf_u16_bytes(&COEFF_BASE_TX4X4_CTX13_CDF[0][0]));
+    out.extend_from_slice(&cdf_u16_bytes(&COEFF_BASE_TX4X4_CTX13_CDF[0][1]));
+    out.extend_from_slice(&cdf_u16_bytes(&COEFF_BASE_TX4X4_CTX13_CDF[1][0]));
+    out.extend_from_slice(&cdf_u16_bytes(&COEFF_BASE_TX4X4_CTX13_CDF[1][1]));
+    out.extend_from_slice(&cdf_u16_bytes(&COEFF_BASE_TX4X4_CTX13_CDF[2][0]));
+    out.extend_from_slice(&cdf_u16_bytes(&COEFF_BASE_TX4X4_CTX13_CDF[2][1]));
+    out.extend_from_slice(&cdf_u16_bytes(&COEFF_BASE_TX4X4_CTX13_CDF[3][0]));
+    out.extend_from_slice(&cdf_u16_bytes(&COEFF_BASE_TX4X4_CTX13_CDF[3][1]));
     out.extend_from_slice(&cdf_u16_bytes(&COEFF_BR_LUMA_CTX0_CDF[0]));
     out.extend_from_slice(&cdf_u16_bytes(&COEFF_BR_LUMA_CTX0_CDF[1]));
     out.extend_from_slice(&cdf_u16_bytes(&COEFF_BR_LUMA_CTX0_CDF[2]));
     out.extend_from_slice(&cdf_u16_bytes(&COEFF_BR_LUMA_CTX0_CDF[3]));
+    out.extend_from_slice(&cdf_u16_bytes(&COEFF_BR_LUMA_CTX1_CDF[0]));
+    out.extend_from_slice(&cdf_u16_bytes(&COEFF_BR_LUMA_CTX1_CDF[1]));
+    out.extend_from_slice(&cdf_u16_bytes(&COEFF_BR_LUMA_CTX1_CDF[2]));
+    out.extend_from_slice(&cdf_u16_bytes(&COEFF_BR_LUMA_CTX1_CDF[3]));
     out.extend_from_slice(&cdf_u16_bytes(&ALL_ZERO_CDF));
     out
 }
@@ -1525,7 +1591,12 @@ mod tests {
             tile.coeff_base_tx4x4_ctx12[0][0].as_slice(),
             &COEFF_BASE_TX4X4_CTX12_CDF[0][0]
         );
+        assert_eq!(
+            tile.coeff_base_tx4x4_ctx13[0][0].as_slice(),
+            &COEFF_BASE_TX4X4_CTX13_CDF[0][0]
+        );
         assert_eq!(tile.coeff_br_luma_ctx0[0].as_slice(), &COEFF_BR_LUMA_CTX0_CDF[0]);
+        assert_eq!(tile.coeff_br_luma_ctx1[0].as_slice(), &COEFF_BR_LUMA_CTX1_CDF[0]);
     }
 
     #[test]
@@ -1584,7 +1655,9 @@ mod tests {
         tile.coeff_base_tx4x4_ctx10[0][0].update(1);
         tile.coeff_base_tx4x4_ctx11[0][0].update(1);
         tile.coeff_base_tx4x4_ctx12[0][0].update(1);
+        tile.coeff_base_tx4x4_ctx13[0][0].update(1);
         tile.coeff_br_luma_ctx0[0].update(1);
+        tile.coeff_br_luma_ctx1[0].update(1);
         tile.all_zero.update(1);
         tile.reset_to_default();
         assert_eq!(tile.partition_do_split[0].as_slice(), &PARTITION_DO_SPLIT_CDF[0]);
@@ -1682,14 +1755,19 @@ mod tests {
             tile.coeff_base_tx4x4_ctx12[0][0].as_slice(),
             &COEFF_BASE_TX4X4_CTX12_CDF[0][0]
         );
+        assert_eq!(
+            tile.coeff_base_tx4x4_ctx13[0][0].as_slice(),
+            &COEFF_BASE_TX4X4_CTX13_CDF[0][0]
+        );
         assert_eq!(tile.coeff_br_luma_ctx0[0].as_slice(), &COEFF_BR_LUMA_CTX0_CDF[0]);
+        assert_eq!(tile.coeff_br_luma_ctx1[0].as_slice(), &COEFF_BR_LUMA_CTX1_CDF[0]);
         assert_eq!(tile.all_zero.as_slice(), &ALL_ZERO_CDF);
     }
 
     #[test]
     fn active_default_cdfs_hash_stably() {
         let digest = md5::compute(active_default_cdf_bytes());
-        assert_eq!(format!("{digest:x}"), "09057f036a0f45bdc6dc1226c71e669a");
+        assert_eq!(format!("{digest:x}"), "38c8367a66a76308f613d2a39bc18a6b");
     }
 
     #[test]

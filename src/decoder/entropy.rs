@@ -95,9 +95,13 @@ fn dc_sign_needed_for_eob_4x4(eob: usize) -> bool {
     eob <= 2
 }
 
-fn materialize_coeffs_4x4(
+fn apply_dc_sign(level: i16, dc_sign: Option<bool>) -> i16 {
+    if dc_sign.unwrap_or(false) { -level } else { level }
+}
+
+fn materialize_coeffs_4x4_with_optional_dc_sign(
     eob: usize,
-    dc_sign: bool,
+    dc_sign: Option<bool>,
     coeff_base_eob: u8,
     coeff_base: u8,
     coeff_base_ctx1: u8,
@@ -137,7 +141,7 @@ fn materialize_coeffs_4x4(
 
         if eob == 0 {
             let level = decode_eob_level(coeff_base_eob, coeff_br);
-            out[0] = if dc_sign { -level } else { level };
+            out[0] = apply_dc_sign(level, dc_sign);
             return Ok(());
         }
 
@@ -154,7 +158,7 @@ fn materialize_coeffs_4x4(
         if eob <= 2 {
             let dc_base_idx = eob - 1;
             if let Some(dc_level) = decode_base_level(coeff_bases[dc_base_idx]) {
-                out[0] = if dc_sign { -dc_level } else { dc_level };
+                out[0] = apply_dc_sign(dc_level, dc_sign);
             }
         }
 
@@ -164,13 +168,13 @@ fn materialize_coeffs_4x4(
     match eob {
         0 => {
             let level = decode_eob_level(coeff_base_eob, coeff_br);
-            out[0] = if dc_sign { -level } else { level };
+            out[0] = apply_dc_sign(level, dc_sign);
             Ok(())
         }
         1 => {
             let ac_level = decode_eob_level(coeff_base_eob, coeff_br);
             if let Some(dc_level) = decode_base_level(coeff_base) {
-                out[0] = if dc_sign { -dc_level } else { dc_level };
+                out[0] = apply_dc_sign(dc_level, dc_sign);
             }
             out[DEFAULT_SCAN_4X4[1]] = ac_level;
             Ok(())
@@ -181,7 +185,7 @@ fn materialize_coeffs_4x4(
                 out[DEFAULT_SCAN_4X4[1]] = prev_ac_level;
             }
             if let Some(dc_level) = decode_base_level(coeff_base_ctx1) {
-                out[0] = if dc_sign { -dc_level } else { dc_level };
+                out[0] = apply_dc_sign(dc_level, dc_sign);
             }
             out[DEFAULT_SCAN_4X4[2]] = ac_level;
             Ok(())
@@ -588,6 +592,51 @@ fn materialize_coeffs_4x4(
         }
         _ => Err(EntropyError::UnimplementedInM0),
     }
+}
+
+#[cfg(test)]
+fn materialize_coeffs_4x4(
+    eob: usize,
+    dc_sign: bool,
+    coeff_base_eob: u8,
+    coeff_base: u8,
+    coeff_base_ctx1: u8,
+    coeff_base_ctx2: u8,
+    coeff_base_ctx3: u8,
+    coeff_base_ctx4: u8,
+    coeff_base_ctx5: u8,
+    coeff_base_ctx6: u8,
+    coeff_base_ctx7: u8,
+    coeff_base_ctx8: u8,
+    coeff_base_ctx9: u8,
+    coeff_base_ctx10: u8,
+    coeff_base_ctx11: u8,
+    coeff_base_ctx12: u8,
+    coeff_base_ctx13: u8,
+    coeff_br: u8,
+    out: &mut [i16; 16],
+) -> Result<(), EntropyError> {
+    materialize_coeffs_4x4_with_optional_dc_sign(
+        eob,
+        Some(dc_sign),
+        coeff_base_eob,
+        coeff_base,
+        coeff_base_ctx1,
+        coeff_base_ctx2,
+        coeff_base_ctx3,
+        coeff_base_ctx4,
+        coeff_base_ctx5,
+        coeff_base_ctx6,
+        coeff_base_ctx7,
+        coeff_base_ctx8,
+        coeff_base_ctx9,
+        coeff_base_ctx10,
+        coeff_base_ctx11,
+        coeff_base_ctx12,
+        coeff_base_ctx13,
+        coeff_br,
+        out,
+    )
 }
 
 pub(crate) struct BacReader<'a> {
@@ -1232,9 +1281,13 @@ impl<'a> BacReader<'a> {
             } else {
                 0
             };
-            materialize_coeffs_4x4(
+            materialize_coeffs_4x4_with_optional_dc_sign(
                 eob,
-                dc_sign,
+                if dc_sign_needed_for_eob_4x4(eob) {
+                    Some(dc_sign)
+                } else {
+                    None
+                },
                 coeff_base_eob,
                 coeff_bases[0],
                 coeff_bases[1],
@@ -1790,6 +1843,37 @@ mod tests {
         assert!(dc_sign_needed_for_eob_4x4(2));
         assert!(!dc_sign_needed_for_eob_4x4(3));
         assert!(!dc_sign_needed_for_eob_4x4(15));
+    }
+
+    #[test]
+    fn materialize_coeffs_4x4_does_not_need_dc_sign_for_ac_only_eob() {
+        let mut coeffs = [0i16; 16];
+        materialize_coeffs_4x4_with_optional_dc_sign(
+            3,
+            None,
+            2,
+            2,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            &mut coeffs,
+        )
+        .expect("materialize ac-only staged path without dc sign");
+        assert_eq!(coeffs[0], 0);
+        assert_eq!(coeffs[DEFAULT_SCAN_4X4[1]], 1);
+        assert_eq!(coeffs[DEFAULT_SCAN_4X4[2]], 2);
+        assert_eq!(coeffs[DEFAULT_SCAN_4X4[3]], 3);
     }
 
     #[test]

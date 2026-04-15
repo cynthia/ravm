@@ -137,6 +137,20 @@ impl<'a> BacReader<'a> {
         }
     }
 
+    #[allow(dead_code)]
+    pub fn read_uv_mode_idx(&mut self, tile_ctx: &mut TileContext, directional_y_mode: bool) -> u8 {
+        const CHROMA_INTRA_MODE_INDEX_COUNT: u8 = 8;
+
+        let ctx = usize::from(directional_y_mode);
+        let uv_mode_idx = self.read_symbol(tile_ctx.uv_mode[ctx].as_slice());
+        tile_ctx.update_uv_mode(ctx, uv_mode_idx);
+        if uv_mode_idx == usize::from(CHROMA_INTRA_MODE_INDEX_COUNT - 1) {
+            uv_mode_idx as u8 + self.read_literal(3)
+        } else {
+            uv_mode_idx as u8
+        }
+    }
+
     pub fn read_coeffs_4x4(
         &mut self,
         tile_ctx: &mut TileContext,
@@ -257,6 +271,7 @@ mod tests {
         let y_mode_set_before = tile_ctx.y_mode_set.as_slice().to_vec();
         let y_mode_idx_before = tile_ctx.y_mode_idx[0].as_slice().to_vec();
         let y_mode_idx_offset_before = tile_ctx.y_mode_idx_offset[0].as_slice().to_vec();
+        let uv_mode_before = tile_ctx.uv_mode[0].as_slice().to_vec();
         let all_zero_before = tile_ctx.all_zero.as_slice().to_vec();
 
         assert!(!reader.read_skip_with_cdf(&mut tile_ctx));
@@ -265,6 +280,7 @@ mod tests {
         reader
             .read_coeffs_4x4(&mut tile_ctx, &mut coeffs)
             .expect("all-zero coeffs");
+        assert_eq!(reader.read_uv_mode_idx(&mut tile_ctx, false), 0);
 
         assert_eq!(tile_ctx.skip.as_slice(), skip_before.as_slice());
         assert_eq!(tile_ctx.y_mode_set.as_slice(), y_mode_set_before.as_slice());
@@ -273,7 +289,15 @@ mod tests {
             tile_ctx.y_mode_idx_offset[0].as_slice(),
             y_mode_idx_offset_before.as_slice()
         );
+        assert_eq!(tile_ctx.uv_mode[0].as_slice(), uv_mode_before.as_slice());
         assert_eq!(tile_ctx.all_zero.as_slice(), all_zero_before.as_slice());
+    }
+
+    #[test]
+    fn read_uv_mode_idx_uses_real_default_table() {
+        let mut reader = BacReader::new(&[0x00, 0x00, 0x00, 0x00]);
+        let mut tile_ctx = TileContext::new_default();
+        assert_eq!(reader.read_uv_mode_idx(&mut tile_ctx, false), 0);
     }
 
     #[test]

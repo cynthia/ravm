@@ -35,6 +35,10 @@ pub(crate) const Y_MODE_IDX_OFFSET_CDF: [[u16; 6]; 3] = [
     [8976, 16084, 20827, 24595, 28496, 32767],
     [8784, 14556, 19710, 24903, 28724, 32767],
 ];
+pub(crate) const UV_MODE_CDF: [[u16; 8]; 2] = [
+    [9363, 20957, 22865, 24753, 26411, 27983, 30428, 32767],
+    [21282, 23610, 28208, 29311, 30348, 31158, 31491, 32767],
+];
 
 /// All-zero coefficient block marker for the walking skeleton.
 pub(crate) const ALL_ZERO_CDF: [u16; 2] = [16384, 32767];
@@ -96,6 +100,7 @@ pub(crate) struct TileContext {
     pub y_mode_set: CdfState<4>,
     pub y_mode_idx: [CdfState<8>; 3],
     pub y_mode_idx_offset: [CdfState<6>; 3],
+    pub uv_mode: [CdfState<8>; 2],
     pub all_zero: CdfState<2>,
 }
 
@@ -107,6 +112,7 @@ pub(crate) struct DefaultTileCdfs {
     y_mode_set: [u16; 4],
     y_mode_idx: [[u16; 8]; 3],
     y_mode_idx_offset: [[u16; 6]; 3],
+    uv_mode: [[u16; 8]; 2],
     all_zero: [u16; 2],
 }
 
@@ -119,6 +125,7 @@ impl DefaultTileCdfs {
             y_mode_set: Y_MODE_SET_CDF,
             y_mode_idx: Y_MODE_IDX_CDF,
             y_mode_idx_offset: Y_MODE_IDX_OFFSET_CDF,
+            uv_mode: UV_MODE_CDF,
             all_zero: ALL_ZERO_CDF,
         }
     }
@@ -153,6 +160,10 @@ impl TileContext {
                 CdfState::new(defaults.y_mode_idx_offset[0]),
                 CdfState::new(defaults.y_mode_idx_offset[1]),
                 CdfState::new(defaults.y_mode_idx_offset[2]),
+            ],
+            uv_mode: [
+                CdfState::new(defaults.uv_mode[0]),
+                CdfState::new(defaults.uv_mode[1]),
             ],
             all_zero: CdfState::new(defaults.all_zero),
         }
@@ -194,6 +205,12 @@ impl TileContext {
     pub fn update_y_mode_idx_offset(&mut self, ctx: usize, symbol: usize) {
         if self.updates_enabled {
             self.y_mode_idx_offset[ctx.min(2)].update(symbol);
+        }
+    }
+
+    pub fn update_uv_mode(&mut self, ctx: usize, symbol: usize) {
+        if self.updates_enabled {
+            self.uv_mode[ctx.min(1)].update(symbol);
         }
     }
 
@@ -243,6 +260,8 @@ fn active_default_cdf_bytes() -> Vec<u8> {
     out.extend_from_slice(&cdf_u16_bytes(&Y_MODE_IDX_OFFSET_CDF[0]));
     out.extend_from_slice(&cdf_u16_bytes(&Y_MODE_IDX_OFFSET_CDF[1]));
     out.extend_from_slice(&cdf_u16_bytes(&Y_MODE_IDX_OFFSET_CDF[2]));
+    out.extend_from_slice(&cdf_u16_bytes(&UV_MODE_CDF[0]));
+    out.extend_from_slice(&cdf_u16_bytes(&UV_MODE_CDF[1]));
     out.extend_from_slice(&cdf_u16_bytes(&ALL_ZERO_CDF));
     out
 }
@@ -281,6 +300,7 @@ mod tests {
         assert_eq!(tile.partition_binary.as_slice(), &PARTITION_BINARY_CDF);
         assert_eq!(tile.y_mode_set.as_slice(), &Y_MODE_SET_CDF);
         assert_eq!(tile.y_mode_idx[0].as_slice(), &Y_MODE_IDX_CDF[0]);
+        assert_eq!(tile.uv_mode[0].as_slice(), &UV_MODE_CDF[0]);
     }
 
     #[test]
@@ -306,6 +326,7 @@ mod tests {
         tile.y_mode_set.update(1);
         tile.y_mode_idx[0].update(4);
         tile.y_mode_idx_offset[0].update(2);
+        tile.uv_mode[0].update(3);
         tile.all_zero.update(1);
         tile.reset_to_default();
         assert_eq!(tile.partition_binary.as_slice(), &PARTITION_BINARY_CDF);
@@ -313,13 +334,14 @@ mod tests {
         assert_eq!(tile.y_mode_set.as_slice(), &Y_MODE_SET_CDF);
         assert_eq!(tile.y_mode_idx[0].as_slice(), &Y_MODE_IDX_CDF[0]);
         assert_eq!(tile.y_mode_idx_offset[0].as_slice(), &Y_MODE_IDX_OFFSET_CDF[0]);
+        assert_eq!(tile.uv_mode[0].as_slice(), &UV_MODE_CDF[0]);
         assert_eq!(tile.all_zero.as_slice(), &ALL_ZERO_CDF);
     }
 
     #[test]
     fn active_default_cdfs_hash_stably() {
         let digest = md5::compute(active_default_cdf_bytes());
-        assert_eq!(format!("{digest:x}"), "b6dc8e52d720eadaab2b1a27527c0c81");
+        assert_eq!(format!("{digest:x}"), "c896fd58dc5b57a41fa5081f184be3f5");
     }
 
     #[test]

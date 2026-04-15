@@ -382,6 +382,17 @@ impl<'a> BacReader<'a> {
         symbol as u8
     }
 
+    pub fn read_dc_sign_luma_symbol(
+        &mut self,
+        tile_ctx: &mut TileContext,
+        q_ctx: usize,
+        ctx: usize,
+    ) -> bool {
+        let symbol = self.read_symbol(tile_ctx.dc_sign_luma[q_ctx.min(3)][ctx.min(2)].as_slice());
+        tile_ctx.update_dc_sign_luma(q_ctx, ctx, symbol);
+        symbol != 0
+    }
+
     pub fn read_coeffs(
         &mut self,
         tile_ctx: &mut TileContext,
@@ -411,6 +422,7 @@ impl<'a> BacReader<'a> {
             };
             let _eob_pt = self.read_eob_pt_16_symbol(tile_ctx, 0, plane_ctx);
             let _coeff_base_eob = self.read_coeff_base_eob_tx4x4_symbol(tile_ctx, 0, 0);
+            let _dc_sign = self.read_dc_sign_luma_symbol(tile_ctx, 0, 0);
             Err(EntropyError::UnimplementedInM0)
         }
     }
@@ -542,6 +554,7 @@ mod tests {
         let uv_mode_before = tile_ctx.uv_mode[0].as_slice().to_vec();
         let eob_multi16_before = tile_ctx.eob_multi16[0][0].as_slice().to_vec();
         let coeff_base_eob_before = tile_ctx.coeff_base_eob_tx4x4[0][0].as_slice().to_vec();
+        let dc_sign_before = tile_ctx.dc_sign_luma[0][0].as_slice().to_vec();
         let all_zero_before = tile_ctx.all_zero.as_slice().to_vec();
 
         assert!(!reader.read_skip_with_cdf(&mut tile_ctx));
@@ -566,6 +579,7 @@ mod tests {
         );
         assert_eq!(reader.read_eob_pt_16_symbol(&mut tile_ctx, 0, 0), 0);
         assert_eq!(reader.read_coeff_base_eob_tx4x4_symbol(&mut tile_ctx, 0, 0), 0);
+        assert!(!reader.read_dc_sign_luma_symbol(&mut tile_ctx, 0, 0));
         let mut coeffs = [1i16; 16];
         reader
             .read_coeffs(
@@ -626,6 +640,7 @@ mod tests {
             tile_ctx.coeff_base_eob_tx4x4[0][0].as_slice(),
             coeff_base_eob_before.as_slice()
         );
+        assert_eq!(tile_ctx.dc_sign_luma[0][0].as_slice(), dc_sign_before.as_slice());
         assert_eq!(tile_ctx.all_zero.as_slice(), all_zero_before.as_slice());
     }
 
@@ -648,6 +663,13 @@ mod tests {
         let mut reader = BacReader::new(&[0x00, 0x00, 0x00, 0x00]);
         let mut tile_ctx = TileContext::new_default();
         assert_eq!(reader.read_coeff_base_eob_tx4x4_symbol(&mut tile_ctx, 0, 0), 0);
+    }
+
+    #[test]
+    fn read_dc_sign_luma_symbol_uses_real_default_table() {
+        let mut reader = BacReader::new(&[0x00, 0x00, 0x00, 0x00]);
+        let mut tile_ctx = TileContext::new_default();
+        assert!(!reader.read_dc_sign_luma_symbol(&mut tile_ctx, 0, 0));
     }
 
     #[test]

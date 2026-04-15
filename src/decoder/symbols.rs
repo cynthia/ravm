@@ -81,6 +81,24 @@ pub(crate) const LOSSLESS_TX_SIZE_CDF: [[[u16; 2]; 2]; 4] = [
     [[16384, 32767], [16384, 32767]],
 ];
 pub(crate) const LOSSLESS_INTER_TX_TYPE_CDF: [u16; 2] = [16384, 32767];
+pub(crate) const INTRA_EXT_TX_CDF_SET1: [[u16; 7]; 4] = [
+    [5026, 16816, 19974, 23404, 26845, 30499, 32767],
+    [14910, 25257, 26964, 29323, 30237, 31535, 32767],
+    [13759, 26108, 27688, 29793, 30265, 31576, 32767],
+    [4681, 9362, 14043, 18725, 23406, 28087, 32767],
+];
+pub(crate) const INTRA_EXT_TX_CDF_SET2: [[u16; 2]; 4] = [
+    [16384, 32767],
+    [16384, 32767],
+    [16384, 32767],
+    [16384, 32767],
+];
+pub(crate) const INTRA_EXT_TX_SHORT_SIDE_CDF: [[u16; 4]; 4] = [
+    [10692, 26586, 29231, 32767],
+    [26700, 32160, 32748, 32767],
+    [26915, 32411, 32748, 32767],
+    [8192, 16384, 24576, 32767],
+];
 
 /// Luma intra-mode selector CDFs from `av2/common/entropy_inits_modes.h`.
 pub(crate) const Y_MODE_SET_CDF: [u16; 4] = [28863, 31022, 31724, 32767];
@@ -169,6 +187,9 @@ pub(crate) struct TileContext {
     pub cfl_alpha: [CdfState<8>; 6],
     pub lossless_tx_size: [[CdfState<2>; 2]; 4],
     pub lossless_inter_tx_type: CdfState<2>,
+    pub intra_ext_tx_set1: [CdfState<7>; 4],
+    pub intra_ext_tx_set2: [CdfState<2>; 4],
+    pub intra_ext_tx_short_side: [CdfState<4>; 4],
     pub y_mode_set: CdfState<4>,
     pub y_mode_idx: [CdfState<8>; 3],
     pub y_mode_idx_offset: [CdfState<6>; 3],
@@ -194,6 +215,9 @@ pub(crate) struct DefaultTileCdfs {
     cfl_alpha: [[u16; 8]; 6],
     lossless_tx_size: [[[u16; 2]; 2]; 4],
     lossless_inter_tx_type: [u16; 2],
+    intra_ext_tx_set1: [[u16; 7]; 4],
+    intra_ext_tx_set2: [[u16; 2]; 4],
+    intra_ext_tx_short_side: [[u16; 4]; 4],
     y_mode_set: [u16; 4],
     y_mode_idx: [[u16; 8]; 3],
     y_mode_idx_offset: [[u16; 6]; 3],
@@ -220,6 +244,9 @@ impl DefaultTileCdfs {
             cfl_alpha: CFL_ALPHA_CDF,
             lossless_tx_size: LOSSLESS_TX_SIZE_CDF,
             lossless_inter_tx_type: LOSSLESS_INTER_TX_TYPE_CDF,
+            intra_ext_tx_set1: INTRA_EXT_TX_CDF_SET1,
+            intra_ext_tx_set2: INTRA_EXT_TX_CDF_SET2,
+            intra_ext_tx_short_side: INTRA_EXT_TX_SHORT_SIDE_CDF,
             y_mode_set: Y_MODE_SET_CDF,
             y_mode_idx: Y_MODE_IDX_CDF,
             y_mode_idx_offset: Y_MODE_IDX_OFFSET_CDF,
@@ -324,6 +351,24 @@ impl TileContext {
                 ],
             ],
             lossless_inter_tx_type: CdfState::new(defaults.lossless_inter_tx_type),
+            intra_ext_tx_set1: [
+                CdfState::new(defaults.intra_ext_tx_set1[0]),
+                CdfState::new(defaults.intra_ext_tx_set1[1]),
+                CdfState::new(defaults.intra_ext_tx_set1[2]),
+                CdfState::new(defaults.intra_ext_tx_set1[3]),
+            ],
+            intra_ext_tx_set2: [
+                CdfState::new(defaults.intra_ext_tx_set2[0]),
+                CdfState::new(defaults.intra_ext_tx_set2[1]),
+                CdfState::new(defaults.intra_ext_tx_set2[2]),
+                CdfState::new(defaults.intra_ext_tx_set2[3]),
+            ],
+            intra_ext_tx_short_side: [
+                CdfState::new(defaults.intra_ext_tx_short_side[0]),
+                CdfState::new(defaults.intra_ext_tx_short_side[1]),
+                CdfState::new(defaults.intra_ext_tx_short_side[2]),
+                CdfState::new(defaults.intra_ext_tx_short_side[3]),
+            ],
             y_mode_set: CdfState::new(defaults.y_mode_set),
             y_mode_idx: [
                 CdfState::new(defaults.y_mode_idx[0]),
@@ -442,6 +487,27 @@ impl TileContext {
     pub fn update_lossless_inter_tx_type(&mut self, symbol: usize) {
         if self.updates_enabled {
             self.lossless_inter_tx_type.update(symbol);
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn update_intra_ext_tx_set1(&mut self, tx_size_ctx: usize, symbol: usize) {
+        if self.updates_enabled {
+            self.intra_ext_tx_set1[tx_size_ctx.min(3)].update(symbol);
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn update_intra_ext_tx_set2(&mut self, tx_size_ctx: usize, symbol: usize) {
+        if self.updates_enabled {
+            self.intra_ext_tx_set2[tx_size_ctx.min(3)].update(symbol);
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn update_intra_ext_tx_short_side(&mut self, tx_size_ctx: usize, symbol: usize) {
+        if self.updates_enabled {
+            self.intra_ext_tx_short_side[tx_size_ctx.min(3)].update(symbol);
         }
     }
 
@@ -581,6 +647,18 @@ fn active_default_cdf_bytes() -> Vec<u8> {
     out.extend_from_slice(&cdf_u16_bytes(&LOSSLESS_TX_SIZE_CDF[3][0]));
     out.extend_from_slice(&cdf_u16_bytes(&LOSSLESS_TX_SIZE_CDF[3][1]));
     out.extend_from_slice(&cdf_u16_bytes(&LOSSLESS_INTER_TX_TYPE_CDF));
+    out.extend_from_slice(&cdf_u16_bytes(&INTRA_EXT_TX_CDF_SET1[0]));
+    out.extend_from_slice(&cdf_u16_bytes(&INTRA_EXT_TX_CDF_SET1[1]));
+    out.extend_from_slice(&cdf_u16_bytes(&INTRA_EXT_TX_CDF_SET1[2]));
+    out.extend_from_slice(&cdf_u16_bytes(&INTRA_EXT_TX_CDF_SET1[3]));
+    out.extend_from_slice(&cdf_u16_bytes(&INTRA_EXT_TX_CDF_SET2[0]));
+    out.extend_from_slice(&cdf_u16_bytes(&INTRA_EXT_TX_CDF_SET2[1]));
+    out.extend_from_slice(&cdf_u16_bytes(&INTRA_EXT_TX_CDF_SET2[2]));
+    out.extend_from_slice(&cdf_u16_bytes(&INTRA_EXT_TX_CDF_SET2[3]));
+    out.extend_from_slice(&cdf_u16_bytes(&INTRA_EXT_TX_SHORT_SIDE_CDF[0]));
+    out.extend_from_slice(&cdf_u16_bytes(&INTRA_EXT_TX_SHORT_SIDE_CDF[1]));
+    out.extend_from_slice(&cdf_u16_bytes(&INTRA_EXT_TX_SHORT_SIDE_CDF[2]));
+    out.extend_from_slice(&cdf_u16_bytes(&INTRA_EXT_TX_SHORT_SIDE_CDF[3]));
     out.extend_from_slice(&cdf_u16_bytes(&Y_MODE_SET_CDF));
     out.extend_from_slice(&cdf_u16_bytes(&Y_MODE_IDX_CDF[0]));
     out.extend_from_slice(&cdf_u16_bytes(&Y_MODE_IDX_CDF[1]));
@@ -651,6 +729,12 @@ mod tests {
             tile.lossless_inter_tx_type.as_slice(),
             &LOSSLESS_INTER_TX_TYPE_CDF
         );
+        assert_eq!(tile.intra_ext_tx_set1[0].as_slice(), &INTRA_EXT_TX_CDF_SET1[0]);
+        assert_eq!(tile.intra_ext_tx_set2[0].as_slice(), &INTRA_EXT_TX_CDF_SET2[0]);
+        assert_eq!(
+            tile.intra_ext_tx_short_side[0].as_slice(),
+            &INTRA_EXT_TX_SHORT_SIDE_CDF[0]
+        );
         assert_eq!(tile.y_mode_set.as_slice(), &Y_MODE_SET_CDF);
         assert_eq!(tile.y_mode_idx[0].as_slice(), &Y_MODE_IDX_CDF[0]);
         assert_eq!(tile.uv_mode[0].as_slice(), &UV_MODE_CDF[0]);
@@ -689,6 +773,9 @@ mod tests {
         tile.cfl_alpha[0].update(3);
         tile.lossless_tx_size[0][0].update(1);
         tile.lossless_inter_tx_type.update(1);
+        tile.intra_ext_tx_set1[0].update(2);
+        tile.intra_ext_tx_set2[0].update(1);
+        tile.intra_ext_tx_short_side[0].update(2);
         tile.y_mode_set.update(1);
         tile.y_mode_idx[0].update(4);
         tile.y_mode_idx_offset[0].update(2);
@@ -722,6 +809,12 @@ mod tests {
             tile.lossless_inter_tx_type.as_slice(),
             &LOSSLESS_INTER_TX_TYPE_CDF
         );
+        assert_eq!(tile.intra_ext_tx_set1[0].as_slice(), &INTRA_EXT_TX_CDF_SET1[0]);
+        assert_eq!(tile.intra_ext_tx_set2[0].as_slice(), &INTRA_EXT_TX_CDF_SET2[0]);
+        assert_eq!(
+            tile.intra_ext_tx_short_side[0].as_slice(),
+            &INTRA_EXT_TX_SHORT_SIDE_CDF[0]
+        );
         assert_eq!(tile.y_mode_set.as_slice(), &Y_MODE_SET_CDF);
         assert_eq!(tile.y_mode_idx[0].as_slice(), &Y_MODE_IDX_CDF[0]);
         assert_eq!(tile.y_mode_idx_offset[0].as_slice(), &Y_MODE_IDX_OFFSET_CDF[0]);
@@ -732,7 +825,7 @@ mod tests {
     #[test]
     fn active_default_cdfs_hash_stably() {
         let digest = md5::compute(active_default_cdf_bytes());
-        assert_eq!(format!("{digest:x}"), "7f8172bdb15368c3a82ba7200b87d2c8");
+        assert_eq!(format!("{digest:x}"), "dc842fe53f8e3fae2251635ddf4ce96b");
     }
 
     #[test]

@@ -62,7 +62,13 @@ fn decode_base_level(coeff_base: u8) -> Option<i16> {
 }
 
 fn coeff_br_luma_ctx_for_eob_4x4(eob: usize) -> usize {
-    usize::from(eob >= 8)
+    if eob >= 12 {
+        2
+    } else if eob >= 8 {
+        1
+    } else {
+        0
+    }
 }
 
 fn materialize_coeffs_4x4(
@@ -1045,6 +1051,12 @@ impl<'a> BacReader<'a> {
         symbol as u8
     }
 
+    pub fn read_coeff_br_luma_ctx2_symbol(&mut self, tile_ctx: &mut TileContext, q_ctx: usize) -> u8 {
+        let symbol = self.read_symbol(tile_ctx.coeff_br_luma_ctx2[q_ctx.min(3)].as_slice());
+        tile_ctx.update_coeff_br_luma_ctx2(q_ctx, symbol);
+        symbol as u8
+    }
+
     pub fn read_coeffs(
         &mut self,
         tile_ctx: &mut TileContext,
@@ -1093,7 +1105,8 @@ impl<'a> BacReader<'a> {
             let coeff_br = match coeff_br_luma_ctx_for_eob_4x4(eob) {
                 0 => self.read_coeff_br_luma_ctx0_symbol(tile_ctx, 0),
                 1 => self.read_coeff_br_luma_ctx1_symbol(tile_ctx, 0),
-                _ => unreachable!("4x4 staged coeff_br context selector only returns 0 or 1"),
+                2 => self.read_coeff_br_luma_ctx2_symbol(tile_ctx, 0),
+                _ => unreachable!("4x4 staged coeff_br context selector only returns 0, 1, or 2"),
             };
             materialize_coeffs_4x4(
                 eob,
@@ -1263,6 +1276,7 @@ mod tests {
         let coeff_base_ctx13_before = tile_ctx.coeff_base_tx4x4_ctx13[0][0].as_slice().to_vec();
         let coeff_br_before = tile_ctx.coeff_br_luma_ctx0[0].as_slice().to_vec();
         let coeff_br_ctx1_before = tile_ctx.coeff_br_luma_ctx1[0].as_slice().to_vec();
+        let coeff_br_ctx2_before = tile_ctx.coeff_br_luma_ctx2[0].as_slice().to_vec();
         let all_zero_before = tile_ctx.all_zero.as_slice().to_vec();
 
         assert!(!reader.read_skip_with_cdf(&mut tile_ctx));
@@ -1304,6 +1318,7 @@ mod tests {
         assert_eq!(reader.read_coeff_base_tx4x4_ctx13_symbol(&mut tile_ctx, 0, 0), 0);
         assert_eq!(reader.read_coeff_br_luma_ctx0_symbol(&mut tile_ctx, 0), 0);
         assert_eq!(reader.read_coeff_br_luma_ctx1_symbol(&mut tile_ctx, 0), 0);
+        assert_eq!(reader.read_coeff_br_luma_ctx2_symbol(&mut tile_ctx, 0), 0);
         let mut coeffs = [1i16; 16];
         reader
             .read_coeffs(
@@ -1423,6 +1438,7 @@ mod tests {
         );
         assert_eq!(tile_ctx.coeff_br_luma_ctx0[0].as_slice(), coeff_br_before.as_slice());
         assert_eq!(tile_ctx.coeff_br_luma_ctx1[0].as_slice(), coeff_br_ctx1_before.as_slice());
+        assert_eq!(tile_ctx.coeff_br_luma_ctx2[0].as_slice(), coeff_br_ctx2_before.as_slice());
         assert_eq!(tile_ctx.all_zero.as_slice(), all_zero_before.as_slice());
     }
 
@@ -1567,6 +1583,13 @@ mod tests {
     }
 
     #[test]
+    fn read_coeff_br_luma_ctx2_symbol_uses_real_default_table() {
+        let mut reader = BacReader::new(&[0x00, 0x00, 0x00, 0x00]);
+        let mut tile_ctx = TileContext::new_default();
+        assert_eq!(reader.read_coeff_br_luma_ctx2_symbol(&mut tile_ctx, 0), 0);
+    }
+
+    #[test]
     fn read_coeffs_4x4_high_eob_path_updates_coeff_br_ctx1() {
         let found = (0u8..=255).find_map(|first_byte| {
             (0u8..=255).find_map(|second_byte| {
@@ -1607,6 +1630,16 @@ mod tests {
             matches!(found, Some(found_coeffs) if found_coeffs[DEFAULT_SCAN_4X4[8]] != 0),
             "no three-byte probe reached a high-eob path that updated coeff_br ctx1"
         );
+    }
+
+    #[test]
+    fn coeff_br_luma_ctx_selector_uses_ctx2_for_highest_eob_range() {
+        assert_eq!(coeff_br_luma_ctx_for_eob_4x4(0), 0);
+        assert_eq!(coeff_br_luma_ctx_for_eob_4x4(7), 0);
+        assert_eq!(coeff_br_luma_ctx_for_eob_4x4(8), 1);
+        assert_eq!(coeff_br_luma_ctx_for_eob_4x4(11), 1);
+        assert_eq!(coeff_br_luma_ctx_for_eob_4x4(12), 2);
+        assert_eq!(coeff_br_luma_ctx_for_eob_4x4(15), 2);
     }
 
     #[test]

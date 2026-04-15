@@ -246,6 +246,12 @@ pub(crate) const COEFF_BR_LUMA_CTX1_CDF: [[u16; 4]; 4] = [
     [27484, 32113, 32486, 32767],
     [29651, 32500, 32698, 32767],
 ];
+pub(crate) const COEFF_BR_LUMA_CTX2_CDF: [[u16; 4]; 4] = [
+    [19776, 28658, 30435, 32767],
+    [21555, 29858, 31096, 32767],
+    [23979, 31279, 32028, 32767],
+    [27204, 32153, 32586, 32767],
+];
 
 /// All-zero coefficient block marker for the walking skeleton.
 pub(crate) const ALL_ZERO_CDF: [u16; 2] = [16384, 32767];
@@ -343,6 +349,7 @@ pub(crate) struct TileContext {
     pub coeff_base_tx4x4_ctx13: [[CdfState<4>; 2]; 4],
     pub coeff_br_luma_ctx0: [CdfState<4>; 4],
     pub coeff_br_luma_ctx1: [CdfState<4>; 4],
+    pub coeff_br_luma_ctx2: [CdfState<4>; 4],
     pub all_zero: CdfState<2>,
 }
 
@@ -390,6 +397,7 @@ pub(crate) struct DefaultTileCdfs {
     coeff_base_tx4x4_ctx13: [[[u16; 4]; 2]; 4],
     coeff_br_luma_ctx0: [[u16; 4]; 4],
     coeff_br_luma_ctx1: [[u16; 4]; 4],
+    coeff_br_luma_ctx2: [[u16; 4]; 4],
     all_zero: [u16; 2],
 }
 
@@ -438,6 +446,7 @@ impl DefaultTileCdfs {
             coeff_base_tx4x4_ctx13: COEFF_BASE_TX4X4_CTX13_CDF,
             coeff_br_luma_ctx0: COEFF_BR_LUMA_CTX0_CDF,
             coeff_br_luma_ctx1: COEFF_BR_LUMA_CTX1_CDF,
+            coeff_br_luma_ctx2: COEFF_BR_LUMA_CTX2_CDF,
             all_zero: ALL_ZERO_CDF,
         }
     }
@@ -905,6 +914,12 @@ impl TileContext {
                 CdfState::new(defaults.coeff_br_luma_ctx1[2]),
                 CdfState::new(defaults.coeff_br_luma_ctx1[3]),
             ],
+            coeff_br_luma_ctx2: [
+                CdfState::new(defaults.coeff_br_luma_ctx2[0]),
+                CdfState::new(defaults.coeff_br_luma_ctx2[1]),
+                CdfState::new(defaults.coeff_br_luma_ctx2[2]),
+                CdfState::new(defaults.coeff_br_luma_ctx2[3]),
+            ],
             all_zero: CdfState::new(defaults.all_zero),
         }
     }
@@ -1167,6 +1182,12 @@ impl TileContext {
     pub fn update_coeff_br_luma_ctx1(&mut self, q_ctx: usize, symbol: usize) {
         if self.updates_enabled {
             self.coeff_br_luma_ctx1[q_ctx.min(3)].update(symbol);
+        }
+    }
+
+    pub fn update_coeff_br_luma_ctx2(&mut self, q_ctx: usize, symbol: usize) {
+        if self.updates_enabled {
+            self.coeff_br_luma_ctx2[q_ctx.min(3)].update(symbol);
         }
     }
 
@@ -1463,6 +1484,10 @@ fn active_default_cdf_bytes() -> Vec<u8> {
     out.extend_from_slice(&cdf_u16_bytes(&COEFF_BR_LUMA_CTX1_CDF[1]));
     out.extend_from_slice(&cdf_u16_bytes(&COEFF_BR_LUMA_CTX1_CDF[2]));
     out.extend_from_slice(&cdf_u16_bytes(&COEFF_BR_LUMA_CTX1_CDF[3]));
+    out.extend_from_slice(&cdf_u16_bytes(&COEFF_BR_LUMA_CTX2_CDF[0]));
+    out.extend_from_slice(&cdf_u16_bytes(&COEFF_BR_LUMA_CTX2_CDF[1]));
+    out.extend_from_slice(&cdf_u16_bytes(&COEFF_BR_LUMA_CTX2_CDF[2]));
+    out.extend_from_slice(&cdf_u16_bytes(&COEFF_BR_LUMA_CTX2_CDF[3]));
     out.extend_from_slice(&cdf_u16_bytes(&ALL_ZERO_CDF));
     out
 }
@@ -1597,6 +1622,7 @@ mod tests {
         );
         assert_eq!(tile.coeff_br_luma_ctx0[0].as_slice(), &COEFF_BR_LUMA_CTX0_CDF[0]);
         assert_eq!(tile.coeff_br_luma_ctx1[0].as_slice(), &COEFF_BR_LUMA_CTX1_CDF[0]);
+        assert_eq!(tile.coeff_br_luma_ctx2[0].as_slice(), &COEFF_BR_LUMA_CTX2_CDF[0]);
     }
 
     #[test]
@@ -1658,6 +1684,7 @@ mod tests {
         tile.coeff_base_tx4x4_ctx13[0][0].update(1);
         tile.coeff_br_luma_ctx0[0].update(1);
         tile.coeff_br_luma_ctx1[0].update(1);
+        tile.coeff_br_luma_ctx2[0].update(1);
         tile.all_zero.update(1);
         tile.reset_to_default();
         assert_eq!(tile.partition_do_split[0].as_slice(), &PARTITION_DO_SPLIT_CDF[0]);
@@ -1761,13 +1788,14 @@ mod tests {
         );
         assert_eq!(tile.coeff_br_luma_ctx0[0].as_slice(), &COEFF_BR_LUMA_CTX0_CDF[0]);
         assert_eq!(tile.coeff_br_luma_ctx1[0].as_slice(), &COEFF_BR_LUMA_CTX1_CDF[0]);
+        assert_eq!(tile.coeff_br_luma_ctx2[0].as_slice(), &COEFF_BR_LUMA_CTX2_CDF[0]);
         assert_eq!(tile.all_zero.as_slice(), &ALL_ZERO_CDF);
     }
 
     #[test]
     fn active_default_cdfs_hash_stably() {
         let digest = md5::compute(active_default_cdf_bytes());
-        assert_eq!(format!("{digest:x}"), "38c8367a66a76308f613d2a39bc18a6b");
+        assert_eq!(format!("{digest:x}"), "88f30238ce41d258dab73d0e63d0a00a");
     }
 
     #[test]

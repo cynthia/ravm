@@ -68,21 +68,24 @@ impl Kernels for Scalar {
         const COSPI_24_64: i32 = 6270;
 
         let idct4 = |input: [i32; 4]| -> [i32; 4] {
-            let a0 = input[0];
-            let a1 = input[2];
-            let a2 = input[1];
-            let a3 = input[3];
+            let a0 = input[0] as i64;
+            let a1 = input[2] as i64;
+            let a2 = input[1] as i64;
+            let a3 = input[3] as i64;
+            let cp16 = COSPI_16_64 as i64;
+            let cp8 = COSPI_8_64 as i64;
+            let cp24 = COSPI_24_64 as i64;
 
-            let b0 = (a0 + a1) * COSPI_16_64;
-            let b1 = (a0 - a1) * COSPI_16_64;
-            let b2 = a2 * COSPI_24_64 - a3 * COSPI_8_64;
-            let b3 = a2 * COSPI_8_64 + a3 * COSPI_24_64;
+            let b0 = (a0 + a1) * cp16;
+            let b1 = (a0 - a1) * cp16;
+            let b2 = a2 * cp24 - a3 * cp8;
+            let b3 = a2 * cp8 + a3 * cp24;
 
-            let rnd = 1 << (COS_BIT - 1);
-            let c0 = (b0 + rnd) >> COS_BIT;
-            let c1 = (b1 + rnd) >> COS_BIT;
-            let c2 = (b2 + rnd) >> COS_BIT;
-            let c3 = (b3 + rnd) >> COS_BIT;
+            let rnd = 1i64 << (COS_BIT - 1);
+            let c0 = ((b0 + rnd) >> COS_BIT) as i32;
+            let c1 = ((b1 + rnd) >> COS_BIT) as i32;
+            let c2 = ((b2 + rnd) >> COS_BIT) as i32;
+            let c3 = ((b3 + rnd) >> COS_BIT) as i32;
 
             [c0 + c3, c1 + c2, c1 - c2, c0 - c3]
         };

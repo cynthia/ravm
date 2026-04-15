@@ -7,7 +7,7 @@ use crate::decoder::entropy::{BacReader, EntropyError};
 use crate::decoder::executor::{Sequential, TileExecutor};
 use crate::decoder::frame_buffer::{FrameBuffer, PlaneBuffer};
 use crate::decoder::intra::{
-    predict_dc_4x4, predict_h_4x4, predict_paeth_4x4, predict_smooth_4x4,
+    predict_d45_4x4, predict_dc_4x4, predict_h_4x4, predict_paeth_4x4, predict_smooth_4x4,
     predict_smooth_h_4x4, predict_smooth_v_4x4, predict_v_4x4,
 };
 use crate::decoder::kernels;
@@ -235,6 +235,11 @@ fn decode_4x4_block(
     } else {
         None
     };
+    let above_wide = if by >= 4 {
+        Some(gather_above_8(fb.luma(), bx, by))
+    } else {
+        None
+    };
     let left = if bx >= 4 {
         Some(gather_left_4(fb.luma(), bx, by))
     } else {
@@ -256,6 +261,9 @@ fn decode_4x4_block(
         }
         crate::decoder::transform::BaseIntraMode::H => {
             predict_h_4x4(left.as_ref(), &mut pred, 4)
+        }
+        crate::decoder::transform::BaseIntraMode::D45 => {
+            predict_d45_4x4(above_wide.as_ref(), &mut pred, 4)
         }
         crate::decoder::transform::BaseIntraMode::Smooth => {
             predict_smooth_4x4(above.as_ref(), left.as_ref(), &mut pred, 4)
@@ -313,6 +321,21 @@ fn decode_4x4_block(
 fn gather_above_4(plane: &PlaneBuffer<u8>, bx: usize, by: usize) -> [u8; 4] {
     let row = plane.row(by - 1);
     [row[bx], row[bx + 1], row[bx + 2], row[bx + 3]]
+}
+
+fn gather_above_8(plane: &PlaneBuffer<u8>, bx: usize, by: usize) -> [u8; 8] {
+    let row = plane.row(by - 1);
+    let last_x = plane.width.saturating_sub(1);
+    [
+        row[bx.min(last_x)],
+        row[(bx + 1).min(last_x)],
+        row[(bx + 2).min(last_x)],
+        row[(bx + 3).min(last_x)],
+        row[(bx + 4).min(last_x)],
+        row[(bx + 5).min(last_x)],
+        row[(bx + 6).min(last_x)],
+        row[(bx + 7).min(last_x)],
+    ]
 }
 
 fn gather_left_4(plane: &PlaneBuffer<u8>, bx: usize, by: usize) -> [u8; 4] {

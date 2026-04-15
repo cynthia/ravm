@@ -69,6 +69,22 @@ pub(crate) fn predict_h_4x4<P: Pixel + Into<u32> + TryFrom<u32>>(
     }
 }
 
+/// Directional 45-degree intra prediction for a 4x4 block.
+pub(crate) fn predict_d45_4x4<P: Pixel + Into<u32> + TryFrom<u32>>(
+    above: Option<&[P; 8]>,
+    dst: &mut [P],
+    stride: usize,
+) {
+    let fill = [mid_gray(); 8];
+    let above = above.copied().unwrap_or(fill);
+
+    for y in 0..4 {
+        for x in 0..4 {
+            dst[y * stride + x] = above[x + y + 1];
+        }
+    }
+}
+
 fn mid_gray<P: Pixel + Into<u32> + TryFrom<u32>>() -> P {
     P::try_from(1u32 << (P::BIT_DEPTH - 1)).ok().unwrap_or_default()
 }
@@ -270,5 +286,13 @@ mod tests {
         let mut dst = [0u8; 16];
         predict_paeth_4x4::<u8>(Some(&above), Some(&left), Some(15), &mut dst, 4);
         assert_eq!(dst, [50, 50, 50, 50, 60, 60, 60, 60, 70, 70, 70, 70, 80, 80, 80, 80]);
+    }
+
+    #[test]
+    fn d45_walks_down_the_top_reference() {
+        let above = [1u8, 2, 3, 4, 5, 6, 7, 8];
+        let mut dst = [0u8; 16];
+        predict_d45_4x4::<u8>(Some(&above), &mut dst, 4);
+        assert_eq!(dst, [2, 3, 4, 5, 3, 4, 5, 6, 4, 5, 6, 7, 5, 6, 7, 8]);
     }
 }

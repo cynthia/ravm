@@ -46,6 +46,16 @@ pub(crate) const PARTITION_CDF_CTX2: [u16; 10] = [
 /// Skip flag CDF for the walking skeleton.
 #[allow(dead_code)]
 pub(crate) const SKIP_CDF: [u16; 2] = [29360, 32767];
+pub(crate) const SEGMENT_PRED_CDF: [[u16; 2]; 3] = [
+    [16384, 32767],
+    [16384, 32767],
+    [16384, 32767],
+];
+pub(crate) const SPATIAL_PRED_SEG_TREE_CDF: [[u16; 8]; 3] = [
+    [5622, 7893, 16093, 18233, 27809, 28373, 32533, 32767],
+    [14274, 18230, 22557, 24935, 29980, 30851, 32344, 32767],
+    [27527, 28487, 28723, 28890, 32397, 32647, 32679, 32767],
+];
 
 /// Luma intra-mode selector CDFs from `av2/common/entropy_inits_modes.h`.
 pub(crate) const Y_MODE_SET_CDF: [u16; 4] = [28863, 31022, 31724, 32767];
@@ -125,6 +135,8 @@ pub(crate) struct TileContext {
     pub partition_do_uneven_4way: [[CdfState<2>; 3]; 2],
     pub partition_ctx: [CdfState<10>; 3],
     pub skip: CdfState<2>,
+    pub segment_pred: [CdfState<2>; 3],
+    pub spatial_pred_seg_tree: [CdfState<8>; 3],
     pub y_mode_set: CdfState<4>,
     pub y_mode_idx: [CdfState<8>; 3],
     pub y_mode_idx_offset: [CdfState<6>; 3],
@@ -141,6 +153,8 @@ pub(crate) struct DefaultTileCdfs {
     partition_do_uneven_4way: [[[u16; 2]; 3]; 2],
     partition_ctx: [[u16; 10]; 3],
     skip: [u16; 2],
+    segment_pred: [[u16; 2]; 3],
+    spatial_pred_seg_tree: [[u16; 8]; 3],
     y_mode_set: [u16; 4],
     y_mode_idx: [[u16; 8]; 3],
     y_mode_idx_offset: [[u16; 6]; 3],
@@ -158,6 +172,8 @@ impl DefaultTileCdfs {
             partition_do_uneven_4way: PARTITION_DO_UNEVEN_4WAY_CDF,
             partition_ctx: [PARTITION_CDF_CTX0, PARTITION_CDF_CTX1, PARTITION_CDF_CTX2],
             skip: SKIP_CDF,
+            segment_pred: SEGMENT_PRED_CDF,
+            spatial_pred_seg_tree: SPATIAL_PRED_SEG_TREE_CDF,
             y_mode_set: Y_MODE_SET_CDF,
             y_mode_idx: Y_MODE_IDX_CDF,
             y_mode_idx_offset: Y_MODE_IDX_OFFSET_CDF,
@@ -217,6 +233,16 @@ impl TileContext {
                 CdfState::new(defaults.partition_ctx[2]),
             ],
             skip: CdfState::new(defaults.skip),
+            segment_pred: [
+                CdfState::new(defaults.segment_pred[0]),
+                CdfState::new(defaults.segment_pred[1]),
+                CdfState::new(defaults.segment_pred[2]),
+            ],
+            spatial_pred_seg_tree: [
+                CdfState::new(defaults.spatial_pred_seg_tree[0]),
+                CdfState::new(defaults.spatial_pred_seg_tree[1]),
+                CdfState::new(defaults.spatial_pred_seg_tree[2]),
+            ],
             y_mode_set: CdfState::new(defaults.y_mode_set),
             y_mode_idx: [
                 CdfState::new(defaults.y_mode_idx[0]),
@@ -267,6 +293,20 @@ impl TileContext {
     pub fn update_skip(&mut self, symbol: usize) {
         if self.updates_enabled {
             self.skip.update(symbol);
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn update_segment_pred(&mut self, ctx: usize, symbol: usize) {
+        if self.updates_enabled {
+            self.segment_pred[ctx.min(2)].update(symbol);
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn update_segment_id(&mut self, ctx: usize, symbol: usize) {
+        if self.updates_enabled {
+            self.spatial_pred_seg_tree[ctx.min(2)].update(symbol);
         }
     }
 
@@ -379,6 +419,12 @@ fn active_default_cdf_bytes() -> Vec<u8> {
     out.extend_from_slice(&cdf_u16_bytes(&PARTITION_CDF_CTX1));
     out.extend_from_slice(&cdf_u16_bytes(&PARTITION_CDF_CTX2));
     out.extend_from_slice(&cdf_u16_bytes(&SKIP_CDF));
+    out.extend_from_slice(&cdf_u16_bytes(&SEGMENT_PRED_CDF[0]));
+    out.extend_from_slice(&cdf_u16_bytes(&SEGMENT_PRED_CDF[1]));
+    out.extend_from_slice(&cdf_u16_bytes(&SEGMENT_PRED_CDF[2]));
+    out.extend_from_slice(&cdf_u16_bytes(&SPATIAL_PRED_SEG_TREE_CDF[0]));
+    out.extend_from_slice(&cdf_u16_bytes(&SPATIAL_PRED_SEG_TREE_CDF[1]));
+    out.extend_from_slice(&cdf_u16_bytes(&SPATIAL_PRED_SEG_TREE_CDF[2]));
     out.extend_from_slice(&cdf_u16_bytes(&Y_MODE_SET_CDF));
     out.extend_from_slice(&cdf_u16_bytes(&Y_MODE_IDX_CDF[0]));
     out.extend_from_slice(&cdf_u16_bytes(&Y_MODE_IDX_CDF[1]));
@@ -434,6 +480,11 @@ mod tests {
             tile.partition_do_uneven_4way[0][0].as_slice(),
             &PARTITION_DO_UNEVEN_4WAY_CDF[0][0]
         );
+        assert_eq!(tile.segment_pred[0].as_slice(), &SEGMENT_PRED_CDF[0]);
+        assert_eq!(
+            tile.spatial_pred_seg_tree[0].as_slice(),
+            &SPATIAL_PRED_SEG_TREE_CDF[0]
+        );
         assert_eq!(tile.y_mode_set.as_slice(), &Y_MODE_SET_CDF);
         assert_eq!(tile.y_mode_idx[0].as_slice(), &Y_MODE_IDX_CDF[0]);
         assert_eq!(tile.uv_mode[0].as_slice(), &UV_MODE_CDF[0]);
@@ -463,6 +514,8 @@ mod tests {
         tile.partition_do_ext[0].update(1);
         tile.partition_do_uneven_4way[0][0].update(1);
         tile.skip.update(1);
+        tile.segment_pred[0].update(1);
+        tile.spatial_pred_seg_tree[0].update(3);
         tile.y_mode_set.update(1);
         tile.y_mode_idx[0].update(4);
         tile.y_mode_idx_offset[0].update(2);
@@ -481,6 +534,11 @@ mod tests {
             &PARTITION_DO_UNEVEN_4WAY_CDF[0][0]
         );
         assert_eq!(tile.skip.as_slice(), &SKIP_CDF);
+        assert_eq!(tile.segment_pred[0].as_slice(), &SEGMENT_PRED_CDF[0]);
+        assert_eq!(
+            tile.spatial_pred_seg_tree[0].as_slice(),
+            &SPATIAL_PRED_SEG_TREE_CDF[0]
+        );
         assert_eq!(tile.y_mode_set.as_slice(), &Y_MODE_SET_CDF);
         assert_eq!(tile.y_mode_idx[0].as_slice(), &Y_MODE_IDX_CDF[0]);
         assert_eq!(tile.y_mode_idx_offset[0].as_slice(), &Y_MODE_IDX_OFFSET_CDF[0]);
@@ -491,7 +549,7 @@ mod tests {
     #[test]
     fn active_default_cdfs_hash_stably() {
         let digest = md5::compute(active_default_cdf_bytes());
-        assert_eq!(format!("{digest:x}"), "76ccb073e81bbae20a74a4a5f9c624c4");
+        assert_eq!(format!("{digest:x}"), "1cdc2d546d9fa655f23a2a5ed2666d51");
     }
 
     #[test]

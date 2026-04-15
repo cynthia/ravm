@@ -8,6 +8,11 @@ pub(crate) trait Kernels: Sync + 'static {
     /// order; output is residual samples written into `dst` with stride in
     /// pixels.
     fn inv_dct4x4(&self, coeffs: &[i32; 16], dst: &mut [i16], dst_stride: usize);
+
+    /// Inverse 4x4 IDTX. Input is dequantized coefficients in row-major
+    /// order; output is residual samples written into `dst` with stride in
+    /// pixels.
+    fn inv_idtx4x4(&self, coeffs: &[i32; 16], dst: &mut [i16], dst_stride: usize);
 }
 
 /// Return the best available kernel implementation for the host CPU.
@@ -40,5 +45,14 @@ mod tests {
         for &v in &dst {
             assert_eq!(v, dst[0], "DC-only block must be flat");
         }
+    }
+
+    #[test]
+    fn inv_idtx4x4_preserves_all_zero_block() {
+        let k = detect();
+        let coeffs = [0i32; 16];
+        let mut dst = [7i16; 16];
+        k.inv_idtx4x4(&coeffs, &mut dst, 4);
+        assert_eq!(dst, [0i16; 16]);
     }
 }

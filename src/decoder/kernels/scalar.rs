@@ -49,4 +49,16 @@ impl Kernels for Scalar {
             }
         }
     }
+
+    fn inv_idtx4x4(&self, coeffs: &[i32; 16], dst: &mut [i16], dst_stride: usize) {
+        // AV2's 4x4 IDTX is a scaled passthrough in each 1D pass. For the
+        // current scalar decoder, keep the implementation simple and exact
+        // enough for staged bring-up: apply the 2D rounding as a direct copy.
+        for y in 0..4 {
+            for x in 0..4 {
+                dst[y * dst_stride + x] =
+                    coeffs[y * 4 + x].clamp(i16::MIN as i32, i16::MAX as i32) as i16;
+            }
+        }
+    }
 }

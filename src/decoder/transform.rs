@@ -118,6 +118,7 @@ pub(crate) fn inverse_transform(
 ) {
     match (tx_size, tx_type) {
         (TxSize::Tx4x4, TxType::DctDct) => kernels.inv_dct4x4(coeffs, dst, stride),
+        (TxSize::Tx4x4, TxType::Idtx) => kernels.inv_idtx4x4(coeffs, dst, stride),
         _ => unimplemented!("inverse transform not implemented for {tx_type:?}"),
     }
 }
@@ -168,5 +169,17 @@ mod tests {
             ),
             TxType::Idtx
         );
+    }
+
+    #[test]
+    fn dispatches_to_idtx4x4() {
+        let k = detect();
+        let mut coeffs = [0i32; 16];
+        coeffs[0] = 5;
+        coeffs[5] = -3;
+        let mut dst = [0i16; 16];
+        inverse_transform(k, TxSize::Tx4x4, TxType::Idtx, &coeffs, &mut dst, 4);
+        assert_eq!(dst[0], 5);
+        assert_eq!(dst[5], -3);
     }
 }

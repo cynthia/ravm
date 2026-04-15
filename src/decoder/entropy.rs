@@ -61,6 +61,71 @@ fn decode_base_level(coeff_base: u8) -> Option<i16> {
     (coeff_base != 0).then_some(i16::from(coeff_base))
 }
 
+fn materialize_coeffs_4x4(
+    eob: usize,
+    dc_sign: bool,
+    coeff_base_eob: u8,
+    coeff_base: u8,
+    coeff_base_ctx1: u8,
+    coeff_base_ctx2: u8,
+    coeff_br: u8,
+    out: &mut [i16; 16],
+) -> Result<(), EntropyError> {
+    *out = [0; 16];
+    match eob {
+        0 => {
+            let level = decode_eob_level(coeff_base_eob, coeff_br);
+            out[0] = if dc_sign { -level } else { level };
+            Ok(())
+        }
+        1 => {
+            let ac_level = decode_eob_level(coeff_base_eob, coeff_br);
+            if let Some(dc_level) = decode_base_level(coeff_base) {
+                out[0] = if dc_sign { -dc_level } else { dc_level };
+            }
+            out[DEFAULT_SCAN_4X4[1]] = ac_level;
+            Ok(())
+        }
+        2 => {
+            let ac_level = decode_eob_level(coeff_base_eob, coeff_br);
+            if let Some(prev_ac_level) = decode_base_level(coeff_base) {
+                out[DEFAULT_SCAN_4X4[1]] = prev_ac_level;
+            }
+            if let Some(dc_level) = decode_base_level(coeff_base_ctx1) {
+                out[0] = if dc_sign { -dc_level } else { dc_level };
+            }
+            out[DEFAULT_SCAN_4X4[2]] = ac_level;
+            Ok(())
+        }
+        3 => {
+            let ac_level = decode_eob_level(coeff_base_eob, coeff_br);
+            if let Some(prev_ac_level) = decode_base_level(coeff_base) {
+                out[DEFAULT_SCAN_4X4[2]] = prev_ac_level;
+            }
+            if let Some(prev_prev_ac_level) = decode_base_level(coeff_base_ctx1) {
+                out[DEFAULT_SCAN_4X4[1]] = prev_prev_ac_level;
+            }
+            out[DEFAULT_SCAN_4X4[3]] = ac_level;
+            Ok(())
+        }
+        4 => {
+            let ac_level = decode_eob_level(coeff_base_eob, coeff_br);
+            if let Some(prev_ac_level) = decode_base_level(coeff_base) {
+                out[DEFAULT_SCAN_4X4[3]] = prev_ac_level;
+            }
+            if let Some(prev_prev_ac_level) = decode_base_level(coeff_base_ctx1) {
+                out[DEFAULT_SCAN_4X4[2]] = prev_prev_ac_level;
+            }
+            if let Some(prev_prev_prev_ac_level) = decode_base_level(coeff_base_ctx2) {
+                out[DEFAULT_SCAN_4X4[1]] = prev_prev_prev_ac_level;
+            }
+            out[DEFAULT_SCAN_4X4[4]] = ac_level;
+            Ok(())
+        }
+        _ => Err(EntropyError::UnimplementedInM0),
+    }
+}
+
 pub(crate) struct BacReader<'a> {
     buf: &'a [u8],
     pos: usize,
@@ -434,6 +499,18 @@ impl<'a> BacReader<'a> {
         symbol as u8
     }
 
+    pub fn read_coeff_base_tx4x4_ctx2_symbol(
+        &mut self,
+        tile_ctx: &mut TileContext,
+        q_ctx: usize,
+        tcq_ctx: usize,
+    ) -> u8 {
+        let symbol =
+            self.read_symbol(tile_ctx.coeff_base_tx4x4_ctx2[q_ctx.min(3)][tcq_ctx.min(1)].as_slice());
+        tile_ctx.update_coeff_base_tx4x4_ctx2(q_ctx, tcq_ctx, symbol);
+        symbol as u8
+    }
+
     pub fn read_coeff_br_luma_ctx0_symbol(&mut self, tile_ctx: &mut TileContext, q_ctx: usize) -> u8 {
         let symbol = self.read_symbol(tile_ctx.coeff_br_luma_ctx0[q_ctx.min(3)].as_slice());
         tile_ctx.update_coeff_br_luma_ctx0(q_ctx, symbol);
@@ -473,47 +550,18 @@ impl<'a> BacReader<'a> {
             let dc_sign = self.read_dc_sign_luma_symbol(tile_ctx, 0, 0);
             let coeff_base = self.read_coeff_base_tx4x4_ctx0_symbol(tile_ctx, 0, 0);
             let coeff_base_ctx1 = self.read_coeff_base_tx4x4_ctx1_symbol(tile_ctx, 0, 0);
+            let coeff_base_ctx2 = self.read_coeff_base_tx4x4_ctx2_symbol(tile_ctx, 0, 0);
             let coeff_br = self.read_coeff_br_luma_ctx0_symbol(tile_ctx, 0);
-
-            *out = [0; 16];
-            match eob {
-                0 => {
-                    let level = decode_eob_level(coeff_base_eob, coeff_br);
-                    out[0] = if dc_sign { -level } else { level };
-                    Ok(())
-                }
-                1 => {
-                    let ac_level = decode_eob_level(coeff_base_eob, coeff_br);
-                    if let Some(dc_level) = decode_base_level(coeff_base) {
-                        out[0] = if dc_sign { -dc_level } else { dc_level };
-                    }
-                    out[DEFAULT_SCAN_4X4[1]] = ac_level;
-                    Ok(())
-                }
-                2 => {
-                    let ac_level = decode_eob_level(coeff_base_eob, coeff_br);
-                    if let Some(prev_ac_level) = decode_base_level(coeff_base) {
-                        out[DEFAULT_SCAN_4X4[1]] = prev_ac_level;
-                    }
-                    if let Some(dc_level) = decode_base_level(coeff_base_ctx1) {
-                        out[0] = if dc_sign { -dc_level } else { dc_level };
-                    }
-                    out[DEFAULT_SCAN_4X4[2]] = ac_level;
-                    Ok(())
-                }
-                3 => {
-                    let ac_level = decode_eob_level(coeff_base_eob, coeff_br);
-                    if let Some(prev_ac_level) = decode_base_level(coeff_base) {
-                        out[DEFAULT_SCAN_4X4[2]] = prev_ac_level;
-                    }
-                    if let Some(prev_prev_ac_level) = decode_base_level(coeff_base_ctx1) {
-                        out[DEFAULT_SCAN_4X4[1]] = prev_prev_ac_level;
-                    }
-                    out[DEFAULT_SCAN_4X4[3]] = ac_level;
-                    Ok(())
-                }
-                _ => Err(EntropyError::UnimplementedInM0),
-            }
+            materialize_coeffs_4x4(
+                eob,
+                dc_sign,
+                coeff_base_eob,
+                coeff_base,
+                coeff_base_ctx1,
+                coeff_base_ctx2,
+                coeff_br,
+                out,
+            )
         }
     }
 
@@ -647,6 +695,7 @@ mod tests {
         let dc_sign_before = tile_ctx.dc_sign_luma[0][0].as_slice().to_vec();
         let coeff_base_before = tile_ctx.coeff_base_tx4x4_ctx0[0][0].as_slice().to_vec();
         let coeff_base_ctx1_before = tile_ctx.coeff_base_tx4x4_ctx1[0][0].as_slice().to_vec();
+        let coeff_base_ctx2_before = tile_ctx.coeff_base_tx4x4_ctx2[0][0].as_slice().to_vec();
         let coeff_br_before = tile_ctx.coeff_br_luma_ctx0[0].as_slice().to_vec();
         let all_zero_before = tile_ctx.all_zero.as_slice().to_vec();
 
@@ -675,6 +724,7 @@ mod tests {
         assert!(!reader.read_dc_sign_luma_symbol(&mut tile_ctx, 0, 0));
         assert_eq!(reader.read_coeff_base_tx4x4_ctx0_symbol(&mut tile_ctx, 0, 0), 0);
         assert_eq!(reader.read_coeff_base_tx4x4_ctx1_symbol(&mut tile_ctx, 0, 0), 0);
+        assert_eq!(reader.read_coeff_base_tx4x4_ctx2_symbol(&mut tile_ctx, 0, 0), 0);
         assert_eq!(reader.read_coeff_br_luma_ctx0_symbol(&mut tile_ctx, 0), 0);
         let mut coeffs = [1i16; 16];
         reader
@@ -745,6 +795,10 @@ mod tests {
             tile_ctx.coeff_base_tx4x4_ctx1[0][0].as_slice(),
             coeff_base_ctx1_before.as_slice()
         );
+        assert_eq!(
+            tile_ctx.coeff_base_tx4x4_ctx2[0][0].as_slice(),
+            coeff_base_ctx2_before.as_slice()
+        );
         assert_eq!(tile_ctx.coeff_br_luma_ctx0[0].as_slice(), coeff_br_before.as_slice());
         assert_eq!(tile_ctx.all_zero.as_slice(), all_zero_before.as_slice());
     }
@@ -789,6 +843,13 @@ mod tests {
         let mut reader = BacReader::new(&[0x00, 0x00, 0x00, 0x00]);
         let mut tile_ctx = TileContext::new_default();
         assert_eq!(reader.read_coeff_base_tx4x4_ctx1_symbol(&mut tile_ctx, 0, 0), 0);
+    }
+
+    #[test]
+    fn read_coeff_base_tx4x4_ctx2_symbol_uses_real_default_table() {
+        let mut reader = BacReader::new(&[0x00, 0x00, 0x00, 0x00]);
+        let mut tile_ctx = TileContext::new_default();
+        assert_eq!(reader.read_coeff_base_tx4x4_ctx2_symbol(&mut tile_ctx, 0, 0), 0);
     }
 
     #[test]
@@ -1130,6 +1191,24 @@ mod tests {
             matches!(coeffs, Some(found) if found[DEFAULT_SCAN_4X4[3]] != 0),
             "no two-byte probe reached the third-scanned-ac nonzero path"
         );
+    }
+
+    #[test]
+    fn read_coeffs_4x4_can_place_fourth_scanned_ac_from_real_scan_order() {
+        let mut coeffs = [0i16; 16];
+        materialize_coeffs_4x4(4, false, 2, 3, 2, 1, 0, &mut coeffs)
+            .expect("materialize fourth scanned coefficient");
+        assert_eq!(coeffs[DEFAULT_SCAN_4X4[1]], 1);
+        assert_eq!(coeffs[DEFAULT_SCAN_4X4[2]], 2);
+        assert_eq!(coeffs[DEFAULT_SCAN_4X4[3]], 3);
+        assert_eq!(coeffs[DEFAULT_SCAN_4X4[4]], 3);
+        assert!(coeffs.iter().enumerate().all(|(i, &coeff)| {
+            i == DEFAULT_SCAN_4X4[1]
+                || i == DEFAULT_SCAN_4X4[2]
+                || i == DEFAULT_SCAN_4X4[3]
+                || i == DEFAULT_SCAN_4X4[4]
+                || coeff == 0
+        }));
     }
 
     #[test]

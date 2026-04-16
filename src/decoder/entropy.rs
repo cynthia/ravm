@@ -79,6 +79,31 @@ fn coeff_br_luma_ctx_for_eob_4x4(eob: usize, coeff_base_eob: u8) -> usize {
     }
 }
 
+fn staged_nonzero_base_count_4x4(coeff_bases: &[u8; 14], eob: usize) -> usize {
+    coeff_bases
+        .iter()
+        .take(coeff_base_symbols_needed_for_eob_4x4(eob))
+        .filter(|&&symbol| symbol != 0)
+        .count()
+}
+
+fn coeff_br_luma_ctx_for_staged_4x4(
+    eob: usize,
+    coeff_base_eob: u8,
+    coeff_bases: &[u8; 14],
+) -> usize {
+    let coarse_ctx = coeff_br_luma_ctx_for_eob_4x4(eob, coeff_base_eob);
+    let prior_nonzero_bases = staged_nonzero_base_count_4x4(coeff_bases, eob);
+
+    if coarse_ctx >= 4 && coeff_base_eob >= 3 && prior_nonzero_bases >= 3 {
+        6
+    } else if coarse_ctx >= 4 && coeff_base_eob >= 2 && prior_nonzero_bases >= 2 {
+        5
+    } else {
+        coarse_ctx
+    }
+}
+
 fn staged_level_q_ctx_4x4(coeff_base_eob: u8) -> usize {
     usize::from(coeff_base_eob.min(3))
 }
@@ -1366,7 +1391,7 @@ impl<'a> BacReader<'a> {
                     self.read_coeff_base_tx4x4_ctx_symbol(tile_ctx, ctx_idx, level_q_ctx, tcq_ctx);
             }
             let coeff_br = if coeff_br_needed_for_eob_level(coeff_base_eob) {
-                match coeff_br_luma_ctx_for_eob_4x4(eob, coeff_base_eob) {
+                match coeff_br_luma_ctx_for_staged_4x4(eob, coeff_base_eob, &coeff_bases) {
                     0 => self.read_coeff_br_luma_ctx0_symbol(tile_ctx, level_q_ctx),
                     1 => self.read_coeff_br_luma_ctx1_symbol(tile_ctx, level_q_ctx),
                     2 => self.read_coeff_br_luma_ctx2_symbol(tile_ctx, level_q_ctx),
@@ -1924,6 +1949,15 @@ mod tests {
     }
 
     #[test]
+    fn staged_nonzero_base_count_4x4_tracks_present_prior_coefficients() {
+        let coeff_bases = coeff_bases_4x4(1, 0, 2, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        assert_eq!(staged_nonzero_base_count_4x4(&coeff_bases, 0), 0);
+        assert_eq!(staged_nonzero_base_count_4x4(&coeff_bases, 1), 1);
+        assert_eq!(staged_nonzero_base_count_4x4(&coeff_bases, 3), 1);
+        assert_eq!(staged_nonzero_base_count_4x4(&coeff_bases, 6), 3);
+    }
+
+    #[test]
     fn coeff_br_requirement_tracks_eob_level_threshold() {
         assert!(!coeff_br_needed_for_eob_level(0));
         assert!(!coeff_br_needed_for_eob_level(1));
@@ -2005,6 +2039,17 @@ mod tests {
         assert_eq!(coeff_br_luma_ctx_for_eob_4x4(15, 0), 4);
         assert_eq!(coeff_br_luma_ctx_for_eob_4x4(15, 2), 5);
         assert_eq!(coeff_br_luma_ctx_for_eob_4x4(15, 3), 6);
+    }
+
+    #[test]
+    fn staged_coeff_br_selector_promotes_top_end_contexts_only_when_prior_bases_exist() {
+        let sparse = coeff_bases_4x4(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        let dense = coeff_bases_4x4(1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+
+        assert_eq!(coeff_br_luma_ctx_for_staged_4x4(14, 2, &sparse), 4);
+        assert_eq!(coeff_br_luma_ctx_for_staged_4x4(14, 2, &dense), 5);
+        assert_eq!(coeff_br_luma_ctx_for_staged_4x4(15, 3, &dense), 6);
+        assert_eq!(coeff_br_luma_ctx_for_staged_4x4(12, 3, &dense), 2);
     }
 
     #[test]

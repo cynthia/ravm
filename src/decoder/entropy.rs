@@ -83,6 +83,10 @@ fn staged_level_q_ctx_4x4(coeff_base_eob: u8) -> usize {
     usize::from(coeff_base_eob.min(3))
 }
 
+fn staged_tcq_ctx_for_coeff_base_4x4(eob: usize, coeff_idx: usize) -> usize {
+    usize::from(eob >= 4 && coeff_idx >= 1)
+}
+
 fn coeff_base_symbols_needed_for_eob_4x4(eob: usize) -> usize {
     match eob {
         0 => 0,
@@ -1357,8 +1361,9 @@ impl<'a> BacReader<'a> {
                 .take(coeff_base_symbols_needed_for_eob_4x4(eob))
                 .enumerate()
             {
+                let tcq_ctx = staged_tcq_ctx_for_coeff_base_4x4(eob, ctx_idx);
                 *coeff_base =
-                    self.read_coeff_base_tx4x4_ctx_symbol(tile_ctx, ctx_idx, level_q_ctx, 0);
+                    self.read_coeff_base_tx4x4_ctx_symbol(tile_ctx, ctx_idx, level_q_ctx, tcq_ctx);
             }
             let coeff_br = if coeff_br_needed_for_eob_level(coeff_base_eob) {
                 match coeff_br_luma_ctx_for_eob_4x4(eob, coeff_base_eob) {
@@ -1934,6 +1939,15 @@ mod tests {
         assert_eq!(staged_level_q_ctx_4x4(2), 2);
         assert_eq!(staged_level_q_ctx_4x4(3), 3);
         assert_eq!(staged_level_q_ctx_4x4(7), 3);
+    }
+
+    #[test]
+    fn staged_tcq_ctx_for_coeff_base_4x4_uses_secondary_row_for_later_positions() {
+        assert_eq!(staged_tcq_ctx_for_coeff_base_4x4(1, 0), 0);
+        assert_eq!(staged_tcq_ctx_for_coeff_base_4x4(3, 1), 0);
+        assert_eq!(staged_tcq_ctx_for_coeff_base_4x4(4, 0), 0);
+        assert_eq!(staged_tcq_ctx_for_coeff_base_4x4(4, 1), 1);
+        assert_eq!(staged_tcq_ctx_for_coeff_base_4x4(15, 13), 1);
     }
 
     #[test]

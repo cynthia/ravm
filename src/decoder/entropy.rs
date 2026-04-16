@@ -95,6 +95,10 @@ fn dc_sign_needed_for_eob_4x4(eob: usize) -> bool {
     eob <= 2
 }
 
+fn optional_dc_sign_for_eob_4x4(eob: usize, dc_sign: bool) -> Option<bool> {
+    dc_sign_needed_for_eob_4x4(eob).then_some(dc_sign)
+}
+
 fn apply_dc_sign(level: i16, dc_sign: Option<bool>) -> i16 {
     if dc_sign.unwrap_or(false) { -level } else { level }
 }
@@ -1283,11 +1287,7 @@ impl<'a> BacReader<'a> {
             };
             materialize_coeffs_4x4_with_optional_dc_sign(
                 eob,
-                if dc_sign_needed_for_eob_4x4(eob) {
-                    Some(dc_sign)
-                } else {
-                    None
-                },
+                optional_dc_sign_for_eob_4x4(eob, dc_sign),
                 coeff_base_eob,
                 coeff_bases[0],
                 coeff_bases[1],
@@ -1843,6 +1843,14 @@ mod tests {
         assert!(dc_sign_needed_for_eob_4x4(2));
         assert!(!dc_sign_needed_for_eob_4x4(3));
         assert!(!dc_sign_needed_for_eob_4x4(15));
+    }
+
+    #[test]
+    fn optional_dc_sign_for_eob_4x4_drops_sign_on_ac_only_paths() {
+        assert_eq!(optional_dc_sign_for_eob_4x4(0, true), Some(true));
+        assert_eq!(optional_dc_sign_for_eob_4x4(2, false), Some(false));
+        assert_eq!(optional_dc_sign_for_eob_4x4(3, true), None);
+        assert_eq!(optional_dc_sign_for_eob_4x4(15, true), None);
     }
 
     #[test]

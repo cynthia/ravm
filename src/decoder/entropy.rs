@@ -112,6 +112,20 @@ fn staged_tcq_ctx_for_coeff_base_4x4(eob: usize, coeff_idx: usize) -> usize {
     usize::from(eob >= 4 && coeff_idx >= 1)
 }
 
+fn coeff_base_ctx_idx_for_staged_4x4(eob: usize, coeff_idx: usize, coeff_bases: &[u8; 14]) -> usize {
+    let prior_nonzero_bases = coeff_bases.iter().take(coeff_idx).filter(|&&symbol| symbol != 0).count();
+    let mut ctx_idx = coeff_idx;
+
+    if eob >= 8 && coeff_idx >= 4 && prior_nonzero_bases >= 2 {
+        ctx_idx = (ctx_idx + 1).min(13);
+    }
+    if eob >= 12 && coeff_idx >= 8 && prior_nonzero_bases >= 4 {
+        ctx_idx = (ctx_idx + 1).min(13);
+    }
+
+    ctx_idx
+}
+
 fn coeff_base_symbols_needed_for_eob_4x4(eob: usize) -> usize {
     match eob {
         0 => 0,
@@ -1381,14 +1395,11 @@ impl<'a> BacReader<'a> {
                 false
             };
             let mut coeff_bases = [0u8; 14];
-            for (ctx_idx, coeff_base) in coeff_bases
-                .iter_mut()
-                .take(coeff_base_symbols_needed_for_eob_4x4(eob))
-                .enumerate()
-            {
+            for ctx_idx in 0..coeff_base_symbols_needed_for_eob_4x4(eob) {
                 let tcq_ctx = staged_tcq_ctx_for_coeff_base_4x4(eob, ctx_idx);
-                *coeff_base =
-                    self.read_coeff_base_tx4x4_ctx_symbol(tile_ctx, ctx_idx, level_q_ctx, tcq_ctx);
+                let staged_ctx_idx = coeff_base_ctx_idx_for_staged_4x4(eob, ctx_idx, &coeff_bases);
+                coeff_bases[ctx_idx] =
+                    self.read_coeff_base_tx4x4_ctx_symbol(tile_ctx, staged_ctx_idx, level_q_ctx, tcq_ctx);
             }
             let coeff_br = if coeff_br_needed_for_eob_level(coeff_base_eob) {
                 match coeff_br_luma_ctx_for_staged_4x4(eob, coeff_base_eob, &coeff_bases) {
@@ -1982,6 +1993,18 @@ mod tests {
         assert_eq!(staged_tcq_ctx_for_coeff_base_4x4(4, 0), 0);
         assert_eq!(staged_tcq_ctx_for_coeff_base_4x4(4, 1), 1);
         assert_eq!(staged_tcq_ctx_for_coeff_base_4x4(15, 13), 1);
+    }
+
+    #[test]
+    fn staged_coeff_base_ctx_idx_promotes_only_in_dense_higher_ranges() {
+        let sparse = coeff_bases_4x4(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        let dense = coeff_bases_4x4(1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+
+        assert_eq!(coeff_base_ctx_idx_for_staged_4x4(7, 4, &dense), 4);
+        assert_eq!(coeff_base_ctx_idx_for_staged_4x4(8, 4, &sparse), 4);
+        assert_eq!(coeff_base_ctx_idx_for_staged_4x4(8, 4, &dense), 5);
+        assert_eq!(coeff_base_ctx_idx_for_staged_4x4(12, 8, &dense), 10);
+        assert_eq!(coeff_base_ctx_idx_for_staged_4x4(15, 13, &dense), 13);
     }
 
     #[test]

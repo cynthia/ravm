@@ -107,6 +107,40 @@ fn apply_dc_sign(level: i16, dc_sign: Option<bool>) -> i16 {
     if dc_sign.unwrap_or(false) { -level } else { level }
 }
 
+fn coeff_bases_4x4(
+    coeff_base: u8,
+    coeff_base_ctx1: u8,
+    coeff_base_ctx2: u8,
+    coeff_base_ctx3: u8,
+    coeff_base_ctx4: u8,
+    coeff_base_ctx5: u8,
+    coeff_base_ctx6: u8,
+    coeff_base_ctx7: u8,
+    coeff_base_ctx8: u8,
+    coeff_base_ctx9: u8,
+    coeff_base_ctx10: u8,
+    coeff_base_ctx11: u8,
+    coeff_base_ctx12: u8,
+    coeff_base_ctx13: u8,
+) -> [u8; 14] {
+    [
+        coeff_base,
+        coeff_base_ctx1,
+        coeff_base_ctx2,
+        coeff_base_ctx3,
+        coeff_base_ctx4,
+        coeff_base_ctx5,
+        coeff_base_ctx6,
+        coeff_base_ctx7,
+        coeff_base_ctx8,
+        coeff_base_ctx9,
+        coeff_base_ctx10,
+        coeff_base_ctx11,
+        coeff_base_ctx12,
+        coeff_base_ctx13,
+    ]
+}
+
 #[cfg(test)]
 fn materialize_coeffs_4x4_with_optional_tokens(
     eob: usize,
@@ -132,7 +166,7 @@ fn materialize_coeffs_4x4_with_optional_tokens(
     *out = [0; 16];
     let coeff_br = coeff_br.unwrap_or(0);
     if eob < DEFAULT_SCAN_4X4.len() {
-        let coeff_bases = [
+        let coeff_bases = coeff_bases_4x4(
             coeff_base,
             coeff_base_ctx1,
             coeff_base_ctx2,
@@ -147,7 +181,7 @@ fn materialize_coeffs_4x4_with_optional_tokens(
             coeff_base_ctx11,
             coeff_base_ctx12,
             coeff_base_ctx13,
-        ];
+        );
 
         if eob == 0 {
             let level = decode_eob_level(coeff_base_eob, coeff_br);
@@ -666,25 +700,27 @@ fn materialize_coeffs_4x4(
     coeff_br: u8,
     out: &mut [i16; 16],
 ) -> Result<(), EntropyError> {
-    materialize_coeffs_4x4_with_optional_tokens(
+    materialize_coeffs_4x4_from_bases_with_optional_tokens(
         eob,
         Some(dc_sign),
         Some(coeff_br),
         coeff_base_eob,
-        coeff_base,
-        coeff_base_ctx1,
-        coeff_base_ctx2,
-        coeff_base_ctx3,
-        coeff_base_ctx4,
-        coeff_base_ctx5,
-        coeff_base_ctx6,
-        coeff_base_ctx7,
-        coeff_base_ctx8,
-        coeff_base_ctx9,
-        coeff_base_ctx10,
-        coeff_base_ctx11,
-        coeff_base_ctx12,
-        coeff_base_ctx13,
+        coeff_bases_4x4(
+            coeff_base,
+            coeff_base_ctx1,
+            coeff_base_ctx2,
+            coeff_base_ctx3,
+            coeff_base_ctx4,
+            coeff_base_ctx5,
+            coeff_base_ctx6,
+            coeff_base_ctx7,
+            coeff_base_ctx8,
+            coeff_base_ctx9,
+            coeff_base_ctx10,
+            coeff_base_ctx11,
+            coeff_base_ctx12,
+            coeff_base_ctx13,
+        ),
         out,
     )
 }
@@ -1336,7 +1372,22 @@ impl<'a> BacReader<'a> {
                 optional_dc_sign_for_eob_4x4(eob, dc_sign),
                 optional_coeff_br_for_eob_level(coeff_base_eob, coeff_br),
                 coeff_base_eob,
-                coeff_bases,
+                coeff_bases_4x4(
+                    coeff_bases[0],
+                    coeff_bases[1],
+                    coeff_bases[2],
+                    coeff_bases[3],
+                    coeff_bases[4],
+                    coeff_bases[5],
+                    coeff_bases[6],
+                    coeff_bases[7],
+                    coeff_bases[8],
+                    coeff_bases[9],
+                    coeff_bases[10],
+                    coeff_bases[11],
+                    coeff_bases[12],
+                    coeff_bases[13],
+                ),
                 out,
             )
         }

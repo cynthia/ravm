@@ -79,6 +79,10 @@ fn coeff_br_luma_ctx_for_eob_4x4(eob: usize, coeff_base_eob: u8) -> usize {
     }
 }
 
+fn staged_level_q_ctx_4x4(coeff_base_eob: u8) -> usize {
+    usize::from(coeff_base_eob.min(3))
+}
+
 fn coeff_base_symbols_needed_for_eob_4x4(eob: usize) -> usize {
     match eob {
         0 => 0,
@@ -142,6 +146,7 @@ fn coeff_bases_4x4(
 }
 
 #[cfg(test)]
+#[allow(dead_code)]
 fn materialize_coeffs_4x4_with_optional_tokens(
     eob: usize,
     dc_sign: Option<bool>,
@@ -1340,8 +1345,9 @@ impl<'a> BacReader<'a> {
             let eob_pt = self.read_eob_pt_16_symbol(tile_ctx, 0, plane_ctx);
             let eob = derive_eob_4x4(eob_pt).ok_or(EntropyError::UnimplementedInM0)?;
             let coeff_base_eob = self.read_coeff_base_eob_tx4x4_symbol(tile_ctx, 0, 0);
+            let level_q_ctx = staged_level_q_ctx_4x4(coeff_base_eob);
             let dc_sign = if dc_sign_needed_for_eob_4x4(eob) {
-                self.read_dc_sign_luma_symbol(tile_ctx, 0, 0)
+                self.read_dc_sign_luma_symbol(tile_ctx, level_q_ctx, 0)
             } else {
                 false
             };
@@ -1351,17 +1357,18 @@ impl<'a> BacReader<'a> {
                 .take(coeff_base_symbols_needed_for_eob_4x4(eob))
                 .enumerate()
             {
-                *coeff_base = self.read_coeff_base_tx4x4_ctx_symbol(tile_ctx, ctx_idx, 0, 0);
+                *coeff_base =
+                    self.read_coeff_base_tx4x4_ctx_symbol(tile_ctx, ctx_idx, level_q_ctx, 0);
             }
             let coeff_br = if coeff_br_needed_for_eob_level(coeff_base_eob) {
                 match coeff_br_luma_ctx_for_eob_4x4(eob, coeff_base_eob) {
-                    0 => self.read_coeff_br_luma_ctx0_symbol(tile_ctx, 0),
-                    1 => self.read_coeff_br_luma_ctx1_symbol(tile_ctx, 0),
-                    2 => self.read_coeff_br_luma_ctx2_symbol(tile_ctx, 0),
-                    3 => self.read_coeff_br_luma_ctx3_symbol(tile_ctx, 0),
-                    4 => self.read_coeff_br_luma_ctx4_symbol(tile_ctx, 0),
-                    5 => self.read_coeff_br_luma_ctx5_symbol(tile_ctx, 0),
-                    6 => self.read_coeff_br_luma_ctx6_symbol(tile_ctx, 0),
+                    0 => self.read_coeff_br_luma_ctx0_symbol(tile_ctx, level_q_ctx),
+                    1 => self.read_coeff_br_luma_ctx1_symbol(tile_ctx, level_q_ctx),
+                    2 => self.read_coeff_br_luma_ctx2_symbol(tile_ctx, level_q_ctx),
+                    3 => self.read_coeff_br_luma_ctx3_symbol(tile_ctx, level_q_ctx),
+                    4 => self.read_coeff_br_luma_ctx4_symbol(tile_ctx, level_q_ctx),
+                    5 => self.read_coeff_br_luma_ctx5_symbol(tile_ctx, level_q_ctx),
+                    6 => self.read_coeff_br_luma_ctx6_symbol(tile_ctx, level_q_ctx),
                     _ => unreachable!("4x4 staged coeff_br context selector only returns 0..=6"),
                 }
             } else {
@@ -1921,6 +1928,15 @@ mod tests {
     }
 
     #[test]
+    fn staged_level_q_ctx_tracks_coeff_base_eob_strength() {
+        assert_eq!(staged_level_q_ctx_4x4(0), 0);
+        assert_eq!(staged_level_q_ctx_4x4(1), 1);
+        assert_eq!(staged_level_q_ctx_4x4(2), 2);
+        assert_eq!(staged_level_q_ctx_4x4(3), 3);
+        assert_eq!(staged_level_q_ctx_4x4(7), 3);
+    }
+
+    #[test]
     fn dc_sign_requirement_tracks_staged_dc_presence() {
         assert!(dc_sign_needed_for_eob_4x4(0));
         assert!(dc_sign_needed_for_eob_4x4(1));
@@ -1948,25 +1964,12 @@ mod tests {
     #[test]
     fn materialize_coeffs_4x4_does_not_need_dc_sign_for_ac_only_eob() {
         let mut coeffs = [0i16; 16];
-        materialize_coeffs_4x4_with_optional_tokens(
+        materialize_coeffs_4x4_from_bases_with_optional_tokens(
             3,
             None,
             None,
             2,
-            2,
-            1,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
+            coeff_bases_4x4(2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
             &mut coeffs,
         )
         .expect("materialize ac-only staged path without dc sign");
